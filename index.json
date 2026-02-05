@@ -160,6 +160,41 @@
       "verified": true,
       "created_at": "2025-12-14T00:00:00Z",
       "updated_at": "2025-12-14T00:00:00Z"
+    },
+    {
+      "id": "com.myriad.video-prompt-generator",
+      "name": "AI 视频提示词生成器",
+      "version": "1.0.0",
+      "description": "智能生成 AI 视频制作提示词，支持多种风格和场景",
+      "long_description": "AI 视频提示词生成器帮助您快速生成专业的 AI 视频制作提示词。支持电影、动漫、写实、抽象艺术、3D 渲染等多种风格，可选择视频时长和画面比例，生成包含主提示词、镜头运动、光影氛围和负面提示词的完整结构化提示词。",
+      "author": {
+        "name": "Myriad Team",
+        "url": "https://github.com/Myriad-You"
+      },
+      "license": "MIT",
+      "homepage": "https://github.com/Myriad-You/tapp-store/tree/main/apps/com.myriad.video-prompt-generator",
+      "repository": "https://github.com/Myriad-You/tapp-store",
+      "category": "ai",
+      "tags": ["AI", "视频", "提示词", "Prompt", "Sora", "Runway", "创意"],
+      "permissions": ["storage", "ui:notification", "ui:theme", "ai:chat"],
+      "min_myriad_version": "0.1.0",
+      "icon_svg": "<svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14v-4z' fill='currentColor'/><rect x='3' y='6' width='12' height='12' rx='2' fill='currentColor'/><path d='M7 10l2 2 4-4' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>",
+      "theme_color": "#8B5CF6",
+      "screenshots": [],
+      "download": {
+        "manifest": "apps/com.myriad.video-prompt-generator/manifest.json",
+        "code": "apps/com.myriad.video-prompt-generator/main.js",
+        "readme": "apps/com.myriad.video-prompt-generator/README.md",
+        "page_styles": "apps/com.myriad.video-prompt-generator/page.css",
+        "page_template": "apps/com.myriad.video-prompt-generator/page.html"
+      },
+      "size": 22528,
+      "downloads": 0,
+      "rating": 0,
+      "featured": true,
+      "verified": true,
+      "created_at": "2026-02-05T00:00:00Z",
+      "updated_at": "2026-02-05T00:00:00Z"
     }
   ]
 }

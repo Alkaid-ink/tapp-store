@@ -1,0 +1,123 @@
+<!-- AI Video Prompt Generator Page v1.0.0 -->
+
+<!-- 背景层 -->
+<div id="tapp-background">
+  <div class="page-bg-base"></div>
+  <!-- 光效装饰 -->
+  <div class="page-bg-glow page-bg-glow-1"></div>
+  <div class="page-bg-glow page-bg-glow-2"></div>
+</div>
+
+<!-- 内容层 -->
+<div id="tapp-content">
+  <div class="page-content">
+    
+    <!-- 头部 -->
+    <header class="page-header">
+      <div class="header-info">
+        <h1 id="page-title" class="page-title">AI 视频提示词</h1>
+        <p id="page-subtitle" class="page-subtitle">生成专业的 AI 视频制作提示词</p>
+      </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="main-area">
+      
+      <!-- 输入区域 -->
+      <section class="input-section">
+        <div class="input-card">
+          <textarea 
+            id="user-input" 
+            class="user-input" 
+            placeholder="描述你想要的视频内容..."
+            rows="3"
+          ></textarea>
+          
+          <!-- 参数选择 -->
+          <div class="params-row">
+            <div class="param-item">
+              <label data-i18n="styleLabel">视频风格</label>
+              <select id="style-select" class="param-select">
+                <option value="cinematic">电影风格</option>
+                <option value="anime">动漫风格</option>
+                <option value="realistic">写实风格</option>
+                <option value="abstract">抽象艺术</option>
+                <option value="3d">3D 渲染</option>
+              </select>
+            </div>
+            <div class="param-item">
+              <label data-i18n="durationLabel">视频时长</label>
+              <select id="duration-select" class="param-select">
+                <option value="short">短片 (5-10秒)</option>
+                <option value="medium" selected>中等 (10-30秒)</option>
+                <option value="long">长片 (30-60秒)</option>
+              </select>
+            </div>
+            <div class="param-item">
+              <label data-i18n="aspectLabel">画面比例</label>
+              <select id="aspect-select" class="param-select">
+                <option value="16:9" selected>横屏 16:9</option>
+                <option value="9:16">竖屏 9:16</option>
+                <option value="1:1">方形 1:1</option>
+                <option value="4:3">传统 4:3</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 生成按钮 -->
+          <div class="action-row">
+            <p id="tips-text" class="tips-text">提示：详细描述场景、主体、动作和情绪，获得更好的结果</p>
+            <button id="generate-btn" class="generate-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2v4m0 12v4m-7-7H1m22 0h-4m-2.636-6.364L14.95 7.05m-5.9 9.9l-1.414 1.414m0-11.314L9.05 8.464m5.9 9.9l1.414 1.414"/>
+              </svg>
+              生成提示词
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 结果面板（滑入显示） -->
+      <section id="result-panel" class="result-panel">
+        <div class="result-header-bar">
+          <button id="back-btn" class="back-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 12H5m7-7l-7 7 7 7"/>
+            </svg>
+          </button>
+          <span class="result-title">生成结果</span>
+          <button id="copy-all-btn" class="copy-all-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2"/>
+              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+            </svg>
+            复制全部
+          </button>
+        </div>
+        <div id="result-container" class="result-container"></div>
+      </section>
+
+      <!-- 历史记录区 -->
+      <section class="history-section">
+        <div class="section-header">
+          <h2 class="section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 6v6l4 2"/>
+            </svg>
+            <span data-i18n="history">历史记录</span>
+          </h2>
+          <button id="clear-history-btn" class="clear-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+            </svg>
+          </button>
+        </div>
+        <div id="history-list" class="history-list">
+          <div class="empty-state">暂无历史记录</div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
