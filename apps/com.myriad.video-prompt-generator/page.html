@@ -36,13 +36,10 @@
           <!-- 参数选择 -->
           <div class="params-row">
             <div class="param-item">
-              <label data-i18n="styleLabel">视频风格</label>
-              <select id="style-select" class="param-select">
-                <option value="cinematic">电影风格</option>
-                <option value="anime">动漫风格</option>
-                <option value="realistic">写实风格</option>
-                <option value="abstract">抽象艺术</option>
-                <option value="3d">3D 渲染</option>
+              <label data-i18n="modeLabel">生成模式</label>
+              <select id="mode-select" class="param-select">
+                <option value="t2v" selected>文生视频</option>
+                <option value="i2v">图生视频</option>
               </select>
             </div>
             <div class="param-item">
@@ -51,15 +48,6 @@
                 <option value="short">短片 (5-10秒)</option>
                 <option value="medium" selected>中等 (10-30秒)</option>
                 <option value="long">长片 (30-60秒)</option>
-              </select>
-            </div>
-            <div class="param-item">
-              <label data-i18n="aspectLabel">画面比例</label>
-              <select id="aspect-select" class="param-select">
-                <option value="16:9" selected>横屏 16:9</option>
-                <option value="9:16">竖屏 9:16</option>
-                <option value="1:1">方形 1:1</option>
-                <option value="4:3">传统 4:3</option>
               </select>
             </div>
           </div>

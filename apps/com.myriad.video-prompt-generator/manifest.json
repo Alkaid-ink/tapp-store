@@ -1,8 +1,8 @@
 {
   "id": "com.myriad.video-prompt-generator",
   "name": "AI 视频提示词生成器",
-  "version": "1.0.0",
-  "description": "智能生成 AI 视频制作提示词，支持多种风格和场景",
+  "version": "1.3.1",
+  "description": "智能生成动漫/二次元风格 AI 视频提示词，适用于 Vidu 等工具",
   "main": "main.js",
   "author": {
     "name": "Myriad Team"
@@ -20,20 +20,6 @@
   "pageStyles": "page.css",
   "pageTemplate": "page.html",
   "settings": [
-    {
-      "key": "defaultStyle",
-      "label": "默认视频风格",
-      "type": "select",
-      "description": "生成提示词时的默认风格",
-      "defaultValue": "cinematic",
-      "options": [
-        { "value": "cinematic", "label": "电影风格" },
-        { "value": "anime", "label": "动漫风格" },
-        { "value": "realistic", "label": "写实风格" },
-        { "value": "abstract", "label": "抽象艺术" },
-        { "value": "3d", "label": "3D 渲染" }
-      ]
-    },
     {
       "key": "saveHistory",
       "label": "保存生成历史",
