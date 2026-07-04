@@ -946,6 +946,25 @@ var lastColors = {
 
 // 播放模式缓存 - 避免重复设置 innerHTML
 var lastMode = null;
+var lastCoverUrl = null;
+
+function getTrackCoverUrl(track) {
+  if (!track) return '';
+  return track.cover ||
+         track.coverUrl ||
+         track.cover_url ||
+         track.artwork ||
+         track.artworkUrl ||
+         track.albumArt ||
+         track.image ||
+         track.imageUrl ||
+         track.picUrl ||
+         '';
+}
+
+function toCssImageUrl(url) {
+  return 'url("' + String(url).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '")';
+}
 
 // 高频 DOM 元素缓存 - 进度相关（每秒更新60次）
 var progressElements = {
@@ -996,11 +1015,13 @@ function updatePlayerUI(status) {
   if (!status) return;
 
   var track = status.currentTrack;
+  var coverUrl = getTrackCoverUrl(track);
   
   // 动态背景 - 使用封面作为模糊背景
   var bgArtwork = $('bg-artwork');
-  if (bgArtwork && track && track.cover) {
-    bgArtwork.style.backgroundImage = 'url(' + track.cover + ')';
+  if (bgArtwork && coverUrl !== lastCoverUrl) {
+    bgArtwork.style.backgroundImage = coverUrl ? toCssImageUrl(coverUrl) : 'none';
+    lastCoverUrl = coverUrl;
   }
   
   // 同步音乐播放器的完整动态颜色 - 只在颜色变化时更新
@@ -1034,8 +1055,8 @@ function updatePlayerUI(status) {
   var coverEl = $('album-cover');
   var coverPlaceholder = $('cover-placeholder');
   if (coverEl && coverPlaceholder) {
-    if (track && track.cover) {
-      coverEl.src = track.cover;
+    if (coverUrl) {
+      coverEl.src = coverUrl;
       coverEl.style.display = 'block';
       coverPlaceholder.style.display = 'none';
       coverEl.onerror = function() {
@@ -1170,6 +1191,7 @@ var playBtnIcons = { play: null, pause: null, cached: false };
 // 上次状态快照 - 用于检测变化
 var lastStateSnapshot = {
   trackId: null,
+  coverUrl: null,
   isPlaying: null,
   position: -1,
   volume: -1,
@@ -1179,10 +1201,12 @@ var lastStateSnapshot = {
 // 检查状态是否有关键变化
 function hasSignificantChange(state) {
   var trackId = state.currentTrack ? state.currentTrack.id : null;
+  var coverUrl = getTrackCoverUrl(state.currentTrack);
   var position = state.position || (state.progress ? state.progress.current : 0) || 0;
   
-  // 歌曲切换、播放状态变化、模式变化是关键变化
+  // 歌曲切换、封面到达、播放状态变化、模式变化是关键变化
   if (trackId !== lastStateSnapshot.trackId ||
+      coverUrl !== lastStateSnapshot.coverUrl ||
       state.isPlaying !== lastStateSnapshot.isPlaying ||
       state.mode !== lastStateSnapshot.mode) {
     return true;
@@ -1205,6 +1229,7 @@ function hasSignificantChange(state) {
 // 更新状态快照
 function updateStateSnapshot(state) {
   lastStateSnapshot.trackId = state.currentTrack ? state.currentTrack.id : null;
+  lastStateSnapshot.coverUrl = getTrackCoverUrl(state.currentTrack);
   lastStateSnapshot.isPlaying = state.isPlaying;
   lastStateSnapshot.position = state.position || (state.progress ? state.progress.current : 0) || 0;
   lastStateSnapshot.volume = state.volume || 0;
