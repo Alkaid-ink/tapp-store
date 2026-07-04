@@ -9,6 +9,17 @@
 <div id="tapp-background">
   <div class="bg-artwork" id="bg-artwork"></div>
   <div class="bg-overlay"></div>
+  <!-- 节奏涟漪层：节奏点从封面（音乐源头）荡出波环扫过背景
+       重音=普通波，转折=更亮更慢的大波（CSS 合成器动画，JS 只在事件时刻切 class） -->
+  <div class="rhythm-layer" aria-hidden="true">
+    <!-- 光呼吸：随 groove 明暗起伏（替代背景震动） -->
+    <div class="rhythm-glow" id="rhythm-glow"></div>
+    <div class="rhythm-ripple"></div>
+    <div class="rhythm-ripple"></div>
+    <div class="rhythm-ripple"></div>
+    <div class="rhythm-ripple"></div>
+    <div class="rhythm-ripple"></div>
+  </div>
 </div>
 
 <!-- 主内容 - 上面6/7内容区 + 底部1/7控制区 -->
@@ -22,6 +33,12 @@
       
       <!-- 封面 -->
       <div class="artwork-container">
+        <!-- Aurora 环境光：三团主题色光斑，分别由低/中/高频驱动 -->
+        <div class="artwork-aurora" id="artwork-aurora" aria-hidden="true">
+          <span class="aurora-blob aurora-bass"></span>
+          <span class="aurora-blob aurora-mid"></span>
+          <span class="aurora-blob aurora-high"></span>
+        </div>
         <div class="artwork-wrapper" id="artwork-wrapper">
           <img id="album-cover" class="artwork-image" src="" alt="" />
           <div id="cover-placeholder" class="artwork-placeholder">
@@ -35,10 +52,10 @@
       <!-- 歌曲信息 -->
       <div class="track-info">
         <div class="track-title-row">
-          <h1 id="song-name" class="track-title">未在播放</h1>
+          <h1 id="song-name" class="track-title"><span class="marquee-inner">未在播放</span></h1>
           <span id="vip-badge" class="badge-vip" style="display:none;">VIP</span>
         </div>
-        <p id="song-artist" class="track-artist">-</p>
+        <p id="song-artist" class="track-artist"><span class="marquee-inner">-</span></p>
       </div>
       
     </div>
@@ -63,34 +80,59 @@
       
       <!-- 播放列表面板 -->
       <section class="panel panel-playlist" id="panel-playlist">
-        <div class="playlist-header">
-          <!-- 歌单ID输入 -->
-          <div class="playlist-id-input" id="playlist-id-section">
-            <div class="playlist-id-row">
-              <input type="text" id="playlist-id-input" class="playlist-id-field" placeholder="网易云歌单ID" />
-              <button id="load-playlist-btn" class="load-playlist-btn" aria-label="加载歌单">
-                <svg viewBox="0 0 24 24" fill="currentColor" class="load-icon">
-                  <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
-                </svg>
-                <svg viewBox="0 0 24 24" fill="currentColor" class="loading-icon" style="display:none;">
-                  <path d="M12 4V2A10 10 0 0 0 2 12h2a8 8 0 0 1 8-8z"/>
+        <div class="playlist-header" id="playlist-header" data-mode="search">
+          <div class="ph-row">
+            <!-- 搜索字段（默认） -->
+            <div class="input-field search-field ph-search">
+              <svg class="field-icon" width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"/>
+              </svg>
+              <input type="text" id="playlist-search" class="search-input" placeholder="搜索" />
+              <button id="clear-search" class="search-clear" aria-label="清除">
+                <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"/>
                 </svg>
               </button>
             </div>
-            <p class="playlist-id-hint" id="playlist-id-hint"></p>
-          </div>
-          <!-- 搜索框 -->
-          <div class="search-box">
-            <svg class="search-icon" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"/>
-            </svg>
-            <input type="text" id="playlist-search" class="search-input" placeholder="搜索" />
-            <button id="clear-search" class="search-clear" aria-label="清除">
-              <svg viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"/>
+            <!-- 导入字段（外部歌单模式） -->
+            <div class="input-field import-field ph-import">
+              <svg class="field-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+              </svg>
+              <input type="text" id="playlist-id-input" class="playlist-id-field" placeholder="网易云歌单 ID 或链接" />
+            </div>
+            <!-- 跳过 VIP 歌曲开关 -->
+            <button id="skip-vip-btn" class="ph-btn ph-btn-labeled skip-vip-btn" aria-label="播放VIP歌曲" title="播放VIP歌曲">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M5 16L3 7l5.5 4L12 5l3.5 6L21 7l-2 9H5zm0 2h14v2H5v-2z"/>
+              </svg>
+              <span class="ph-btn-label">播放VIP</span>
+            </button>
+            <!-- 切换到外部歌单 -->
+            <button id="toggle-import-btn" class="ph-btn ph-btn-toggle ph-btn-labeled" aria-label="使用外部歌单" title="使用外部歌单">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+              </svg>
+              <span class="ph-btn-label">外部歌单</span>
+            </button>
+            <!-- 执行导入 -->
+            <button id="load-playlist-btn" class="ph-btn ph-btn-import ph-btn-labeled load-playlist-btn" aria-label="加载歌单" title="导入歌单">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="load-icon">
+                <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
+              </svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="loading-icon" style="display:none;">
+                <path d="M12 4V2A10 10 0 0 0 2 12h2a8 8 0 0 1 8-8z"/>
+              </svg>
+              <span class="ph-btn-label">导入</span>
+            </button>
+            <!-- 返回搜索 -->
+            <button id="import-back-btn" class="ph-btn ph-btn-back" aria-label="返回搜索" title="返回搜索">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
               </svg>
             </button>
           </div>
+          <p class="playlist-id-hint" id="playlist-id-hint"></p>
         </div>
         <div class="playlist-scroll" id="playlist-container">
           <div class="playlist-empty" id="playlist-empty">播放列表为空</div>

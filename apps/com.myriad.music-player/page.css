@@ -4,6 +4,8 @@
    CSS 变量 - 动态主题色（从封面颜色同步）
    ======================================== */
 :root {
+  /* 歌词基准字号：手机 26px → 平板随宽度 → 桌面 40px（全部消费方共用此变量） */
+  --lyric-fs: clamp(26px, 5vw, 40px);
   /* 动态音乐颜色 - 由 JS 从播放器的封面颜色同步 */
   --music-primary: #fc3c44;
   --music-secondary: #ff6b6b;
@@ -158,12 +160,17 @@ html, body {
   position: relative;
   z-index: 1;
   height: 100vh;
+  /* 动态视口高度：移动端 100vh 含地址栏，会把底部控制行（tab 按钮）推出可视区 */
+  height: 100dvh;
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
   display: grid;
   grid-template-rows: 6fr 1fr;
   gap: 16px;
+  /* iPhone 手势条安全区 */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-sizing: border-box;
 }
 
 /* ========================================
@@ -171,7 +178,8 @@ html, body {
    ======================================== */
 .content-area {
   display: grid;
-  grid-template-columns: 2fr 3fr;
+  /* minmax(0,…) 允许列收缩到小于内容，避免长标题把左列撑破导致溢出 */
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
   gap: 16px;
   min-height: 0;
 }
@@ -187,6 +195,8 @@ html, body {
   padding: 24px;
   padding-left: 15%;
   gap: 12px;
+  /* 允许在 grid 列内收缩，作为标题/艺术家的裁剪边界 */
+  min-width: 0;
 }
 
 /* 封面容器 - 自适应大小 */
@@ -198,6 +208,152 @@ html, body {
   width: 100%;
 }
 
+/* Aurora 环境光 - 封面后方三团主题色光斑，分别由低/中/高频驱动（频谱可视化）
+   尺寸规则与 .artwork-wrapper 保持一致；transform/opacity 由 JS 每帧驱动（合成器友好） */
+.artwork-aurora {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: min(100%, calc(100% - 20px));
+  max-width: 280px;
+  aspect-ratio: 1;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.aurora-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(48px);
+  opacity: 0.1;
+  will-change: transform, opacity;
+}
+
+/* 低频：主色，大团，左下 */
+.aurora-blob.aurora-bass {
+  width: 85%;
+  height: 85%;
+  left: -12%;
+  bottom: -10%;
+  background: radial-gradient(closest-side, var(--music-primary), transparent 72%);
+}
+
+/* 中频：副色，中团，右上 */
+.aurora-blob.aurora-mid {
+  width: 62%;
+  height: 62%;
+  right: -10%;
+  top: -8%;
+  background: radial-gradient(closest-side, var(--music-secondary), transparent 72%);
+}
+
+/* 高频：强调色，小团，上方居中 */
+.aurora-blob.aurora-high {
+  width: 42%;
+  height: 42%;
+  left: 24%;
+  top: -14%;
+  background: radial-gradient(closest-side, var(--accent-color), transparent 70%);
+}
+
+/* 暂停时光斑收敛（!important 压过 JS 内联 opacity） */
+:root.player-paused .aurora-blob {
+  opacity: 0.05 !important;
+  transition: opacity 0.6s ease;
+}
+
+/* ============ 节奏事件层（重音/转折可视化）============ */
+/* 全部为合成器动画（opacity/transform），JS 仅在事件时刻切 class */
+.rhythm-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* 光呼吸：铺满背景的柔光，透明度随节奏 groove 起伏（替代背景震动的节奏表达）。
+   opacity 由 JS 每帧驱动 + 短过渡平滑，合成器友好 */
+.rhythm-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at 50% 78%,
+    color-mix(in srgb, var(--music-primary) 40%, transparent),
+    transparent 65%
+  );
+  opacity: 0;
+  transition: opacity 0.12s linear;
+  will-change: opacity;
+  pointer-events: none;
+}
+
+/* 节奏涟漪：柔化的环形波带（radial-gradient 圆环），从封面中心荡开扫过背景。
+   尺寸/圆心由 JS 在触发时按封面几何设置；扩散动画走合成器（scale+opacity） */
+.rhythm-ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    transparent 56%,
+    color-mix(in srgb, var(--music-primary) 22%, transparent) 64%,
+    color-mix(in srgb, var(--music-primary) 55%, transparent) 68%,
+    color-mix(in srgb, var(--music-primary) 22%, transparent) 72%,
+    transparent 80%
+  );
+  opacity: 0;
+  will-change: transform, opacity;
+  pointer-events: none;
+}
+
+/* 波的时长由 JS 按情绪值设置：缓和 → 慢荡（~2.3s），激烈 → 快脆（~1.0s） */
+.rhythm-ripple.run {
+  animation: rhythmRipple var(--rip-t, 1.5s) cubic-bezier(0.2, 0.75, 0.35, 1) forwards;
+}
+
+/* 重音波：双波前（主波 + 内侧跟随波），一眼区别于常规单波 */
+.rhythm-ripple.accent {
+  background: radial-gradient(
+    circle,
+    transparent 46%,
+    color-mix(in srgb, var(--music-primary) 30%, transparent) 53%,
+    transparent 58%,
+    color-mix(in srgb, var(--music-primary) 24%, transparent) 63%,
+    color-mix(in srgb, var(--music-primary) 60%, transparent) 68%,
+    color-mix(in srgb, var(--music-primary) 24%, transparent) 72%,
+    transparent 80%
+  );
+}
+
+/* 转折大波：波前内部带微光填充（仪式感） */
+.rhythm-ripple.big {
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--music-primary) 8%, transparent) 30%,
+    color-mix(in srgb, var(--music-primary) 14%, transparent) 56%,
+    color-mix(in srgb, var(--music-primary) 60%, transparent) 68%,
+    color-mix(in srgb, var(--music-primary) 20%, transparent) 73%,
+    transparent 80%
+  );
+}
+
+/* 缓和情绪的雨滴：浅水色（light 主题色），像月光下的水面 */
+.rhythm-ripple.soft {
+  background: radial-gradient(
+    circle,
+    transparent 56%,
+    color-mix(in srgb, var(--music-light, #fff) 16%, transparent) 64%,
+    color-mix(in srgb, var(--music-light, #fff) 38%, transparent) 68%,
+    color-mix(in srgb, var(--music-light, #fff) 16%, transparent) 72%,
+    transparent 80%
+  );
+}
+
+@keyframes rhythmRipple {
+  0% { transform: scale(0.06); opacity: 0; }
+  8% { opacity: var(--rip-a, 0.3); }
+  100% { transform: scale(1); opacity: 0; }
+}
+
 .artwork-wrapper {
   position: relative;
   width: min(100%, calc(100% - 20px));
@@ -205,20 +361,24 @@ html, body {
   aspect-ratio: 1;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: 
+  box-shadow:
     0 20px 60px color-mix(in srgb, var(--music-primary) 30%, transparent),
     0 8px 20px rgba(0, 0, 0, 0.2);
-  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-              box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  /* 恢复播放 = 弹簧回弹（带过冲）；will-change 提升为合成层 */
+  transition: transform 0.55s cubic-bezier(0.34, 1.45, 0.5, 1),
+              box-shadow 0.55s cubic-bezier(0.33, 1, 0.68, 1);
+  will-change: transform;
   /* 🎯 WebKit 兼容性：移除 contain，确保触摸事件可以正常工作 */
 }
 
-/* 暂停状态 - 封面缩小 */
+/* 暂停状态 - 封面深度收缩（Apple Music 式），收缩用平滑 ease-out 不过冲 */
 .artwork-wrapper.paused {
-  transform: scale(0.88);
-  box-shadow: 
-    0 12px 40px color-mix(in srgb, var(--music-primary) 20%, transparent),
-    0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: scale(0.8);
+  box-shadow:
+    0 10px 30px color-mix(in srgb, var(--music-primary) 16%, transparent),
+    0 3px 10px rgba(0, 0, 0, 0.14);
+  transition: transform 0.45s cubic-bezier(0.33, 1, 0.68, 1),
+              box-shadow 0.45s cubic-bezier(0.33, 1, 0.68, 1);
 }
 
 .artwork-wrapper:hover {
@@ -227,7 +387,7 @@ html, body {
 
 /* 暂停时hover也保持缩小 */
 .artwork-wrapper.paused:hover {
-  transform: scale(0.9);
+  transform: scale(0.82);
 }
 
 .artwork-image {
@@ -235,6 +395,16 @@ html, body {
   height: 100%;
   object-fit: cover;
   transition: opacity var(--transition-smooth);
+}
+
+/* 切歌时封面 pop-in（作用在内层 img，避免与 wrapper 的播放/暂停缩放打架） */
+.artwork-wrapper.art-change .artwork-image {
+  animation: artIn 0.65s cubic-bezier(0.32, 1.3, 0.5, 1) both;
+}
+
+@keyframes artIn {
+  0% { opacity: 0.35; transform: scale(1.06); }
+  100% { opacity: 1; transform: scale(1); }
 }
 
 .artwork-placeholder {
@@ -266,6 +436,22 @@ html, body {
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* 切歌时标题/歌手错峰滑入（歌手延迟 70ms，Apple Music 式 stagger） */
+.track-title-row.track-change {
+  animation: trackIn 0.5s cubic-bezier(0.3, 1.35, 0.5, 1) both;
+}
+
+.track-artist.track-change {
+  animation: trackIn 0.5s cubic-bezier(0.3, 1.35, 0.5, 1) 0.07s both;
+}
+
+@keyframes trackIn {
+  0% { opacity: 0; transform: translateY(12px); filter: blur(4px); }
+  100% { opacity: 1; transform: translateY(0); filter: blur(0); }
 }
 
 .track-title {
@@ -273,10 +459,11 @@ html, body {
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.3;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* 作为裁剪窗口，让长标题在窗口内滚动而不撑破布局 */
+  min-width: 0;
+  flex: 0 1 auto;
   max-width: 100%;
+  overflow: hidden;
 }
 
 .badge-vip {
@@ -293,14 +480,51 @@ html, body {
 .track-artist {
   font-size: 16px;
   font-weight: 500;
+  margin-top: 4px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* ========================================
+   长标题跑马灯 - 文本溢出时自动横向来回滚动
+   否则保持单行省略号；由 JS 测量后切换 .is-marquee
+   ======================================== */
+.track-title .marquee-inner,
+.track-artist .marquee-inner {
+  display: inline-block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+/* 艺术家渐变色文字（移至内层，兼容裁剪窗口） */
+.track-artist .marquee-inner {
   background: linear-gradient(135deg, var(--music-primary), var(--music-secondary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  margin-top: 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+/* 溢出时启用滚动：取消省略号，平滑往返 */
+.track-title.is-marquee .marquee-inner,
+.track-artist.is-marquee .marquee-inner {
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  will-change: transform;
+  animation: marquee-scroll var(--marquee-duration, 12s)
+    cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
+}
+
+@keyframes marquee-scroll {
+  0%, 12% {
+    transform: translateX(0);
+  }
+  88%, 100% {
+    transform: translateX(var(--marquee-shift, 0));
+  }
 }
 
 /* ========================================
@@ -311,6 +535,7 @@ html, body {
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
+  min-width: 0;
 }
 
 /* ========================================
@@ -326,6 +551,13 @@ html, body {
 
 .panel.active {
   display: flex;
+  /* 面板切换：淡入 + 轻微上滑（display 切换时 animation 会重新触发） */
+  animation: panelIn 0.38s cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+@keyframes panelIn {
+  0% { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
 }
 
 /* 歌词面板 */
@@ -335,14 +567,10 @@ html, body {
 
 .lyrics-scroll {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 40% 20px;
-  scroll-behavior: smooth;
+  /* Apple Music 式逐行波浪引擎：滚动完全由 JS 接管（每行独立弹簧 transform），
+     容器不再原生滚动 */
+  overflow: hidden;
+  padding: 0;
   position: relative;
   /* 上下渐隐遮罩 */
   mask-image: linear-gradient(
@@ -373,14 +601,24 @@ html, body {
   opacity: 0.6;
 }
 
+/* 歌词行：绝对定位，位置(translateY)与视觉大小(scale)全部由 JS 波浪引擎驱动。
+   统一字号 + 统一字重：激活态只变 scale/颜色/模糊，零重排（Apple Music 的做法） */
+.lyrics-inner {
+  position: absolute;
+  inset: 0;
+}
+
 .lyric-line {
-  position: relative;
-  width: 100%;
-  padding: 12px 8px;
+  position: absolute;
+  top: 0;
+  left: 20px;
+  right: 20px;
+  padding: 11px 8px;
   margin: 0;
   font-family: "Noto Sans SC", "Noto Sans TC", "Noto Sans JP", "Noto Sans", sans-serif;
-  font-size: 22px;
-  line-height: 1.4;
+  font-size: var(--lyric-fs, 40px);
+  font-weight: 700;
+  line-height: 1.35;
   color: var(--text-secondary);
   text-align: left;
   opacity: 0.5;
@@ -389,13 +627,11 @@ html, body {
   word-wrap: break-word;
   white-space: pre-wrap;
   filter: blur(5px);
-  /* GPU加速 */
-  transform: translateZ(0);
-  transition: 
+  will-change: transform;
+  transition:
     opacity 0.5s ease-out,
     filter 0.5s ease-out,
     color 0.4s ease-out,
-    font-size 0.5s cubic-bezier(0.22, 1, 0.36, 1),
     background 0.3s ease;
   box-sizing: border-box;
   /* 🎯 WebKit 兼容性：移除 contain，确保触摸事件可以正常工作 */
@@ -416,35 +652,186 @@ html, body {
 }
 
 .lyric-line.active {
-  font-size: 32px;
-  font-weight: 600;
   background: linear-gradient(135deg, var(--music-primary), var(--music-secondary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   opacity: 1;
   filter: blur(0) drop-shadow(0 0 20px var(--accent-glow));
-  /* active状态的完整过渡 */
-  transition: 
-    opacity 0.35s ease-out,
-    filter 0.35s ease-out,
-    font-size 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  /* 放大由 JS scale 弹簧完成；标亮用更长的平滑缓出曲线（easeOutCubic） */
+  transition:
+    opacity 0.55s cubic-bezier(0.33, 1, 0.68, 1),
+    filter 0.55s cubic-bezier(0.33, 1, 0.68, 1);
 }
 
-/* 当前歌词前后的过渡效果 - 距离渐变 */
+/* ============ 逐字歌词（卡拉OK）============ */
+/* 逐字模式：激活行改用字级填充，禁用整行渐变 */
+#lyrics-container.karaoke .lyric-line.active {
+  background: none;
+  -webkit-text-fill-color: initial;
+  color: var(--text-secondary);
+}
+
+/* 非激活行的字：正常继承行色（由行 opacity 变暗）*/
+#lyrics-container.karaoke .lyric-word {
+  color: inherit;
+}
+
+/* 激活行逐字：左→右主色填充，--fp（像素）由 JS 每帧驱动 */
+/* 激活行逐字（Apple Music 式）：
+   - 填充边缘 --fp 为像素坐标，±12px 恒定羽化——窄字和长词的柔边质感一致
+   - inline-block 以支持逐字上浮（transform 对 inline 元素无效）
+   - 未唱部分用主题自适应的半透明前景色 */
+#lyrics-container.karaoke .lyric-line.active .lyric-word {
+  --fp: -9999px;
+  display: inline-block;
+  background-image: linear-gradient(
+    90deg,
+    var(--music-primary) calc(var(--fp) - 12px),
+    color-mix(in srgb, var(--text-primary) 30%, transparent) calc(var(--fp) + 12px)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  /* 基态即持有透明光晕，使 singing 切换时 filter 平滑淡入淡出而非突变 */
+  filter: drop-shadow(0 0 9px transparent);
+  transition: filter 0.4s ease;
+  will-change: transform;
+  /* 瞬态膨胀从基线附近向上鼓起 */
+  transform-origin: 50% 82%;
+}
+
+/* 正在唱的字：柔光晕（drop-shadow 作用于渐变裁切后的字形） */
+#lyrics-container.karaoke .lyric-line.active .lyric-word.singing {
+  filter: drop-shadow(0 0 9px var(--accent-glow));
+}
+
+/* 完整括号内容（和声/注释）：缩小显示；逐字模式下跟随锚点词一起标亮，
+   不作为独立标亮实体（时间轴取锚点词，见 computeParenAnchors） */
+.lyric-line .lyric-paren,
+#lyrics-container.karaoke .lyric-word.paren {
+  font-size: 0.62em;
+  opacity: 0.85;
+}
+
+/* 逐行模式激活行中的括号段：opacity 使其成为独立合成层，父行的
+   background-clip:text 渐变画不进子层，继承的 transparent fill 会让文字消失。
+   给它自己的渐变裁切修复。 */
+.lyric-line.active .lyric-paren {
+  background: linear-gradient(135deg, var(--music-primary), var(--music-secondary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* 行尾和声子行：独立一小行，与正文同步渐亮 */
+.lyric-line .lyric-subline {
+  display: block;
+  margin-top: -4px;
+  line-height: 1.2;
+}
+
+/* 多字符 token 的字母容器：作为整体参与换行，字母不被从中间拆断。
+   white-space: pre 保留 token 内的空格宽度（nowrap 会折叠行尾空格导致单词粘连） */
+.lyric-line .lyric-wordwrap {
+  display: inline-block;
+  white-space: pre;
+}
+
+/* 已唱过的行：整体点亮为主色 */
+#lyrics-container.karaoke .lyric-line.passed .lyric-word {
+  background-image: linear-gradient(90deg, var(--music-primary), var(--music-primary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* 当前歌词前后的过渡效果 - 距离渐变
+   错峰 transition-delay：激活行先动，邻行依次跟随，形成 Apple Music 式 cascade */
+.lyric-line {
+  transition-delay: 90ms;
+}
+
+/* 悬停反馈即时响应，不受 cascade 延迟影响 */
+.lyric-line:hover {
+  transition-delay: 0ms;
+}
+
+.lyric-line.active {
+  transition-delay: 0ms;
+}
+
 .lyric-line.near-1 {
   opacity: 0.8;
   filter: blur(1px);
+  transition-delay: 30ms;
 }
 
 .lyric-line.near-2 {
   opacity: 0.6;
   filter: blur(3px);
+  transition-delay: 55ms;
 }
 
 .lyric-line.near-3 {
   opacity: 0.45;
   filter: blur(4px);
+  transition-delay: 75ms;
+}
+
+/* ============ 间奏呼吸点（Apple Music 式）============ */
+/* 默认常驻显示（暗态，与非激活歌词行一致的存在感），间奏进行时点亮；
+   占位与歌词行同节奏：同 padding，槽位高度 = 行框 40px×1.35 + 22px padding ≈ 76px */
+.lyric-interlude {
+  position: absolute;
+  top: 0;
+  left: 20px;
+  right: 20px;
+  /* 槽位高度与歌词行同节奏：行框 + 上下 padding，随字号自适应 */
+  height: calc(1.35 * var(--lyric-fs, 40px) + 22px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 8px;
+  opacity: 0.35;
+  transform-origin: left center;
+  transition: opacity 0.45s ease;
+  pointer-events: none;
+  box-sizing: border-box;
+  will-change: transform;
+}
+
+.lyric-interlude.active {
+  opacity: 1;
+}
+
+.lyric-interlude span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-primary);
+  opacity: 0.22;
+  transition: opacity 0.5s ease;
+}
+
+/* 呼吸动画只在间奏进行时启用（默认暗态为静止） */
+.lyric-interlude.active span {
+  animation: dotBreathe 2.4s ease-in-out infinite;
+}
+
+.lyric-interlude.active span:nth-child(2) { animation-delay: 0.4s; }
+.lyric-interlude.active span:nth-child(3) { animation-delay: 0.8s; }
+
+/* 按间奏进度依次点亮 */
+.lyric-interlude span.on {
+  opacity: 0.92;
+}
+
+@keyframes dotBreathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.25); }
 }
 
 /* 歌词切换动画 - GPU加速 */
@@ -458,9 +845,15 @@ html, body {
 
 @keyframes lyricEnter {
   0% {
-    transform: scale(0.92) translateY(8px) translateZ(0);
+    transform: scale(0.92) translateY(10px) translateZ(0);
     opacity: 0.5;
     filter: blur(4px);
+  }
+  /* 轻微过冲，弹簧落位（Apple Music 式） */
+  70% {
+    transform: scale(1.015) translateY(-1px) translateZ(0);
+    opacity: 1;
+    filter: blur(0);
   }
   100% {
     transform: scale(1) translateY(0) translateZ(0);
@@ -488,79 +881,165 @@ html, body {
 }
 
 .playlist-header {
-  padding: 12px 16px 10px;
+  padding: 14px 16px 12px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
 }
 
-/* 歌单ID输入区域 */
-.playlist-id-input {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.playlist-id-row {
+/* 头部一行：输入字段 + 按钮组 */
+.ph-row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.playlist-id-field {
+/* ========================================
+   通用输入容器 - 圆角 + 前置图标 + 聚焦强调环
+   搜索 / 导入歌单共用
+   ======================================== */
+.input-field {
+  position: relative;
+  display: flex;
+  align-items: center;
   flex: 1;
-  height: 32px;
-  padding: 0 12px;
-  font-size: 13px;
-  color: var(--text-primary);
-  background: rgba(120, 120, 128, 0.08);
-  border: 1px solid transparent;
+  min-width: 0;
+  height: 38px;
   border-radius: var(--radius-md);
-  outline: none;
-  transition: all var(--transition-fast);
+  background: rgba(120, 120, 128, 0.10);
+  border: 1.5px solid transparent;
+  transition: background var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
-.playlist-id-field:focus {
-  background: rgba(120, 120, 128, 0.12);
+.input-field:focus-within {
+  background: color-mix(in srgb, var(--music-primary) 6%, rgba(120, 120, 128, 0.10));
   border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px var(--accent-light);
 }
 
-.playlist-id-field::placeholder {
+.input-field .field-icon {
+  position: absolute;
+  left: 12px;
+  width: 16px;
+  height: 16px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+  transition: color var(--transition-fast);
+}
+
+.input-field:focus-within .field-icon {
+  color: var(--accent-color);
+}
+
+.input-field input {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  padding: 0 12px 0 36px;
+  font-size: 13.5px;
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+.input-field input::placeholder {
   color: var(--text-tertiary);
 }
 
-.load-playlist-btn {
+/* ========================================
+   头部按钮组：外部歌单切换 / 导入 / 返回
+   ======================================== */
+.ph-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 38px;
+  height: 38px;
   padding: 0;
-  background: var(--btn-gradient);
-  border: 1px solid var(--btn-border);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
   flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: transform var(--transition-fast),
+    background var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    opacity var(--transition-fast);
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
 
-.load-playlist-btn:hover {
-  background: var(--btn-gradient-hover);
-  border-color: var(--btn-border-hover);
-  transform: scale(1.05);
+.ph-btn svg {
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
 }
 
-.load-playlist-btn:active {
+/* 带文字说明的按钮 - 自适应宽度的胶囊 */
+.ph-btn-labeled {
+  width: auto;
+  gap: 6px;
+  padding: 0 14px;
+}
+
+.ph-btn-label {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.ph-btn:active {
   transform: scale(0.95);
 }
 
-.load-playlist-btn svg {
+.ph-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+  transform: none;
+  box-shadow: none;
+}
+
+/* 切换 / 返回 / 跳过VIP - 低调填充 */
+.ph-btn-toggle,
+.ph-btn-back,
+.skip-vip-btn {
+  background: rgba(120, 120, 128, 0.12);
+  color: var(--text-secondary);
+}
+
+.ph-btn-toggle:hover,
+.ph-btn-back:hover,
+.skip-vip-btn:hover {
+  background: rgba(120, 120, 128, 0.20);
+  color: var(--text-primary);
+}
+
+/* 跳过VIP 开启态 - 强调色高亮（表示正在屏蔽 VIP） */
+.skip-vip-btn.active {
+  background: var(--accent-light);
+  color: var(--accent-color);
+}
+
+.ph-btn-back svg {
   width: 16px;
   height: 16px;
+}
+
+/* 导入 - 实心强调色 */
+.ph-btn-import {
+  background: linear-gradient(135deg, var(--music-primary), var(--music-secondary));
+  color: #fff;
+  box-shadow: 0 3px 10px var(--accent-glow);
+}
+
+.ph-btn-import:hover {
+  transform: scale(1.06);
+  box-shadow: 0 5px 16px var(--accent-glow);
 }
 
 .load-playlist-btn .loading-icon {
@@ -572,11 +1051,34 @@ html, body {
   to { transform: rotate(360deg); }
 }
 
+/* ========================================
+   模式切换：搜索 ⇄ 外部歌单
+   ======================================== */
+.playlist-header[data-mode="search"] .ph-import,
+.playlist-header[data-mode="search"] .ph-btn-import,
+.playlist-header[data-mode="search"] .ph-btn-back,
+.playlist-header[data-mode="search"] .playlist-id-hint {
+  display: none;
+}
+
+.playlist-header[data-mode="import"] .ph-search,
+.playlist-header[data-mode="import"] .ph-btn-toggle,
+.playlist-header[data-mode="import"] .skip-vip-btn {
+  display: none;
+}
+
 .playlist-id-hint {
-  font-size: 11px;
+  font-size: 11.5px;
   color: var(--text-tertiary);
   margin: 0;
-  min-height: 14px;
+  min-height: 0;
+  padding-left: 2px;
+  transition: color var(--transition-fast);
+}
+
+/* 仅当有提示文字时才占据高度，保证两种模式下「输入框→列表」距离一致 */
+.playlist-id-hint:not(:empty) {
+  margin-top: 6px;
 }
 
 .playlist-id-hint.error {
@@ -587,67 +1089,41 @@ html, body {
   color: #22c55e;
 }
 
-.search-box {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.search-icon {
-  position: absolute;
-  left: 12px;
-  width: 14px;
-  height: 14px;
-  color: var(--text-tertiary);
-  pointer-events: none;
-}
-
-.search-input {
-  width: 100%;
-  height: 32px;
-  padding: 0 32px;
-  font-size: 13px;
-  color: var(--text-primary);
-  background: rgba(120, 120, 128, 0.08);
-  border: none;
-  border-radius: var(--radius-md);
-  outline: none;
-  transition: all var(--transition-fast);
-}
-
-.search-input:focus {
-  background: rgba(120, 120, 128, 0.15);
-}
-
-.search-input::placeholder {
-  color: var(--text-tertiary);
-}
-
+/* 搜索清除按钮 */
 .search-clear {
   position: absolute;
   right: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   padding: 0;
-  background: transparent;
+  background: rgba(120, 120, 128, 0.25);
   border: none;
-  color: var(--text-tertiary);
+  border-radius: 50%;
+  color: var(--text-secondary);
   cursor: pointer;
   opacity: 0;
-  transition: opacity var(--transition-fast);
+  transform: scale(0.8);
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
-.search-input:not(:placeholder-shown) + .search-clear,
+.search-field input {
+  padding-right: 38px;
+}
+
+.search-input:not(:placeholder-shown) ~ .search-clear,
 .search-clear:hover {
   opacity: 1;
+  transform: scale(1);
 }
 
 .search-clear svg {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
 }
 
 .playlist-scroll {
@@ -668,32 +1144,32 @@ html, body {
   opacity: 0.6;
 }
 
-/* 播放列表项 - 更精细的样式 */
+/* ========================================
+   播放列表项 - 重新设计
+   封面(悬浮播放/播放中均衡器) + 标题/艺术家 + 时长
+   ======================================== */
 .playlist-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background 0.15s ease;
   position: relative;
-  /* 性能优化 - 限制重绘范围 */
-  /* 🎯 WebKit 兼容性：移除 contain 和 content-visibility，它们在 Safari/iOS 上可能阻止触摸事件 */
-  /* 对于交互元素，性能优化让位于兼容性 */
+  transition: background var(--transition-fast);
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
 
 .playlist-item:hover {
-  background: rgba(120, 120, 128, 0.06);
+  background: rgba(120, 120, 128, 0.10);
 }
 
+/* 当前播放项：淡色底 + 左侧指示条 */
 .playlist-item.active {
-  background: transparent;
+  background: var(--accent-light);
 }
 
-/* 当前播放项的左侧指示条 */
 .playlist-item.active::before {
   content: '';
   position: absolute;
@@ -701,23 +1177,108 @@ html, body {
   top: 50%;
   transform: translateY(-50%);
   width: 3px;
-  height: 60%;
+  height: 56%;
   background: var(--accent-color);
-  border-radius: 2px;
+  border-radius: 0 3px 3px 0;
+}
+
+/* 封面容器 - 承载覆盖层 */
+.playlist-item-cover-wrap {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: rgba(120, 120, 128, 0.08);
 }
 
 .playlist-item-cover {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-sm);
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  flex-shrink: 0;
-  background: rgba(120, 120, 128, 0.08);
-  transition: transform 0.2s ease;
+  display: block;
+  transition: transform 0.3s ease;
 }
 
 .playlist-item:hover .playlist-item-cover {
-  transform: scale(1.03);
+  transform: scale(1.06);
+}
+
+/* 封面覆盖层 - 悬浮显示播放键 / 当前项显示均衡器 */
+.playlist-item-cover-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  pointer-events: none;
+}
+
+.playlist-item:hover .playlist-item-cover-overlay {
+  opacity: 1;
+}
+
+.playlist-item.active .playlist-item-cover-overlay {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.38);
+}
+
+.playlist-item-cover-overlay .play-ico {
+  width: 20px;
+  height: 20px;
+}
+
+.playlist-item.active .playlist-item-cover-overlay .play-ico {
+  display: none;
+}
+
+/* 均衡器动画 - 仅当前播放项显示 */
+.playlist-item-cover-overlay .eq {
+  display: none;
+  align-items: flex-end;
+  gap: 2px;
+  height: 15px;
+}
+
+.playlist-item.active .playlist-item-cover-overlay .eq {
+  display: flex;
+}
+
+.playlist-item-cover-overlay .eq span {
+  width: 3px;
+  height: 40%;
+  background: #fff;
+  border-radius: 1px;
+  animation: eq-bounce 0.9s ease-in-out infinite;
+}
+
+.playlist-item-cover-overlay .eq span:nth-child(2) {
+  animation-delay: 0.3s;
+}
+
+.playlist-item-cover-overlay .eq span:nth-child(3) {
+  animation-delay: 0.15s;
+}
+
+/* 真实频谱驱动模式：禁用 keyframe，改由 JS 设高度并平滑过渡 */
+.playlist-item-cover-overlay .eq.live span {
+  animation: none;
+  transition: height 0.09s linear;
+}
+
+@keyframes eq-bounce {
+  0%, 100% { height: 35%; }
+  50% { height: 100%; }
+}
+
+/* 暂停时均衡器静止 */
+:root.player-paused .playlist-item-cover-overlay .eq span {
+  animation-play-state: paused;
 }
 
 .playlist-item-info {
@@ -725,10 +1286,19 @@ html, body {
   min-width: 0;
 }
 
+/* 名称行 - 标题 + VIP 徽章 */
+.playlist-item-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .playlist-item-name {
   font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -738,6 +1308,28 @@ html, body {
 .playlist-item.active .playlist-item-name {
   color: var(--accent-color);
   font-weight: 600;
+}
+
+/* 列表内 VIP / 试听 徽章 */
+.playlist-item-vip {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.4;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.playlist-item-vip.vip {
+  color: #7a4b00;
+  background: linear-gradient(135deg, #ffd700, #ffb100);
+}
+
+.playlist-item-vip.trial {
+  color: #fff;
+  background: rgba(120, 120, 128, 0.55);
 }
 
 .playlist-item-artist {
@@ -750,7 +1342,21 @@ html, body {
   opacity: 0.8;
 }
 
-/* 播放动画已移除 */
+/* 时长 - 右侧对齐 */
+.playlist-item-duration {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.6;
+  min-width: 36px;
+  text-align: right;
+}
+
+.playlist-item.active .playlist-item-duration {
+  color: var(--accent-color);
+  opacity: 1;
+}
 
 /* ========================================
    底部控制区 - 1/7高度
@@ -779,7 +1385,9 @@ html, body {
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: color var(--transition-fast), background var(--transition-fast),
+              border-color var(--transition-fast),
+              transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
   /* 移动端点击优化 */
   -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
   -webkit-touch-callout: none;
@@ -787,6 +1395,11 @@ html, body {
   user-select: none;
   /* 确保按钮在最上层可点击 */
   z-index: 10;
+}
+
+.tab-btn:active {
+  transform: scale(0.88);
+  transition-duration: 0.08s;
 }
 
 .tab-btn svg {
@@ -834,8 +1447,14 @@ html, body {
   flex: 1;
   height: 4px;
   background: rgba(120, 120, 128, 0.2);
-  border-radius: 2px;
+  border-radius: 3.5px;
   overflow: visible;
+  /* Apple Music 式：悬停时轨道增粗 */
+  transition: height 0.22s cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.progress-section:hover .progress-track {
+  height: 7px;
 }
 
 .progress-slider {
@@ -853,19 +1472,30 @@ html, body {
   touch-action: none;
 }
 
+/* Apple Music 式：滑块默认隐藏，悬停/拖动时弹簧浮现 */
 .progress-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   background: #fff;
   border-radius: 50%;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
   cursor: pointer;
-  transition: transform var(--transition-fast);
+  transform: scale(0);
+  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.progress-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.3);
+.progress-section:hover .progress-slider::-webkit-slider-thumb,
+.progress-slider:active::-webkit-slider-thumb,
+.progress-slider:focus-visible::-webkit-slider-thumb {
+  transform: scale(1);
+}
+
+/* 触屏设备无 hover：保持滑块常驻可见 */
+@media (hover: none) {
+  .progress-slider::-webkit-slider-thumb {
+    transform: scale(0.9);
+  }
 }
 
 .progress-slider::-moz-range-thumb {
@@ -884,7 +1514,7 @@ html, body {
   left: 0;
   height: 100%;
   background: var(--accent-color);
-  border-radius: 2px;
+  border-radius: inherit;
   pointer-events: none;
   z-index: 1;
   transition: width 0.1s linear;
@@ -996,11 +1626,19 @@ html, body {
   border-radius: 50%;
   background: var(--btn-gradient);
   border: 1px solid var(--btn-border);
+  /* 弹簧释放：按下快速收缩，松开带过冲回弹 */
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+              background 0.2s ease, border-color 0.2s ease;
 }
 
 .control-main:hover {
   background: var(--btn-gradient-hover);
   border-color: var(--btn-border-hover);
+}
+
+.control-main:active {
+  transform: scale(0.85);
+  transition-duration: 0.08s;
 }
 
 .control-main svg {
@@ -1019,12 +1657,29 @@ html, body {
   border-radius: 50%;
   color: #fff;
   box-shadow: 0 4px 16px var(--accent-glow);
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.35s ease;
 }
 
 .control-play:hover {
   color: #fff;
   transform: scale(1.08);
   box-shadow: 0 6px 24px var(--accent-glow), 0 0 40px color-mix(in srgb, var(--music-primary) 30%, transparent);
+}
+
+.control-play:active {
+  transform: scale(0.88);
+  transition-duration: 0.08s;
+}
+
+/* 播放/暂停切换时图标 pop（JS 重触发 state-pop 类） */
+.control-play.state-pop svg {
+  animation: iconPop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes iconPop {
+  0% { transform: scale(0.6); opacity: 0.4; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 .control-play svg {
@@ -1174,6 +1829,15 @@ html, body {
     max-width: 186px;
     width: 47%;
   }
+
+  .artwork-aurora {
+    max-width: 186px;
+    width: 47%;
+  }
+
+  .aurora-blob {
+    filter: blur(34px);
+  }
   
   .track-info {
     text-align: left;
@@ -1215,16 +1879,33 @@ html, body {
     display: flex;
     flex-direction: column;
   }
-  
+
   .player-right.mobile-visible .panel {
     flex: 1;
     display: none;
     border-radius: 0;
+    /* flex 子项高度链：确保 lyrics-scroll/playlist-scroll 拿到确定高度 */
+    min-height: 0;
   }
-  
+
   .player-right.mobile-visible .panel.active {
     display: flex;
     flex-direction: column;
+  }
+
+  /* 移动端歌词：边距收窄，字重降一档减少拥挤感 */
+  .lyric-line {
+    left: 12px;
+    right: 12px;
+    padding: 8px 6px;
+    font-weight: 600;
+  }
+
+  .lyric-interlude {
+    left: 12px;
+    right: 12px;
+    height: calc(1.35 * var(--lyric-fs, 26px) + 16px);
+    padding: 8px 6px;
   }
   
   /* 面板关闭按钮 */
@@ -1372,11 +2053,56 @@ html, body {
   }
 }
 
+/* 移动端面板关闭：下滑退场（两段式：先播动画，animationend 后再 display:none） */
+.player-right.mobile-closing {
+  display: flex !important;
+  flex-direction: column;
+  animation: slideDownOut 0.26s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes slideDownOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+}
+
 /* 桌面端隐藏移动端专用元素 */
 @media (min-width: 769px) {
   .mobile-close-btn,
   .mobile-panel-title {
     display: none !important;
+  }
+}
+
+/* ========================================
+   平板段（769~1080px）：桌面网格但比例收紧
+   ======================================== */
+@media (min-width: 769px) and (max-width: 1080px) {
+  /* 左侧封面区收窄，把空间让给歌词 */
+  .content-area {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
+    gap: 16px;
+  }
+
+  /* 平板上封面上限收小一档 */
+  .artwork-wrapper,
+  .artwork-aurora {
+    max-width: 220px;
+  }
+
+  .lyric-line {
+    left: 14px;
+    right: 14px;
+  }
+
+  .lyric-interlude {
+    left: 14px;
+    right: 14px;
   }
 }
 
@@ -1419,5 +2145,25 @@ html, body {
   .playlist-item,
   .tab-btn {
     transition: none !important;
+  }
+
+  /* 禁用播放动效（Apple Music 式动画组） */
+  .panel.active,
+  .track-title-row.track-change,
+  .track-artist.track-change,
+  .artwork-wrapper.art-change .artwork-image,
+  .control-play.state-pop svg {
+    animation: none !important;
+  }
+
+  .artwork-wrapper,
+  .aurora-blob,
+  .progress-track {
+    transition: none !important;
+  }
+
+  .lyric-interlude span,
+  .rhythm-ripple.run {
+    animation: none !important;
   }
 }
