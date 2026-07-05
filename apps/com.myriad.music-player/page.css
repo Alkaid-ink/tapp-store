@@ -732,6 +732,89 @@ html, body {
   line-height: 1.2;
 }
 
+/* ============ 歌词翻译副行 ============ */
+/* 与括号子行(.lyric-subline)是两种身份，视觉上明确区分：
+   - 子行是「原文的一部分」：同字重、参与卡拉OK填色、贴紧主行
+   - 翻译是「注解」：更小、字重回落、静态灰阶、永不参与填色，
+     与主行留一口气的间距。跟随行的 scale 弹簧与波浪（在行内，零新增动效） */
+.lyric-line .lyric-trans {
+  display: none;
+}
+
+#lyrics-container.show-trans .lyric-line .lyric-trans {
+  display: block;
+  font-size: 0.5em;
+  font-weight: 500;
+  line-height: 1.4;
+  margin-top: 0.3em;
+  letter-spacing: 0.01em;
+  color: var(--text-secondary);
+  /* 阻断激活行 background-clip:text 的 transparent fill 继承（同 .lyric-paren 修复） */
+  -webkit-text-fill-color: currentColor;
+  background: none;
+  opacity: 0.75;
+}
+
+/* 激活行的翻译略提亮，但保持注解层级，不与主行渐变填色竞争 */
+#lyrics-container.show-trans .lyric-line.active .lyric-trans {
+  color: var(--text-primary);
+  opacity: 0.82;
+}
+
+/* 翻译开关：歌词面板右下角浮钮（放在渐隐遮罩外层，不被 mask 吃掉） */
+.panel-lyrics {
+  position: relative;
+}
+
+.lyric-trans-btn {
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-secondary);
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: transform var(--transition-fast),
+    background var(--transition-fast),
+    color var(--transition-fast);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.lyric-trans-btn svg {
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+}
+
+.lyric-trans-btn:hover {
+  background: color-mix(in srgb, var(--text-primary) 14%, transparent);
+  color: var(--text-primary);
+}
+
+.lyric-trans-btn:active {
+  transform: scale(0.92);
+}
+
+.lyric-trans-btn.active {
+  background: linear-gradient(135deg, var(--music-primary), var(--music-secondary));
+  color: #fff;
+}
+
+.lyric-trans-btn[hidden] {
+  display: none;
+}
+
 /* 多字符 token 的字母容器：作为整体参与换行，字母不被从中间拆断。
    white-space: pre 保留 token 内的空格宽度（nowrap 会折叠行尾空格导致单词粘连） */
 .lyric-line .lyric-wordwrap {
@@ -1921,6 +2004,14 @@ html, body {
     right: 12px;
     padding: 8px 6px;
     font-weight: 600;
+  }
+
+  /* 移动端翻译开关：44px 触控热区 + 避开底部安全区 */
+  .lyric-trans-btn {
+    width: 44px;
+    height: 44px;
+    right: 12px;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
   }
 
   .lyric-interlude {

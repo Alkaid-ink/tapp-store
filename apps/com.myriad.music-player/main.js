@@ -24,6 +24,7 @@ var i18n = {
     lyrics: '歌词',
     noLyrics: '暂无歌词',
     lyricsLoading: '歌词加载中...',
+    translate: '翻译',
     searchPlaceholder: '搜索歌曲...',
     songs: '首歌曲',
     currentlyPlaying: '正在播放',
@@ -59,6 +60,7 @@ var i18n = {
     lyrics: 'Lyrics',
     noLyrics: 'No Lyrics',
     lyricsLoading: 'Loading lyrics...',
+    translate: 'Translate',
     searchPlaceholder: 'Search songs...',
     songs: 'songs',
     currentlyPlaying: 'Now Playing',
@@ -94,6 +96,7 @@ var i18n = {
     lyrics: '歌詞',
     noLyrics: '歌詞なし',
     lyricsLoading: '歌詞読み込み中...',
+    translate: '翻訳',
     searchPlaceholder: '曲を検索...',
     songs: '曲',
     currentlyPlaying: '再生中',
@@ -313,6 +316,10 @@ var pageState = {
   // 逐字歌词（yrc）：与 lyrics 行一一对应，含每行 words
   verbatimLyrics: [],
   lyricsSongId: null,      // 已加载逐字歌词对应的歌曲 id
+  // 歌词翻译（随 getLyrics 各行 translation 字段带回；Phase 1 仅网易中文源）
+  hasTranslation: false,   // 当前歌曲是否有翻译数据
+  transLang: '',           // 翻译语言（'zh' | ''）
+  transOn: false,          // 翻译显示开关（持久化于 Tapp.storage）
   lyricWordFrame: null,    // 逐字高亮 rAF 句柄
   lastKaraokeLine: -1,     // 上一次做逐字填充的行索引
   eqFrame: null,           // 列表均衡器频谱 rAF 句柄
@@ -510,6 +517,52 @@ function focusLyricItemK(k, instant) {
 function focusLyricLine(lineIdx, instant) {
   var k = findLyricItemK(lineIdx);
   if (k >= 0) focusLyricItemK(k, instant);
+}
+
+// ========================================
+// 歌词翻译（Apple Music 式副行）
+// ========================================
+
+// 翻译对当前用户可用：有翻译数据 且 翻译语言与界面语言一致
+// （Phase 1 只有网易中文翻译源，故仅中文界面显示开关）
+function transUsable() {
+  return pageState.hasTranslation &&
+         pageState.transLang === 'zh' &&
+         currentLocale === 'zh-CN';
+}
+
+// 同步翻译容器类 + 开关按钮（可见性/高亮/无障碍文案）
+function syncLyricTransUI() {
+  var usable = transUsable();
+  var showing = usable && pageState.transOn;
+  var container = $('lyrics-container');
+  if (container) container.classList.toggle('show-trans', showing);
+  var btn = $('lyric-trans-btn');
+  if (btn) {
+    btn.hidden = !usable;
+    btn.classList.toggle('active', showing);
+    btn.title = t('translate');
+    btn.setAttribute('aria-label', t('translate'));
+    btn.setAttribute('aria-pressed', showing ? 'true' : 'false');
+  }
+}
+
+// 切换翻译显隐：行高改变 → 重测量布局，波浪引擎把所有行弹到新位置。
+// 与歌词加载后的路径共用 measure/focus，无独立动画逻辑
+function setLyricTransOn(on) {
+  pageState.transOn = !!on;
+  syncLyricTransUI();
+  if (lyricFx.items.length === 0) return;
+  lyricFx.measured = false;
+  if (!measureLyricLayout()) return;
+  lyricFx.targetS = clampLyricS(lyricFx.targetS);
+  // 保持当前焦点项在焦点位（新行高下重新计算目标滚动量）
+  if (pageState.autoScrollEnabled && lyricFx.focusK >= 0) {
+    focusLyricItemK(lyricFx.focusK);
+  }
+  // 焦点目标可能未变但其他行的 y 全变了：无条件启动波浪把行送到新位
+  if (shouldAnimate()) startLyricWave();
+  else snapLyricItems();
 }
 
 function startLyricWave() {
@@ -764,6 +817,16 @@ function renderLyrics(lyrics, currentIndex) {
   // 关键：逐行<->逐字切换时行数可能相同，必须按 word span 是否存在强制重建
   var hasWordSpans = container.querySelector('.lyric-word') !== null;
   if (isKaraoke !== hasWordSpans) needsFullRender = true;
+  // 同理：翻译到达/消失时行数也可能相同（状态兜底行 → getLyrics 带翻译行），
+  // 按 trans span 是否存在与数据比对，不一致强制重建
+  if (!needsFullRender) {
+    var wantTrans = false;
+    for (var wt = 0; wt < lyrics.length; wt++) {
+      if (lyrics[wt].translation) { wantTrans = true; break; }
+    }
+    var hasTransSpans = container.querySelector('.lyric-trans') !== null;
+    if (wantTrans !== hasTransSpans) needsFullRender = true;
+  }
 
   if (needsFullRender) {
     buildLyricDom(container, lyrics, currentIndex, isKaraoke);
@@ -827,6 +890,13 @@ function buildLyricDom(container, lyrics, currentIndex, isKaraoke) {
       fillVerbatimLine(el, i);
     } else {
       fillPlainLine(el, lyrics[i].text || '');
+    }
+    // 翻译副行：常驻 DOM，显隐由容器 show-trans 类控制（开关切换只改类+重测量）
+    if (lyrics[i].translation) {
+      var trEl = document.createElement('span');
+      trEl.className = 'lyric-trans';
+      trEl.textContent = lyrics[i].translation;
+      el.appendChild(trEl);
     }
     inner.appendChild(el);
     items.push({
@@ -1478,12 +1548,17 @@ function loadLyricsForTrack(track) {
     if (verbatim.length > 0) {
       pageState.verbatimLyrics = verbatim;
       pageState.lyrics = verbatim.map(function(v) {
-        return { time: v.time, text: v.text };
+        return { time: v.time, text: v.text, translation: v.translation };
       });
     } else {
       pageState.verbatimLyrics = [];
       if (res.lines && res.lines.length) pageState.lyrics = res.lines;
     }
+
+    // 翻译可用性（各行 translation 已由桥接层按时间对齐嵌入）
+    pageState.hasTranslation = !!res.hasTranslation;
+    pageState.transLang = res.translationLang || '';
+    syncLyricTransUI();
 
     var st = pageState.status || {};
     var pos = st.position || (st.progress ? st.progress.current : 0) || 0;
@@ -1499,6 +1574,8 @@ function loadLyricsForTrack(track) {
   }).catch(function() {
     // 逐字失败：保持逐行兜底，并撤销标记允许重试
     pageState.verbatimLyrics = [];
+    pageState.hasTranslation = false;
+    syncLyricTransUI();
     if (pageState.lyricsSongId === track.id) pageState.lyricsSongId = null;
   });
 }
@@ -2381,6 +2458,9 @@ async function initPage() {
   var titleEl = document.getElementById('page-title');
   if (titleEl) titleEl.textContent = t('title');
 
+  // 翻译 UI 随 locale 刷新（按钮文案/可用性；locale 切走时收起副行并重测布局）
+  setLyricTransOn(pageState.transOn);
+
   // 并行获取所有初始数据（减少初始化时间）
   var results = await Promise.allSettled([
     Tapp.media.getStatus(),
@@ -2754,6 +2834,17 @@ function bindControls() {
   // 移动端关闭按钮
   if (mobileCloseBtn) {
     addClickHandler(mobileCloseBtn, handleClosePanel);
+  }
+
+  // 歌词翻译开关（按钮仅在当前歌曲有用户语言翻译时可见）
+  var transBtn = document.getElementById('lyric-trans-btn');
+  if (transBtn) {
+    addClickHandler(transBtn, function() {
+      setLyricTransOn(!pageState.transOn);
+      if (Tapp.storage && Tapp.storage.set) {
+        Tapp.storage.set('lyricTransOn', pageState.transOn).catch(function() {});
+      }
+    });
   }
   
   // 窗口大小变化时重置状态 - 使用节流（统一处理所有 resize 逻辑）
@@ -3840,6 +3931,13 @@ function cleanup() {
         applyTheme(results[1]);
         
         await initPage();
+
+        // 恢复翻译开关偏好（持久化；storage 权限已在 manifest 声明）
+        if (Tapp.storage && Tapp.storage.get) {
+          Tapp.storage.get('lyricTransOn').then(function(v) {
+            if (v === true || v === 'true') setLyricTransOn(true);
+          }).catch(function() {});
+        }
 
         // 监听语言变化
         Tapp.ui.onLocaleChange(function(locale) {
