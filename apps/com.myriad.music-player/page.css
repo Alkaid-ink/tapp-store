@@ -1904,6 +1904,17 @@ html, body {
     flex-direction: column;
   }
 
+  /* 移动端：VIP 开关只留图标（皇冠已足够表意），给搜索框腾空间 */
+  .skip-vip-btn .ph-btn-label {
+    display: none;
+  }
+
+  .skip-vip-btn.ph-btn-labeled {
+    width: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+
   /* 移动端歌词：边距收窄，字重降一档减少拥挤感 */
   .lyric-line {
     left: 12px;
