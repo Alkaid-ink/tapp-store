@@ -17,6 +17,13 @@
   --accent-color: var(--music-primary);
   --accent-light: color-mix(in srgb, var(--music-primary) 15%, transparent);
   --accent-glow: color-mix(in srgb, var(--music-primary) 40%, transparent);
+
+  /* 歌词可读色 - JS 按当前深/浅模式从封面色派生，原色对比度足够时保持原样 */
+  --lyric-active-primary: var(--music-primary);
+  --lyric-active-secondary: var(--music-secondary);
+  --lyric-passed: var(--music-primary);
+  --lyric-unfilled: color-mix(in srgb, var(--text-primary) 34%, transparent);
+  --lyric-glow: var(--accent-glow);
   
   /* 按钮渐变色 */
   --btn-gradient: linear-gradient(135deg,
@@ -39,6 +46,8 @@
   --text-primary: #1d1d1f;
   --text-secondary: rgba(60, 60, 67, 0.6);
   --text-tertiary: rgba(60, 60, 67, 0.3);
+  --lyric-trans-color: rgba(0, 0, 0, 0.42);
+  --lyric-trans-active-color: rgba(0, 0, 0, 0.58);
   
   /* 圆角 */
   --radius-sm: 8px;
@@ -61,6 +70,8 @@
     --text-primary: #f5f5f7;
     --text-secondary: rgba(235, 235, 245, 0.6);
     --text-tertiary: rgba(235, 235, 245, 0.3);
+    --lyric-trans-color: rgba(255, 255, 255, 0.44);
+    --lyric-trans-active-color: rgba(255, 255, 255, 0.62);
   }
 }
 
@@ -72,6 +83,8 @@
   --text-primary: #f5f5f7;
   --text-secondary: rgba(235, 235, 245, 0.6);
   --text-tertiary: rgba(235, 235, 245, 0.3);
+  --lyric-trans-color: rgba(255, 255, 255, 0.44);
+  --lyric-trans-active-color: rgba(255, 255, 255, 0.62);
 }
 
 /* ========================================
@@ -652,12 +665,12 @@ html, body {
 }
 
 .lyric-line.active {
-  background: linear-gradient(135deg, var(--music-primary), var(--music-secondary));
+  background: linear-gradient(135deg, var(--lyric-active-primary), var(--lyric-active-secondary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   opacity: 1;
-  filter: blur(0) drop-shadow(0 0 20px var(--accent-glow));
+  filter: blur(0) drop-shadow(0 0 20px var(--lyric-glow));
   /* 放大由 JS scale 弹簧完成；标亮用更长的平滑缓出曲线（easeOutCubic） */
   transition:
     opacity 0.55s cubic-bezier(0.33, 1, 0.68, 1),
@@ -687,8 +700,8 @@ html, body {
   display: inline-block;
   background-image: linear-gradient(
     90deg,
-    var(--music-primary) calc(var(--fp) - 12px),
-    color-mix(in srgb, var(--text-primary) 30%, transparent) calc(var(--fp) + 12px)
+    var(--lyric-active-primary) calc(var(--fp) - 12px),
+    var(--lyric-unfilled) calc(var(--fp) + 12px)
   );
   -webkit-background-clip: text;
   background-clip: text;
@@ -704,7 +717,7 @@ html, body {
 
 /* 正在唱的字：柔光晕（drop-shadow 作用于渐变裁切后的字形） */
 #lyrics-container.karaoke .lyric-line.active .lyric-word.singing {
-  filter: drop-shadow(0 0 9px var(--accent-glow));
+  filter: drop-shadow(0 0 9px var(--lyric-glow));
 }
 
 /* 完整括号内容（和声/注释）：缩小显示；逐字模式下跟随锚点词一起标亮，
@@ -719,7 +732,7 @@ html, body {
    background-clip:text 渐变画不进子层，继承的 transparent fill 会让文字消失。
    给它自己的渐变裁切修复。 */
 .lyric-line.active .lyric-paren {
-  background: linear-gradient(135deg, var(--music-primary), var(--music-secondary));
+  background: linear-gradient(135deg, var(--lyric-active-primary), var(--lyric-active-secondary));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -748,17 +761,17 @@ html, body {
   line-height: 1.4;
   margin-top: 0.3em;
   letter-spacing: 0.01em;
-  color: var(--text-secondary);
+  color: var(--lyric-trans-color);
   /* 阻断激活行 background-clip:text 的 transparent fill 继承（同 .lyric-paren 修复） */
   -webkit-text-fill-color: currentColor;
   background: none;
-  opacity: 0.75;
+  opacity: 1;
 }
 
 /* 激活行的翻译略提亮，但保持注解层级，不与主行渐变填色竞争 */
 #lyrics-container.show-trans .lyric-line.active .lyric-trans {
-  color: var(--text-primary);
-  opacity: 0.82;
+  color: var(--lyric-trans-active-color);
+  opacity: 1;
 }
 
 /* 翻译开关：歌词面板右下角浮钮（放在渐隐遮罩外层，不被 mask 吃掉） */
@@ -824,7 +837,7 @@ html, body {
 
 /* 已唱过的行：整体点亮为主色 */
 #lyrics-container.karaoke .lyric-line.passed .lyric-word {
-  background-image: linear-gradient(90deg, var(--music-primary), var(--music-primary));
+  background-image: linear-gradient(90deg, var(--lyric-passed), var(--lyric-passed));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;

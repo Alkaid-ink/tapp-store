@@ -147,7 +147,9 @@ var THEME_DARK = [
   ['--glass-shadow', '0 8px 32px rgba(0, 0, 0, 0.4)'],
   ['--text-primary', '#f5f5f7'],
   ['--text-secondary', 'rgba(235, 235, 245, 0.6)'],
-  ['--text-tertiary', 'rgba(235, 235, 245, 0.3)']
+  ['--text-tertiary', 'rgba(235, 235, 245, 0.3)'],
+  ['--lyric-trans-color', 'rgba(255, 255, 255, 0.44)'],
+  ['--lyric-trans-active-color', 'rgba(255, 255, 255, 0.62)']
 ];
 var THEME_LIGHT = [
   ['--glass-bg', 'rgba(255, 255, 255, 0.72)'],
@@ -155,7 +157,9 @@ var THEME_LIGHT = [
   ['--glass-shadow', '0 8px 32px rgba(0, 0, 0, 0.12)'],
   ['--text-primary', '#1d1d1f'],
   ['--text-secondary', 'rgba(60, 60, 67, 0.6)'],
-  ['--text-tertiary', 'rgba(60, 60, 67, 0.3)']
+  ['--text-tertiary', 'rgba(60, 60, 67, 0.3)'],
+  ['--lyric-trans-color', 'rgba(0, 0, 0, 0.42)'],
+  ['--lyric-trans-active-color', 'rgba(0, 0, 0, 0.58)']
 ];
 var BG_DARK_GRADIENT = 'linear-gradient(180deg, rgba(0, 0, 0, 0.3) 0%, rgba(0, 0, 0, 0.5) 40%, rgba(0, 0, 0, 0.7) 100%)';
 var BG_LIGHT_GRADIENT = 'linear-gradient(180deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0.6) 40%, rgba(255, 255, 255, 0.8) 100%)';
@@ -191,6 +195,8 @@ function applyTheme(theme) {
   if (cachedBgArtwork) {
     cachedBgArtwork.style.filter = isDark ? BG_DARK_FILTER : BG_LIGHT_FILTER;
   }
+
+  applyLyricReadableColors();
 }
 
 // ========================================
@@ -2115,6 +2121,205 @@ function toCssImageUrl(url) {
   return 'url("' + String(url).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '")';
 }
 
+function clampNumber(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function normalizeHexColor(value) {
+  if (!value) return null;
+  var hex = String(value).trim();
+  if (hex.charAt(0) !== '#') return null;
+  hex = hex.slice(1);
+  if (hex.length === 3) {
+    hex = hex.charAt(0) + hex.charAt(0) +
+      hex.charAt(1) + hex.charAt(1) +
+      hex.charAt(2) + hex.charAt(2);
+  }
+  if (hex.length === 8) {
+    hex = hex.slice(0, 6);
+  }
+  if (hex.length !== 6 || !/^[0-9a-fA-F]+$/.test(hex)) return null;
+  return '#' + hex.toLowerCase();
+}
+
+function hexToRgb(value) {
+  var hex = normalizeHexColor(value);
+  if (!hex) return null;
+  var n = parseInt(hex.slice(1), 16);
+  return {
+    r: (n >> 16) & 255,
+    g: (n >> 8) & 255,
+    b: n & 255
+  };
+}
+
+function rgbToHex(rgb) {
+  function part(value) {
+    var hex = clampNumber(Math.round(value), 0, 255).toString(16);
+    return hex.length === 1 ? '0' + hex : hex;
+  }
+  return '#' + part(rgb.r) + part(rgb.g) + part(rgb.b);
+}
+
+function rgbToHsl(rgb) {
+  var r = rgb.r / 255;
+  var g = rgb.g / 255;
+  var b = rgb.b / 255;
+  var max = Math.max(r, g, b);
+  var min = Math.min(r, g, b);
+  var h = 0;
+  var s = 0;
+  var l = (max + min) / 2;
+
+  if (max !== min) {
+    var d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r:
+        h = (g - b) / d + (g < b ? 6 : 0);
+        break;
+      case g:
+        h = (b - r) / d + 2;
+        break;
+      default:
+        h = (r - g) / d + 4;
+        break;
+    }
+    h /= 6;
+  }
+
+  return { h: h, s: s, l: l };
+}
+
+function hslToRgb(hsl) {
+  var h = hsl.h;
+  var s = hsl.s;
+  var l = hsl.l;
+  var r;
+  var g;
+  var b;
+
+  if (s === 0) {
+    r = g = b = l;
+  } else {
+    function hue2rgb(p, q, t) {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    }
+
+    var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    var p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1 / 3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1 / 3);
+  }
+
+  return {
+    r: r * 255,
+    g: g * 255,
+    b: b * 255
+  };
+}
+
+function relativeLuminance(rgb) {
+  function channel(value) {
+    var c = value / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  }
+  return channel(rgb.r) * 0.2126 + channel(rgb.g) * 0.7152 + channel(rgb.b) * 0.0722;
+}
+
+function contrastRatio(foreground, background) {
+  var a = relativeLuminance(foreground);
+  var b = relativeLuminance(background);
+  var lighter = Math.max(a, b);
+  var darker = Math.min(a, b);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function getLyricBackdropRgb(isDark) {
+  return isDark ? { r: 12, g: 12, b: 14 } : { r: 246, g: 246, b: 248 };
+}
+
+function toColorCandidates(value) {
+  return Array.isArray(value) ? value : [value];
+}
+
+function pickReadableLyricCandidate(candidates, isDark, minContrast) {
+  var bg = getLyricBackdropRgb(isDark);
+  var values = toColorCandidates(candidates);
+  for (var i = 0; i < values.length; i++) {
+    var hex = normalizeHexColor(values[i]);
+    var rgb = hexToRgb(hex);
+    if (rgb && contrastRatio(rgb, bg) >= minContrast) {
+      return hex;
+    }
+  }
+  return null;
+}
+
+function firstUsableLyricColor(candidates, fallbackColor) {
+  var values = toColorCandidates(candidates);
+  for (var i = 0; i < values.length; i++) {
+    var rgb = hexToRgb(values[i]);
+    if (rgb) return rgb;
+  }
+  return hexToRgb(fallbackColor) || hexToRgb('#fc3c44');
+}
+
+function deriveReadableLyricColor(rawColor, fallbackColor, isDark, lightness, minContrast) {
+  var readable = pickReadableLyricCandidate(rawColor, isDark, minContrast);
+  if (readable) return readable;
+
+  var bg = getLyricBackdropRgb(isDark);
+  var rgb = firstUsableLyricColor(rawColor, fallbackColor);
+  var hsl = rgbToHsl(rgb);
+  var l = hsl.l + (lightness - hsl.l) * 0.72;
+  var s = clampNumber(hsl.s, isDark ? 0.34 : 0.3, isDark ? 0.86 : 0.78);
+  var step = isDark ? 0.02 : -0.02;
+  var limit = isDark ? 0.94 : 0.16;
+  var candidate;
+  var guard = 0;
+
+  do {
+    candidate = hslToRgb({ h: hsl.h, s: s, l: l });
+    if (contrastRatio(candidate, bg) >= minContrast) break;
+    l += step;
+    guard += 1;
+  } while (guard < 24 && (isDark ? l <= limit : l >= limit));
+
+  return rgbToHex(candidate);
+}
+
+function rgbaFromHex(value, alpha) {
+  var rgb = hexToRgb(value) || hexToRgb('#fc3c44');
+  return 'rgba(' + rgb.r + ', ' + rgb.g + ', ' + rgb.b + ', ' + alpha + ')';
+}
+
+function applyLyricReadableColors() {
+  var isDark = currentTheme === 'dark';
+  var root = document.documentElement;
+  var primaryRaw = lastColors.primary || '#fc3c44';
+  var secondaryRaw = lastColors.secondary || lastColors.accent || primaryRaw;
+  var themeAltRaw = isDark ? lastColors.light : lastColors.dark;
+  var primaryCandidates = [primaryRaw, themeAltRaw, secondaryRaw, lastColors.accent];
+  var secondaryCandidates = [secondaryRaw, lastColors.accent, themeAltRaw, primaryRaw];
+  var passedCandidates = [primaryRaw, themeAltRaw, secondaryRaw];
+  var primary = deriveReadableLyricColor(primaryCandidates, '#fc3c44', isDark, isDark ? 0.78 : 0.34, 3.7);
+  var secondary = deriveReadableLyricColor(secondaryCandidates, primaryRaw, isDark, isDark ? 0.70 : 0.42, 3.4);
+  var passed = deriveReadableLyricColor(passedCandidates, primary, isDark, isDark ? 0.68 : 0.38, 3.0);
+
+  root.style.setProperty('--lyric-active-primary', primary);
+  root.style.setProperty('--lyric-active-secondary', secondary);
+  root.style.setProperty('--lyric-passed', passed);
+  root.style.setProperty('--lyric-unfilled', isDark ? 'rgba(245, 245, 247, 0.34)' : 'rgba(29, 29, 31, 0.34)');
+  root.style.setProperty('--lyric-glow', rgbaFromHex(primary, isDark ? 0.34 : 0.18));
+}
+
 // 是否偏好减少动画（无障碍）
 var prefersReducedMotion = !!(window.matchMedia &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -2222,6 +2427,7 @@ function updatePlayerUI(status) {
   
   // 同步音乐播放器的完整动态颜色 - 只在颜色变化时更新
   var root = document.documentElement;
+  var didUpdateColors = false;
   if (status.primaryColor && status.primaryColor !== lastColors.primary) {
     var primary = status.primaryColor;
     lastColors.primary = primary;
@@ -2229,22 +2435,30 @@ function updatePlayerUI(status) {
     root.style.setProperty('--accent-color', primary);
     root.style.setProperty('--accent-light', primary + '26');
     root.style.setProperty('--accent-glow', primary + '66');
+    didUpdateColors = true;
   }
   if (status.secondaryColor && status.secondaryColor !== lastColors.secondary) {
     lastColors.secondary = status.secondaryColor;
     root.style.setProperty('--music-secondary', status.secondaryColor);
+    didUpdateColors = true;
   }
   if (status.accentColor && status.accentColor !== lastColors.accent) {
     lastColors.accent = status.accentColor;
     root.style.setProperty('--music-accent', status.accentColor);
+    didUpdateColors = true;
   }
   if (status.lightColor && status.lightColor !== lastColors.light) {
     lastColors.light = status.lightColor;
     root.style.setProperty('--music-light', status.lightColor);
+    didUpdateColors = true;
   }
   if (status.darkColor && status.darkColor !== lastColors.dark) {
     lastColors.dark = status.darkColor;
     root.style.setProperty('--music-dark', status.darkColor);
+    didUpdateColors = true;
+  }
+  if (didUpdateColors) {
+    applyLyricReadableColors();
   }
   
   // 封面
