@@ -11,11 +11,8 @@ var i18n = {
     noPlaylist: '播放列表为空',
     play: '播放',
     pause: '暂停',
-    previous: '上一首',
     next: '下一首',
     volume: '音量',
-    mute: '静音',
-    unmute: '取消静音',
     shuffle: '随机播放',
     repeat: '列表循环',
     repeatOne: '单曲循环',
@@ -23,11 +20,8 @@ var i18n = {
     playlist: '播放列表',
     lyrics: '歌词',
     noLyrics: '暂无歌词',
-    lyricsLoading: '歌词加载中...',
     translate: '翻译',
     searchPlaceholder: '搜索歌曲...',
-    songs: '首歌曲',
-    currentlyPlaying: '正在播放',
     vip: 'VIP',
     trial: '试听',
     playlistIdPlaceholder: '网易云歌单 ID 或链接',
@@ -47,11 +41,8 @@ var i18n = {
     noPlaylist: 'Playlist Empty',
     play: 'Play',
     pause: 'Pause',
-    previous: 'Previous',
     next: 'Next',
     volume: 'Volume',
-    mute: 'Mute',
-    unmute: 'Unmute',
     shuffle: 'Shuffle',
     repeat: 'Repeat All',
     repeatOne: 'Repeat One',
@@ -59,11 +50,8 @@ var i18n = {
     playlist: 'Playlist',
     lyrics: 'Lyrics',
     noLyrics: 'No Lyrics',
-    lyricsLoading: 'Loading lyrics...',
     translate: 'Translate',
     searchPlaceholder: 'Search songs...',
-    songs: 'songs',
-    currentlyPlaying: 'Now Playing',
     vip: 'VIP',
     trial: 'Trial',
     playlistIdPlaceholder: 'Netease playlist ID or link',
@@ -83,11 +71,8 @@ var i18n = {
     noPlaylist: 'プレイリスト空',
     play: '再生',
     pause: '一時停止',
-    previous: '前へ',
     next: '次へ',
     volume: '音量',
-    mute: 'ミュート',
-    unmute: 'ミュート解除',
     shuffle: 'シャッフル',
     repeat: 'リピート',
     repeatOne: '1曲リピート',
@@ -95,11 +80,8 @@ var i18n = {
     playlist: 'プレイリスト',
     lyrics: '歌詞',
     noLyrics: '歌詞なし',
-    lyricsLoading: '歌詞読み込み中...',
     translate: '翻訳',
     searchPlaceholder: '曲を検索...',
-    songs: '曲',
-    currentlyPlaying: '再生中',
     vip: 'VIP',
     trial: '試聴',
     playlistIdPlaceholder: 'Netease歌単IDまたはリンク',
@@ -210,16 +192,6 @@ function formatTime(seconds) {
   return mins + ':' + (secs < 10 ? '0' : '') + secs;
 }
 
-function escapeHtml(text) {
-  if (!text) return '';
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
 function debounce(fn, delay) {
   var timer = null;
   return function() {
@@ -229,17 +201,6 @@ function debounce(fn, delay) {
     timer = setTimeout(function() {
       fn.apply(context, args);
     }, delay);
-  };
-}
-
-function throttle(fn, limit) {
-  var lastCall = 0;
-  return function() {
-    var now = Date.now();
-    if (now - lastCall >= limit) {
-      lastCall = now;
-      fn.apply(this, arguments);
-    }
   };
 }
 
@@ -282,29 +243,6 @@ async function initAnimationConfig() {
   }
 }
 
-// 获取调度延迟
-async function getScheduledDelay(index, baseDelay) {
-  if (!pageState.animConfig.shouldAnimate) {
-    return 0;
-  }
-  try {
-    return await Tapp.animation.getStaggerDelay(index, baseDelay || 50);
-  } catch (e) {
-    // 回退到本地计算
-    var delay = baseDelay || 50;
-    if (pageState.animConfig.level === 'light') delay *= 0.5;
-    return index * delay * pageState.animConfig.durationScale;
-  }
-}
-
-// 获取缩放后的动画时长
-function getScaledDuration(baseDuration) {
-  if (!pageState.animConfig.shouldAnimate) {
-    return 0;
-  }
-  return baseDuration * pageState.animConfig.durationScale;
-}
-
 // 检查是否应该执行动画
 function shouldAnimate() {
   return pageState.animConfig.shouldAnimate && pageState.animConfig.level !== 'none';
@@ -329,15 +267,10 @@ var pageState = {
   lyricWordFrame: null,    // 逐字高亮 rAF 句柄
   lastKaraokeLine: -1,     // 上一次做逐字填充的行索引
   eqFrame: null,           // 列表均衡器频谱 rAF 句柄
-  searchQuery: '',
-  isSearching: false,
   autoScrollEnabled: true, // 自动滚动开关（点击歌词跳转时临时禁用）
   unsubscribe: null,
-  animationFrame: null,
   // 背景动画状态
   bgAnimationFrame: null,
-  energyHistory: [],
-  lastBeatTime: 0,
   beatIntensity: 0,
   bgPhase: 0,
   // 统一动画调度器配置
@@ -357,10 +290,6 @@ function $(id) {
     domCache[id] = document.getElementById(id);
   }
   return domCache[id];
-}
-
-function clearDomCache() {
-  domCache = {};
 }
 
 // ========================================
@@ -528,12 +457,14 @@ function focusLyricLine(lineIdx, instant) {
 // 布局自愈：容器高度和上次测量不一致（入场时机早于布局稳定/iframe 尺寸变化/
 // 横竖屏）就重测并回焦——与 tab 切换路径同逻辑。measured 一旦锁定不会自动
 // 失效，没有这层守卫，入场早测的错误布局会一直持续
-function relayoutLyricsIfNeeded() {
-  if (lyricFx.items.length === 0 || !lyricFx.measured) return;
+// allowUnmeasured=true 时对「从未测量成功」（如面板此前隐藏）也重测——tab 切换路径用
+function relayoutLyricsIfNeeded(allowUnmeasured) {
+  if (lyricFx.items.length === 0) return;
+  if (!lyricFx.measured && !allowUnmeasured) return;
   var c = $('lyrics-container');
   if (!c) return;
   var h = c.clientHeight;
-  if (h > 0 && Math.abs(h - lyricFx.viewH) > 4) {
+  if (h > 0 && (!lyricFx.measured || Math.abs(h - lyricFx.viewH) > 4)) {
     lyricFx.measured = false;
     if (measureLyricLayout()) {
       lyricFx.focusK = -1;
@@ -2650,6 +2581,16 @@ var lastStateSnapshot = {
 };
 
 // 检查状态是否有关键变化
+// 规范化媒体状态：API 返回 title/progress.current，页面统一用 name/position
+function normalizeMediaState(s) {
+  if (s.currentTrack) {
+    s.currentTrack.name = s.currentTrack.title || s.currentTrack.name;
+  }
+  if (s.progress) {
+    s.position = s.progress.current || 0;
+  }
+}
+
 function hasSignificantChange(state) {
   var trackId = state.currentTrack ? state.currentTrack.id : null;
   var coverUrl = getTrackCoverUrl(state.currentTrack);
@@ -2705,16 +2646,7 @@ async function initPage() {
   // 处理媒体状态
   if (results[0].status === 'fulfilled') {
     var status = results[0].value || {};
-    
-    // 规范化字段名: API 返回 title，我们需要 name
-    if (status.currentTrack) {
-      status.currentTrack.name = status.currentTrack.title || status.currentTrack.name;
-    }
-    // 规范化进度: API 返回 progress.current，我们需要 position
-    if (status.progress) {
-      status.position = status.progress.current || 0;
-    }
-    
+    normalizeMediaState(status);
     pageState.status = status;
     updatePlayerUI(status);
 
@@ -2793,16 +2725,8 @@ async function initPage() {
   function handleStateChange(state) {
     // 检查是否有关键变化
     var significantChange = hasSignificantChange(state);
-    
-    // 规范化状态
-    if (state.currentTrack) {
-      state.currentTrack.name = state.currentTrack.title || state.currentTrack.name;
-    }
-    // 处理进度信息
-    if (state.progress) {
-      state.position = state.progress.current || 0;
-    }
-    
+
+    normalizeMediaState(state);
     pageState.status = state;
     
     // 只在关键变化时更新完整UI
@@ -2987,17 +2911,7 @@ function bindControls() {
     // 不只看 measured 标记——面板高度变过（移动端首开/横竖屏/关开）就必须重测
     if (tab === 'lyrics') {
       requestAnimationFrame(function() {
-        var c = $('lyrics-container');
-        if (!c) return;
-        var h = c.clientHeight;
-        if (h > 0 && (!lyricFx.measured || Math.abs(h - lyricFx.viewH) > 4)) {
-          lyricFx.measured = false;
-          if (measureLyricLayout()) {
-            lyricFx.focusK = -1;
-            var idx = pageState.currentLyricIndex >= 0 ? pageState.currentLyricIndex : 0;
-            focusLyricLine(idx, true);
-          }
-        }
+        relayoutLyricsIfNeeded(true);
       });
     }
     
@@ -3289,7 +3203,6 @@ function bindControls() {
   if (searchInput) {
     searchInput.placeholder = t('searchPlaceholder');
     var debouncedSearch = debounce(function(query) {
-      pageState.searchQuery = query;
       renderPlaylist(pageState.playlist, pageState.status?.currentTrack, query);
     }, 300);
 
@@ -3305,7 +3218,6 @@ function bindControls() {
       var searchInput = document.getElementById('playlist-search');
       if (searchInput) {
         searchInput.value = '';
-        pageState.searchQuery = '';
         renderPlaylist(pageState.playlist, pageState.status?.currentTrack, '');
       }
     });
@@ -4129,10 +4041,6 @@ function cleanup() {
   if (pageState.unsubscribe) {
     pageState.unsubscribe();
     pageState.unsubscribe = null;
-  }
-  if (pageState.animationFrame) {
-    cancelAnimationFrame(pageState.animationFrame);
-    pageState.animationFrame = null;
   }
   // 清理逐字歌词 rAF
   if (pageState.lyricWordFrame) {
