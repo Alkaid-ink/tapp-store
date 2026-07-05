@@ -519,6 +519,15 @@ function startLyricWave() {
 }
 
 function lyricWaveTick(now) {
+  try {
+    lyricWaveTickBody(now);
+  } catch (e) {
+    logTickError('lyricWaveTick', e);
+    lyricFx.raf = null; // 波浪状态已不可信，停下等下一次 focus 重启
+  }
+}
+
+function lyricWaveTickBody(now) {
   var dt = Math.min(0.032, (now - lyricFx.lastT) / 1000);
   lyricFx.lastT = now;
 
@@ -684,6 +693,11 @@ function updateInterludeDots() {
   var posSec = getLyricPosition();
   for (var d0 = 0; d0 < dots.length; d0++) {
     var it = dots[d0];
+    // 防御：循环体内的 renderLyrics/demote 可能重建歌词结构，条目失效则跳过
+    if (!it || !it.el || !it.el.isConnected) {
+      logTickError('dotsItem', new Error('stale dots item ' + d0 + '/' + dots.length));
+      continue;
+    }
     var k = it._k;
     var inGap = posSec >= it.start && posSec < it.end - 0.4;
     if (inGap !== it.el.classList.contains('active')) {
@@ -708,11 +722,13 @@ function updateInterludeDots() {
     }
     if (inGap) {
       // 三个点按间奏进度依次点亮
+      // ⚠️ var 是函数作用域：此处若命名为 dots 会遮蔽外层间奏项数组
+      //（曾在进入间奏瞬间把外层循环变量覆盖为 DOM 集合而抛异常，杀死整个 eqTick）
       var p = (posSec - it.start) / Math.max(0.1, it.end - it.start);
-      var dots = it.el.children;
-      for (var d = 0; d < dots.length; d++) {
+      var dotEls = it.el.children;
+      for (var d = 0; d < dotEls.length; d++) {
         var on = p >= (d + 0.6) / 3.6;
-        if (on !== dots[d].classList.contains('on')) dots[d].classList.toggle('on', on);
+        if (on !== dotEls[d].classList.contains('on')) dotEls[d].classList.toggle('on', on);
       }
       // Apple 行为：间奏期间焦点移到呼吸点
       if (pageState.autoScrollEnabled && lyricFx.focusK !== k) focusLyricItemK(k);
@@ -1410,13 +1426,27 @@ function updateWordHighlight(position) {
   }
 }
 
+// 循环异常记录（每类只记一次，避免刷屏；同时保证循环不死）
+var tickErrLogged = {};
+function logTickError(key, e) {
+  if (tickErrLogged[key]) return;
+  tickErrLogged[key] = true;
+  try { console.error('[music-player] ' + key + ' error:', e); } catch (e2) {}
+}
+
 // 逐字高亮 rAF 循环（仅逐字模式 + 播放中运行）
+// 防崩溃壳：任何一帧异常只丢弃该帧并记录，循环继续——
+// 否则一次瞬时异常会让循环静默死亡且句柄残留，ensure 守卫永远无法重启（填色永久失效）
 function lyricWordTick() {
   if (pageState.verbatimLyrics.length === 0 || !lyricClock.playing) {
     pageState.lyricWordFrame = null;
     return;
   }
-  updateWordHighlight(getLyricPosition());
+  try {
+    updateWordHighlight(getLyricPosition());
+  } catch (e) {
+    logTickError('lyricWordTick', e);
+  }
   pageState.lyricWordFrame = requestAnimationFrame(lyricWordTick);
 }
 function ensureLyricWordLoop() {
@@ -2430,6 +2460,16 @@ async function initPage() {
     pageState.unsubscribe = null;
   }
   pageState.unsubscribe = Tapp.media.onStateChange(function(state) {
+    // 防崩溃壳：回调异常若不捕获，本次事件的 ensureEqLoop/ensureLyricWordLoop
+    // 重启链会中断；异常只跳过该事件并记录
+    try {
+      handleStateChange(state);
+    } catch (e) {
+      logTickError('stateChange', e);
+    }
+  });
+
+  function handleStateChange(state) {
     // 检查是否有关键变化
     var significantChange = hasSignificantChange(state);
     
@@ -2530,7 +2570,7 @@ async function initPage() {
         }
       }
     }
-  });
+  }
 
   // 绑定控制按钮（内部幂等）
   var firstBind = !controlsBound;
@@ -3531,9 +3571,21 @@ function gridTick() {
 
 var eqLastUpdate = 0;
 var EQ_INTERVAL = 66; // ~15fps 数据轮询
+// 防崩溃壳：eqTick 驱动全部视觉效果（aurora/涟漪/光呼吸/网格踩拍/间奏点/自愈），
+// 任何一帧异常若不捕获，循环静默死亡且句柄残留 → ensureEqLoop 永远无法重启 →
+// 所有效果永久失效。异常只丢当帧并记录，循环必须活着。
 function eqTick(ts) {
   var isPlaying = pageState.status && pageState.status.isPlaying;
   if (!isPlaying) { pageState.eqFrame = null; return; }
+  try {
+    eqTickBody(ts);
+  } catch (e) {
+    logTickError('eqTick', e);
+  }
+  pageState.eqFrame = requestAnimationFrame(eqTick);
+}
+
+function eqTickBody(ts) {
   if (ts - eqLastUpdate >= EQ_INTERVAL) {
     eqLastUpdate = ts;
     // 间奏呼吸点：进度点亮 + 焦点跟随（15fps 足够）
@@ -3595,7 +3647,9 @@ function eqTick(ts) {
         }
         // 节奏事件：重音/转折检测（触发即交给 CSS 合成器动画，无每帧渲染）
         rhythmTick(aurora.bands, ts);
-      }).catch(function() {});
+      }).catch(function(e) {
+        logTickError('spectrumPoll', e);
+      });
     }
   }
   // 网格跟拍逐帧比对（60fps 精度踩拍）
@@ -3603,7 +3657,6 @@ function eqTick(ts) {
   // Aurora 渲染每帧运行（60fps 包络 + 公转），数据按 15fps 更新
   renderAurora(ts);
   renderRhythmGlow();
-  pageState.eqFrame = requestAnimationFrame(eqTick);
 }
 
 // 光呼吸：透明度 = groove × 密度增益（量化去重，只在变化时写）
