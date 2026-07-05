@@ -759,8 +759,6 @@ function renderLyrics(lyrics, currentIndex) {
     return;
   }
 
-  var prevIndex = pageState.currentLyricIndex;
-
   // 逐字模式：verbatim 与 lyrics 行数一致时启用卡拉OK字级填充
   var isKaraoke = pageState.verbatimLyrics.length > 0 &&
                   pageState.verbatimLyrics.length === lyrics.length;
@@ -792,10 +790,17 @@ function renderLyrics(lyrics, currentIndex) {
     var startIdx = Math.max(0, currentIndex - updateRange);
     var endIdx = Math.min(lyrics.length, currentIndex + updateRange + 1);
 
-    if (prevIndex >= 0 && (prevIndex < startIdx || prevIndex >= endIdx)) {
-      var prevEl = existingLines[prevIndex];
-      if (prevEl) {
-        prevEl.className = getLyricLineClasses(prevIndex, currentIndex);
+    // 清扫一切范围外的残留 active——不能靠 prevIndex 记账：调用方（verbatim
+    // 分支/歌词点击）在调用前已改写 currentLyricIndex，prevIndex 读到的是新值。
+    // 大跨度 seek（跳行 >6）时旧激活行不在更新窗口内，残留的 .active 会让
+    // updateWordHighlight 按 DOM 序命中旧行 → 真正的当前行永远不填色，
+    // 且自愈因「存在激活行」不触发（EXEC_FLIP_FUSIONSPHERE 实测）
+    var staleActives = container.querySelectorAll('.lyric-line.active');
+    for (var si = 0; si < staleActives.length; si++) {
+      var sEl = staleActives[si];
+      var sIdx = parseInt(sEl.getAttribute('data-index'), 10);
+      if (sIdx !== currentIndex && (sIdx < startIdx || sIdx >= endIdx)) {
+        sEl.className = getLyricLineClasses(sIdx, currentIndex);
       }
     }
 
