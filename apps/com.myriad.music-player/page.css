@@ -781,8 +781,8 @@ html, body {
 
 .lyric-trans-btn {
   position: absolute;
-  right: 16px;
-  bottom: 14px;
+  right: 28px;
+  bottom: 24px;
   z-index: 5;
   display: flex;
   align-items: center;
@@ -2023,8 +2023,8 @@ html, body {
   .lyric-trans-btn {
     width: 44px;
     height: 44px;
-    right: 12px;
-    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    right: 20px;
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
   }
 
   .lyric-interlude {
