@@ -3955,11 +3955,11 @@ function startBackgroundAnimation() {
       pageState.beatIntensity *= 0.95;
       if (pageState.beatIntensity < 0.01) {
         pageState.beatIntensity = 0;
-        applyBackgroundTransform(0, 0, pageState.bgPhase);
+        applyBackgroundTransform(0, pageState.bgPhase);
         pageState.bgAnimationFrame = null;
         return;
       }
-      applyBackgroundTransform(pageState.beatIntensity, 0, pageState.bgPhase);
+      applyBackgroundTransform(pageState.beatIntensity, pageState.bgPhase);
       pageState.bgAnimationFrame = requestAnimationFrame(updateBackground);
       return;
     }
@@ -3967,29 +3967,14 @@ function startBackgroundAnimation() {
     if (timestamp - lastUpdateTime >= UPDATE_INTERVAL) {
       lastUpdateTime = timestamp;
       pageState.bgPhase += 0.008; // 缓慢相位变化
-      
-      // 请求频谱数据（getSpectrum 返回 { spectrum:[...], energy, bass, mid, high }）
-      Tapp.media.getSpectrum().then(function(result) {
-        var spectrum = (result && result.spectrum && result.spectrum.length >= 4)
-          ? result.spectrum : [0, 0, 0, 0];
 
-        // 计算当前能量：优先用返回的 energy，回退到前四段均值
-        var currentEnergy = (result && typeof result.energy === 'number')
-          ? result.energy
-          : (spectrum[0] + spectrum[1] + spectrum[2] + spectrum[3]) * 0.25;
-        
-        // 背景震动强度 = 节奏引擎的 groove 包络 × 密度增益：
-        // 缓和的歌 → 密度低 → 幅度小、衰减慢（轻轻地涌）；
-        // 紧凑的歌 → 密度高 → 幅度大、衰减快（跟着拍点弹）
-        pageState.beatIntensity = rhythm.groove * (0.45 + rhythm.density * 0.75);
-
-        // 应用背景变换
-        applyBackgroundTransform(pageState.beatIntensity, currentEnergy, pageState.bgPhase);
-      }).catch(function() {
-        // 如果获取频谱失败，使用默认动画
-        pageState.bgPhase += 0.005;
-        applyBackgroundTransform(0.1, 0.1, pageState.bgPhase);
-      });
+      // 背景震动强度 = 节奏引擎的 groove 包络 × 密度增益：
+      // 缓和的歌 → 密度低 → 幅度小、衰减慢（轻轻地涌）；
+      // 紧凑的歌 → 密度高 → 幅度大、衰减快（跟着拍点弹）
+      // （groove/density 由 eq 循环的 15fps 频谱轮询驱动，这里不再重复
+      //  调 getSpectrum——此前每秒 ~20 次桥接往返取回的 energy 从未被使用）
+      pageState.beatIntensity = rhythm.groove * (0.45 + rhythm.density * 0.75);
+      applyBackgroundTransform(pageState.beatIntensity, pageState.bgPhase);
     }
     
     pageState.bgAnimationFrame = requestAnimationFrame(updateBackground);
@@ -4001,7 +3986,7 @@ function startBackgroundAnimation() {
 // 应用背景变换 - 使用缓存的元素引用
 var cachedBgArtworkRef = null;
 
-function applyBackgroundTransform(beatIntensity, energy, phase) {
+function applyBackgroundTransform(beatIntensity, phase) {
   if (!cachedBgArtworkRef) cachedBgArtworkRef = $('bg-artwork');
   if (!cachedBgArtworkRef) return;
   
