@@ -889,7 +889,10 @@ function buildLyricDom(container, lyrics, currentIndex, isKaraoke) {
   var inner = document.createElement('div');
   inner.className = 'lyrics-inner';
   var items = [];
-  var verbatim = pageState.verbatimLyrics;
+  // 行数不一致说明 verbatim 与当前行集不对应（如自载酷狗行被外部行集替换），
+  // 其时长对不上行时间轴——只有对应时才用它精确判定间奏空窗
+  var verbatim = (pageState.verbatimLyrics.length === lyrics.length)
+    ? pageState.verbatimLyrics : [];
 
   function pushDots(start, end) {
     var dotsEl = document.createElement('div');
@@ -2715,8 +2718,12 @@ async function initPage() {
     pageState.status = status;
     updatePlayerUI(status);
 
-    // 获取歌词（逐行兜底先渲染，逐字异步加载后覆盖）
-    if (status.lyrics && status.lyrics.length > 0) {
+    // 获取歌词（逐行兜底先渲染，逐字异步加载后覆盖）。
+    // 本曲歌词已自载（lyricsSongId 匹配）则绝不覆盖：initPage 会因 locale 事件
+    // 等重跑，此时用 status 的网易逐行去踩自载的酷狗 verbatim 派生行，
+    // 两个行集错位 → 呼吸点乱插/高亮失效（且 loadLyricsForTrack 因去重不自愈）
+    if (status.lyrics && status.lyrics.length > 0 &&
+        !(status.currentTrack && status.currentTrack.id === pageState.lyricsSongId)) {
       // 注意不能用 `|| -1`：索引 0（第一句）是合法值会被吞掉
       var initIdx = typeof status.currentLyricIndex === 'number' ? status.currentLyricIndex : -1;
       pageState.lyrics = status.lyrics;
