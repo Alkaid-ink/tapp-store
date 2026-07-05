@@ -525,6 +525,24 @@ function focusLyricLine(lineIdx, instant) {
   if (k >= 0) focusLyricItemK(k, instant);
 }
 
+// 布局自愈：容器高度和上次测量不一致（入场时机早于布局稳定/iframe 尺寸变化/
+// 横竖屏）就重测并回焦——与 tab 切换路径同逻辑。measured 一旦锁定不会自动
+// 失效，没有这层守卫，入场早测的错误布局会一直持续
+function relayoutLyricsIfNeeded() {
+  if (lyricFx.items.length === 0 || !lyricFx.measured) return;
+  var c = $('lyrics-container');
+  if (!c) return;
+  var h = c.clientHeight;
+  if (h > 0 && Math.abs(h - lyricFx.viewH) > 4) {
+    lyricFx.measured = false;
+    if (measureLyricLayout()) {
+      lyricFx.focusK = -1;
+      var idx = pageState.currentLyricIndex >= 0 ? pageState.currentLyricIndex : 0;
+      focusLyricLine(idx, true);
+    }
+  }
+}
+
 // ========================================
 // 歌词翻译（Apple Music 式副行）
 // ========================================
@@ -2699,9 +2717,11 @@ async function initPage() {
 
     // 获取歌词（逐行兜底先渲染，逐字异步加载后覆盖）
     if (status.lyrics && status.lyrics.length > 0) {
+      // 注意不能用 `|| -1`：索引 0（第一句）是合法值会被吞掉
+      var initIdx = typeof status.currentLyricIndex === 'number' ? status.currentLyricIndex : -1;
       pageState.lyrics = status.lyrics;
-      pageState.currentLyricIndex = status.currentLyricIndex || -1;
-      renderLyrics(status.lyrics, status.currentLyricIndex || -1);
+      pageState.currentLyricIndex = initIdx;
+      renderLyrics(status.lyrics, initIdx);
     }
     // 加载逐字歌词（卡拉OK）+ 节拍网格（精确跟拍）
     if (status.currentTrack) {
@@ -2782,6 +2802,7 @@ async function initPage() {
     if (significantChange) {
       updateStateSnapshot(state);
       updatePlayerUI(state);
+      relayoutLyricsIfNeeded();
     } else {
       // 非关键变化只更新进度相关
       updateProgressOnly(state);
@@ -2826,8 +2847,10 @@ async function initPage() {
           pageState.currentLyricIndex = currentLyricIdx;
           renderLyrics(lyrics, currentLyricIdx);
         }
-      } else if (pageState.lyrics && pageState.lyrics.length > 0) {
-        // 歌词清空了
+      } else if (pageState.lyrics && pageState.lyrics.length > 0 &&
+                 !(state.currentTrack && state.currentTrack.id === pageState.lyricsSongId)) {
+        // 歌词清空了。但本曲歌词若是 tapp 自己加载的（lyricsSongId 匹配）则不清：
+        // 状态事件缺 lyrics 字段（部分派发）不代表歌词消失，自载数据是权威
         pageState.lyrics = [];
         pageState.currentLyricIndex = -1;
         renderLyrics([], -1);
@@ -3072,6 +3095,8 @@ function bindControls() {
       remeasureScrollingText($('song-artist'));
       // 视口高度变化后重新填充虚拟列表可见项
       refreshPlaylistView();
+      // 歌词波浪引擎布局随尺寸重测（否则旧布局被 measured 锁死）
+      relayoutLyricsIfNeeded();
       // 全局移动端缓存会在 checkIsMobile 调用时自动更新
       if (!isMobile() && playerRight) {
         playerRight.classList.remove('mobile-visible');
