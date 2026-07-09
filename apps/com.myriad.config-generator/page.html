@@ -15,9 +15,20 @@
       <div class="header-icon">⚙️</div>
       <div class="header-info">
         <h1 class="header-title">Myriad 安装配置生成</h1>
-        <p class="header-subtitle">快速生成 Docker Compose 和 Nginx 配置文件</p>
+        <p class="header-subtitle">proxy + updater 单运行槽 · Docker Compose / .env / Nginx</p>
       </div>
     </header>
+
+    <!-- 架构提示 -->
+    <div class="section-info">
+      <span class="section-info-icon">ℹ️</span>
+      <div class="section-info-content">
+        <span class="section-info-title">当前生产架构</span>
+        仅 <strong>proxy</strong> 暴露宿主端口；backend / frontend / postgres / updater 在内网。<br>
+        升级为<strong>单运行槽 + 维护模式</strong>（非 A/B 双活）：快照 <code>./pgdata</code> 后切换镜像 tag。<br>
+        外层 HTTPS 请反代到 <code>HTTP_PORT</code>，不要直连 backend:1103。
+      </div>
+    </div>
 
     <!-- 配置表单 -->
     <div class="config-form">
@@ -28,14 +39,14 @@
           域名配置
         </h2>
         <div class="form-group">
-          <label for="main-domain">主域名 (前端)</label>
+          <label for="main-domain">主域名</label>
           <input type="text" id="main-domain" class="form-input" placeholder="example.com" autocomplete="off">
-          <span class="form-hint">用于访问 Myriad 前端界面</span>
+          <span class="form-hint">对外访问 Myriad 的域名；BASE_URL / FRONTEND_URL / CORS 均基于它</span>
         </div>
         <div class="form-group">
-          <label for="api-domain">API 域名 (后端)</label>
-          <input type="text" id="api-domain" class="form-input" placeholder="api.example.com" autocomplete="off">
-          <span class="form-hint">用于后端 API 服务</span>
+          <label for="extra-domain">额外域名（可选）</label>
+          <input type="text" id="extra-domain" class="form-input" placeholder="www.example.com" autocomplete="off">
+          <span class="form-hint">如需 www 或备用域名一并加入 CORS，并额外生成一份 Nginx</span>
         </div>
       </section>
 
@@ -46,28 +57,97 @@
           安全配置
         </h2>
         <div class="form-group">
-          <label for="db-password">数据库密码</label>
+          <label for="db-password">数据库密码 (POSTGRES_PASSWORD)</label>
           <div class="input-with-action">
-            <input type="text" id="db-password" class="form-input" placeholder="点击生成按钮生成强密码" readonly>
+            <input type="text" id="db-password" class="form-input" placeholder="点击生成或自行填写（≥32 字符）" autocomplete="off">
             <button type="button" id="gen-db-password" class="btn-generate" title="生成随机密码">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>
               </svg>
             </button>
           </div>
-          <span class="form-hint">PostgreSQL 数据库密码，建议使用生成的强密码</span>
+          <span class="form-hint">≥32 字符，写入 .env；字母数字以避免 DATABASE_URL 解析问题</span>
         </div>
         <div class="form-group">
-          <label for="jwt-secret">JWT 密钥</label>
+          <label for="jwt-secret">JWT 密钥 (JWT_SECRET)</label>
           <div class="input-with-action">
-            <input type="text" id="jwt-secret" class="form-input" placeholder="点击生成按钮生成密钥" readonly>
+            <input type="text" id="jwt-secret" class="form-input" placeholder="点击生成或自行填写（≥32 字符）" autocomplete="off">
             <button type="button" id="gen-jwt-secret" class="btn-generate" title="生成随机密钥">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>
               </svg>
             </button>
           </div>
-          <span class="form-hint">用于 JWT 令牌签名的密钥，64 字符</span>
+          <span class="form-hint">用于 JWT 签名，64 字符</span>
+        </div>
+        <div class="form-group">
+          <label for="update-token">更新鉴权 (UPDATE_TOKEN)</label>
+          <div class="input-with-action">
+            <input type="text" id="update-token" class="form-input" placeholder="点击生成或自行填写（≥32 字符）" autocomplete="off">
+            <button type="button" id="gen-update-token" class="btn-generate" title="生成 UPDATE_TOKEN">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>
+              </svg>
+            </button>
+          </div>
+          <span class="form-hint">仅服务端持有；浏览器走 admin session，勿暴露给前端</span>
+        </div>
+      </section>
+
+      <!-- 版本与更新器 -->
+      <section class="form-section">
+        <h2 class="section-title">
+          <span class="section-icon">🚀</span>
+          版本与更新器
+        </h2>
+        <p class="section-desc">
+          镜像 tag <strong>禁止使用 <code>:latest</code></strong>（updater 回滚依赖不可变 tag）。
+          打开页面时会从 Docker Hub 自动解析<strong>当前最新 versioned tag</strong>；也可手动覆盖。
+        </p>
+        <div class="tag-status-row">
+          <span id="tag-status" class="tag-status">正在获取最新版本…</span>
+          <button type="button" id="btn-refresh-tags" class="btn-secondary" title="从 Docker Hub 刷新">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>
+            </svg>
+            刷新最新版本
+          </button>
+        </div>
+        <div class="form-row form-row-3">
+          <div class="form-group form-group-third">
+            <label for="myriad-tag">MYRIAD_TAG</label>
+            <input type="text" id="myriad-tag" class="form-input" value="" placeholder="自动获取…" autocomplete="off">
+            <span class="form-hint">backend + frontend 共用</span>
+          </div>
+          <div class="form-group form-group-third">
+            <label for="proxy-tag">PROXY_TAG</label>
+            <input type="text" id="proxy-tag" class="form-input" value="" placeholder="自动获取…" autocomplete="off">
+            <span class="form-hint">proxy 镜像</span>
+          </div>
+          <div class="form-group form-group-third">
+            <label for="updater-tag">UPDATER_TAG</label>
+            <input type="text" id="updater-tag" class="form-input" value="" placeholder="自动获取…" autocomplete="off">
+            <span class="form-hint">updater 镜像</span>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group form-group-half">
+            <label for="channel">Release Channel</label>
+            <select id="channel" class="form-input form-select">
+              <option value="stable" selected>stable</option>
+              <option value="beta">beta</option>
+              <option value="nightly">nightly</option>
+            </select>
+            <span class="form-hint">会按解析到的 tag 形态给出建议</span>
+          </div>
+          <div class="form-group form-group-half">
+            <label for="cosign-verify">Cosign 验证</label>
+            <select id="cosign-verify" class="form-input form-select">
+              <option value="off" selected>off（兼容）</option>
+              <option value="soft">soft（警告）</option>
+              <option value="strict">strict（推荐生产）</option>
+            </select>
+          </div>
         </div>
       </section>
 
@@ -79,23 +159,25 @@
         </h2>
         <div class="form-row">
           <div class="form-group form-group-half">
-            <label for="backend-port">后端端口</label>
-            <input type="number" id="backend-port" class="form-input" value="3000" min="1" max="65535">
-            <span class="form-hint">Backend API 服务端口</span>
+            <label for="http-port">HTTP_PORT（proxy 宿主端口）</label>
+            <input type="number" id="http-port" class="form-input" value="80" min="1" max="65535">
+            <span class="form-hint">唯一对外端口；外层 Nginx 反代到这里</span>
           </div>
           <div class="form-group form-group-half">
-            <label for="frontend-port">前端端口</label>
-            <input type="number" id="frontend-port" class="form-input" value="4321" min="1" max="65535">
-            <span class="form-hint">Frontend 服务端口</span>
+            <label for="db-version">PostgreSQL 版本</label>
+            <select id="db-version" class="form-input form-select">
+              <option value="16" selected>PostgreSQL 16（官方支持）</option>
+            </select>
+            <span class="form-hint">release 契约当前锁定 16；pgdata 必须为 bind mount</span>
           </div>
         </div>
-        <div class="form-group">
-          <label for="db-version">PostgreSQL 版本</label>
-          <select id="db-version" class="form-input form-select">
-            <option value="16">PostgreSQL 16 (推荐)</option>
-            <option value="17">PostgreSQL 17 (最新)</option>
-          </select>
-          <span class="form-hint">选择数据库版本，16 更稳定，17 有新特性</span>
+        <div class="section-warning" style="margin-top: 12px;">
+          <span class="section-warning-icon">📌</span>
+          <div class="section-warning-content">
+            <span class="section-warning-title">内网端口（不可改）</span>
+            frontend:1102 · backend:1103 · updater:1101 · postgres:5432<br>
+            生产环境<strong>不要</strong>再配置 BACKEND_PORT / FRONTEND_PORT 宿主映射。
+          </div>
         </div>
       </section>
 
@@ -105,41 +187,36 @@
           <span class="section-icon">📊</span>
           资源限制
         </h2>
-        <p class="section-desc">配置各服务的 CPU 和内存限制（Docker Compose deploy 配置）</p>
-        
-        <!-- 数据库资源 -->
+        <p class="section-desc">Docker Compose deploy.resources.limits（对齐官方默认值）</p>
+
         <div class="resource-group">
           <div class="resource-label">🗄️ PostgreSQL</div>
           <div class="form-row">
             <div class="form-group form-group-half">
               <label for="db-cpu-limit">CPU 限制</label>
-              <input type="text" id="db-cpu-limit" class="form-input" value="1.0" placeholder="1.0">
-              <span class="form-hint">CPU 核心数，如 0.5, 1.0, 2.0</span>
+              <input type="text" id="db-cpu-limit" class="form-input" value="2.0" placeholder="2.0">
             </div>
             <div class="form-group form-group-half">
               <label for="db-mem-limit">内存限制</label>
-              <input type="text" id="db-mem-limit" class="form-input" value="1G" placeholder="1G">
-              <span class="form-hint">如 512M, 1G, 2G</span>
+              <input type="text" id="db-mem-limit" class="form-input" value="2G" placeholder="2G">
             </div>
           </div>
         </div>
 
-        <!-- 后端资源 -->
         <div class="resource-group">
           <div class="resource-label">⚙️ Backend</div>
           <div class="form-row">
             <div class="form-group form-group-half">
               <label for="backend-cpu-limit">CPU 限制</label>
-              <input type="text" id="backend-cpu-limit" class="form-input" value="1.0" placeholder="1.0">
+              <input type="text" id="backend-cpu-limit" class="form-input" value="2.0" placeholder="2.0">
             </div>
             <div class="form-group form-group-half">
               <label for="backend-mem-limit">内存限制</label>
-              <input type="text" id="backend-mem-limit" class="form-input" value="1G" placeholder="1G">
+              <input type="text" id="backend-mem-limit" class="form-input" value="2G" placeholder="2G">
             </div>
           </div>
         </div>
 
-        <!-- 前端资源 -->
         <div class="resource-group">
           <div class="resource-label">🎨 Frontend</div>
           <div class="form-row">
@@ -153,32 +230,32 @@
             </div>
           </div>
         </div>
+        <p class="form-hint" style="margin-top: 8px;">proxy / updater 与官方 compose 一致，不设 deploy.resources 限制。</p>
       </section>
 
       <!-- Nginx 配置上传 -->
       <section class="form-section">
         <h2 class="section-title">
           <span class="section-icon">📄</span>
-          Nginx 配置 (可选)
+          Nginx 配置（可选）
         </h2>
-        <p class="section-desc">上传您现有的 Nginx 配置文件，保留 SSL 设置并替换域名</p>
-        
-        <!-- 警告提示框 -->
+        <p class="section-desc">上传现有 Nginx 配置可保留 SSL 证书路径；生成器会把反代目标统一到 HTTP_PORT</p>
+
         <div class="section-warning">
           <span class="section-warning-icon">⚠️</span>
           <div class="section-warning-content">
             <span class="section-warning-title">上传要求</span>
-            请上传<strong>纯净的、仅配置好 SSL 证书</strong>的 Nginx 配置文件。<br>
-            复杂的配置文件（包含多个 server 块、复杂的 location 规则等）可能无法正确处理。<br>
-            如不上传，将使用默认模板生成（无 SSL，需要手动配置）。
+            请上传<strong>纯净的、仅配置好 SSL</strong>的 Nginx 配置。<br>
+            旧版「前端端口 + API 端口」双反代已废弃，统一改为反代 <code>127.0.0.1:HTTP_PORT</code>。<br>
+            不上传则生成无 SSL 的默认模板，需自行配置证书。
           </div>
         </div>
-        
+
         <div class="upload-group">
           <div class="upload-item">
             <label>主域名 Nginx 配置</label>
-            <div class="upload-box" id="upload-main-conf">
-              <input type="file" id="file-main-conf" accept=".conf" hidden>
+            <div class="upload-box" id="upload-nginx-conf">
+              <input type="file" id="file-nginx-conf" accept=".conf" hidden>
               <div class="upload-placeholder">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
@@ -195,16 +272,16 @@
               </div>
             </div>
           </div>
-          
+
           <div class="upload-item">
-            <label>API 域名 Nginx 配置</label>
-            <div class="upload-box" id="upload-api-conf">
-              <input type="file" id="file-api-conf" accept=".conf" hidden>
+            <label>额外域名 Nginx（可选）</label>
+            <div class="upload-box" id="upload-extra-nginx-conf">
+              <input type="file" id="file-extra-nginx-conf" accept=".conf" hidden>
               <div class="upload-placeholder">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
                 </svg>
-                <span>点击上传或拖拽文件</span>
+                <span>仅在填写额外域名时需要</span>
               </div>
               <div class="upload-success" hidden>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -233,7 +310,7 @@
     <!-- 生成结果 -->
     <div id="results-section" class="results-section" hidden>
       <h2 class="results-title">📦 生成结果</h2>
-      
+
       <!-- Docker Compose -->
       <div class="result-card">
         <div class="result-header">
@@ -254,6 +331,28 @@
           </button>
         </div>
         <pre class="result-content"><code id="result-docker-compose"></code></pre>
+      </div>
+
+      <!-- .env -->
+      <div class="result-card">
+        <div class="result-header">
+          <span class="result-icon">🔑</span>
+          <span class="result-name">.env</span>
+          <button type="button" class="btn-copy" data-target="env">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+            复制
+          </button>
+          <button type="button" class="btn-download" data-filename=".env" data-target="env">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+            </svg>
+            下载
+          </button>
+        </div>
+        <pre class="result-content"><code id="result-env"></code></pre>
       </div>
 
       <!-- Main Nginx Config -->
@@ -278,26 +377,48 @@
         <pre class="result-content"><code id="result-main-nginx"></code></pre>
       </div>
 
-      <!-- API Nginx Config -->
-      <div class="result-card" id="card-api-nginx">
+      <!-- Extra Nginx Config -->
+      <div class="result-card" id="card-extra-nginx" hidden>
         <div class="result-header">
           <span class="result-icon">📄</span>
-          <span class="result-name" id="name-api-nginx">api.example.com.conf</span>
-          <button type="button" class="btn-copy" data-target="api-nginx">
+          <span class="result-name" id="name-extra-nginx">www.example.com.conf</span>
+          <button type="button" class="btn-copy" data-target="extra-nginx">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
             </svg>
             复制
           </button>
-          <button type="button" class="btn-download" data-filename="api.conf" data-target="api-nginx">
+          <button type="button" class="btn-download" data-filename="extra.conf" data-target="extra-nginx">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
             </svg>
             下载
           </button>
         </div>
-        <pre class="result-content"><code id="result-api-nginx"></code></pre>
+        <pre class="result-content"><code id="result-extra-nginx"></code></pre>
+      </div>
+
+      <!-- Deploy notes -->
+      <div class="result-card">
+        <div class="result-header">
+          <span class="result-icon">📘</span>
+          <span class="result-name">DEPLOY.md</span>
+          <button type="button" class="btn-copy" data-target="deploy-notes">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+            复制
+          </button>
+          <button type="button" class="btn-download" data-filename="DEPLOY.md" data-target="deploy-notes">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+            </svg>
+            下载
+          </button>
+        </div>
+        <pre class="result-content"><code id="result-deploy-notes"></code></pre>
       </div>
     </div>
   </div>

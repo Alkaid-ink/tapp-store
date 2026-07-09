@@ -1,14 +1,32 @@
 // Myriad Config Generator v1.0.0
-// 一键生成 Myriad 部署配置文件
+// 生成 proxy + updater 单运行槽生产部署配置
+// 对齐 Myriad docker-compose.yml / .env.production.example / docs/updater-spec.md
+// 镜像 tag 在运行时从 Docker Hub 解析最新 versioned 标签（禁止 :latest）
 
 // ========================================
 // 配置模板（带占位符）
 // ========================================
 
-var DOCKER_COMPOSE_TEMPLATE = `version: "3.8"
+// 与官方 docker-compose.yml 对齐：proxy 唯一宿主端口、pgdata bind mount、
+// 镜像 tag 由 .env 中 MYRIAD_TAG/PROXY_TAG/UPDATER_TAG 驱动。
+var DOCKER_COMPOSE_TEMPLATE = `# Myriad Docker Compose (v2 — proxy + updater)
+# 由 Myriad 安装配置生成器生成
+#
+# 架构:
+#   proxy (\${HTTP_PORT:-80}) ──┬──► frontend:1102
+#                              └──► backend:1103 ──► postgres
+#   updater (内网) — 快照 pgdata / 切换版本 tag / 维护模式
+#
+# 升级: 管理后台 → 关于 → 更新管理
+# 文档: docs/updater-spec.md / docs/UPDATER_QUICKSTART.md
+#
+# 首次启动:
+#   1. 将本文件与 .env 放在同一目录
+#   2. mkdir -p pgdata state state/snapshots state/cache backups
+#   3. docker compose up -d
+#   或使用仓库 scripts/docker/deploy.sh up
 
 services:
-  # ==================== PostgreSQL Database ====================
   postgres:
     image: postgres:{{DB_VERSION}}-alpine
     container_name: myriad-postgres
@@ -23,10 +41,8 @@ services:
     environment:
       POSTGRES_DB: myriad
       POSTGRES_USER: myriad
-      POSTGRES_PASSWORD: {{DB_PASSWORD}}
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
       POSTGRES_INITDB_ARGS: "-E UTF8 --locale=C --lc-collate=C --lc-ctype=C"
-
-      # PostgreSQL 性能优化参数
       POSTGRES_SHARED_BUFFERS: 512MB
       POSTGRES_EFFECTIVE_CACHE_SIZE: 1536MB
       POSTGRES_MAINTENANCE_WORK_MEM: 128MB
@@ -42,34 +58,27 @@ services:
       POSTGRES_MAX_PARALLEL_WORKERS_PER_GATHER: 2
       POSTGRES_MAX_PARALLEL_WORKERS: 4
       POSTGRES_MAX_PARALLEL_MAINTENANCE_WORKERS: 2
-
       TZ: Asia/Shanghai
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # IMPORTANT: bind mount，不可改为 named volume。updater 依赖文件级快照。
+      - ./pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U myriad -d myriad" ]
+      test: ["CMD-SHELL", "pg_isready -U myriad -d myriad"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
-    networks:
-      - myriad-net
+    networks: [myriad-net]
     restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
+    security_opt: [no-new-privileges:true]
     read_only: false
-    tmpfs:
-      - /tmp
-      - /run
+    tmpfs: [/tmp, /run]
     logging:
       driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      options: { max-size: "10m", max-file: "3" }
 
-  # ==================== Backend API ====================
   backend:
-    image: somekawahitomi/myriad-backend:preview
+    image: \${BACKEND_IMAGE:-docker.io/somekawahitomi/myriad-backend}:\${MYRIAD_TAG}
     container_name: myriad-backend
     deploy:
       resources:
@@ -80,33 +89,26 @@ services:
           cpus: '0.5'
           memory: 512M
     environment:
-      # 数据库连接 - ⚠️ 密码已 URL 编码
-      DATABASE_URL: postgres://myriad:{{DB_PASSWORD_URL_ENCODED}}@postgres:5432/myriad
-
-      # 服务器配置
+      DATABASE_URL: postgres://myriad:\${POSTGRES_PASSWORD}@postgres:5432/myriad
       SERVER_HOST: 0.0.0.0
-      SERVER_PORT: {{BACKEND_PORT}}
-
-      # 安全配置
-      JWT_SECRET: {{JWT_SECRET}}
-
-      # CORS - 域名
-      CORS_ORIGINS: https://{{MAIN_DOMAIN}},https://www.{{MAIN_DOMAIN}},https://{{API_DOMAIN}}
-
-      # OAuth 回调
-      FRONTEND_URL: https://{{MAIN_DOMAIN}}
-      BASE_URL: https://{{API_DOMAIN}}
-
-      # 日志
-      RUST_LOG: info
+      SERVER_PORT: 1103
+      JWT_SECRET: \${JWT_SECRET}
+      CORS_ORIGINS: \${CORS_ORIGINS:-http://localhost}
+      CSP_CONNECT_SRC: \${CSP_CONNECT_SRC:-'self' https:}
+      ENVIRONMENT: \${ENVIRONMENT:-production}
+      FRONTEND_URL: \${FRONTEND_URL:-}
+      BASE_URL: \${BASE_URL:-}
+      RUST_LOG: \${RUST_LOG:-info}
       TZ: Asia/Shanghai
-    ports:
-      - "{{BACKEND_PORT}}:{{BACKEND_PORT}}"
+      MYRIAD_VERSION: \${MYRIAD_TAG}
+      # backend 持有 UPDATE_TOKEN，浏览器只走 admin session
+      MYRIAD_UPDATER_URL: http://updater:1101
+      UPDATE_TOKEN: \${UPDATE_TOKEN}
+    # 不暴露宿主端口；仅 proxy 对外
     depends_on:
-      postgres:
-        condition: service_healthy
+      postgres: { condition: service_healthy }
     healthcheck:
-      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:{{BACKEND_PORT}}/health" ]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:1103/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -114,25 +116,18 @@ services:
     volumes:
       - backend_cache:/app/cache
       - backend_data:/app/data
-    networks:
-      - myriad-net
+    networks: [myriad-net]
     restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    # ⚠️ 关键修复：使用 root 用户运行，确保有文件写入权限
-    user: "0:0"
+    security_opt: [no-new-privileges:true]
     read_only: false
-    tmpfs:
-      - /tmp
+    tmpfs: [/tmp]
+    user: "0:0"
     logging:
       driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      options: { max-size: "10m", max-file: "3" }
 
-  # ==================== Frontend ====================
   frontend:
-    image: somekawahitomi/myriad-frontend:preview
+    image: \${FRONTEND_IMAGE:-docker.io/somekawahitomi/myriad-frontend}:\${MYRIAD_TAG}
     container_name: myriad-frontend
     deploy:
       resources:
@@ -143,228 +138,737 @@ services:
           cpus: '0.25'
           memory: 256M
     environment:
-      PUBLIC_API_URL: https://{{API_DOMAIN}}
+      PUBLIC_API_URL: \${PUBLIC_API_URL:-}
       NODE_ENV: production
       TZ: Asia/Shanghai
-    ports:
-      - "{{FRONTEND_PORT}}:{{FRONTEND_PORT}}"
+      MYRIAD_VERSION: \${MYRIAD_TAG}
     depends_on:
-      backend:
-        condition: service_healthy
+      backend: { condition: service_healthy }
     healthcheck:
-      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:{{FRONTEND_PORT}}" ]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:1102"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
-    networks:
-      - myriad-net
+    networks: [myriad-net]
     restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
+    security_opt: [no-new-privileges:true]
     read_only: true
-    tmpfs:
-      - /tmp
+    tmpfs: [/tmp]
     logging:
       driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      options: { max-size: "10m", max-file: "3" }
 
-# ==================== Volumes ====================
+  proxy:
+    image: \${PROXY_IMAGE:-docker.io/somekawahitomi/myriad-proxy}:\${PROXY_TAG}
+    container_name: myriad-proxy
+    ports:
+      - "\${HTTP_PORT:-80}:80"
+    environment:
+      PROXY_STATE_FILE: /state/maintenance.json
+      PROXY_BACKEND_UPSTREAM: http://backend:1103
+      PROXY_FRONTEND_UPSTREAM: http://frontend:1102
+      PROXY_UPDATER_UPSTREAM: http://updater:1101
+      # 默认关闭 /_updater/* 直连；推荐 /api/admin/updater/*
+      PROXY_ALLOW_DIRECT_UPDATER: \${PROXY_ALLOW_DIRECT_UPDATER:-false}
+      MYRIAD_VERSION: \${PROXY_TAG}
+      TZ: Asia/Shanghai
+    volumes:
+      - ./state:/state:ro
+    networks: [myriad-net]
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: [/tmp]
+    logging:
+      driver: "json-file"
+      options: { max-size: "10m", max-file: "3" }
+
+  updater:
+    image: \${UPDATER_IMAGE:-docker.io/somekawahitomi/myriad-updater}:\${UPDATER_TAG}
+    container_name: myriad-updater
+    environment:
+      UPDATE_TOKEN: \${UPDATE_TOKEN}
+      CHANNEL: \${CHANNEL:-stable}
+      GITHUB_TOKEN: \${GITHUB_TOKEN:-}
+      REGISTRY_MIRROR: \${REGISTRY_MIRROR:-}
+      MYRIAD_GITHUB_REPO: \${MYRIAD_GITHUB_REPO:-Myriad-You/Myriad}
+      CHECK_INTERVAL_SECS: \${CHECK_INTERVAL_SECS:-3600}
+      UPDATER_ENV_FILE: /host/compose/.env
+      COSIGN_VERIFY: \${COSIGN_VERIFY:-off}
+      COMPOSE_PROJECT_NAME: \${COMPOSE_PROJECT_NAME:-myriad}
+      MYRIAD_DOCKER_NETWORK: \${MYRIAD_DOCKER_NETWORK:-myriad-net}
+      MYRIAD_VERSION: \${UPDATER_TAG}
+      TZ: Asia/Shanghai
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./pgdata:/host/pgdata
+      - ./state:/state
+      - ./backups:/backups
+      - ./:/host/compose
+    networks: [myriad-net]
+    restart: unless-stopped
+    # 故意不设 read_only：需要写 state / 快照 / .env
+    logging:
+      driver: "json-file"
+      options: { max-size: "10m", max-file: "3" }
+
 volumes:
-  postgres_data:
-    driver: local
-  backend_cache:
-    driver: local
-  backend_data:
-    driver: local
+  backend_cache: { driver: local }
+  backend_data: { driver: local }
 
-# ==================== Networks ====================
 networks:
   myriad-net:
+    name: \${MYRIAD_DOCKER_NETWORK:-myriad-net}
     driver: bridge
     ipam:
       config:
         - subnet: 172.28.0.0/16
 `;
 
-// 默认的主域名 Nginx 配置模板（无 SSL）
-var DEFAULT_MAIN_NGINX_TEMPLATE = `server {
+// .env 生产模板（密钥与域名由生成器填入）
+var ENV_TEMPLATE = `# =============================================================================
+# Myriad Production Environment Configuration
+# 由 Myriad 安装配置生成器生成 — 请妥善保管，勿提交到 Git
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# UPDATER REQUIRED
+# -----------------------------------------------------------------------------
+# 镜像 versioned tag（生成时解析自 Docker Hub 最新可用版本）。禁止 :latest。
+# 之后由 updater 在升级时改写。
+MYRIAD_TAG={{MYRIAD_TAG}}
+PROXY_TAG={{PROXY_TAG}}
+UPDATER_TAG={{UPDATER_TAG}}
+
+COMPOSE_PROJECT_NAME=myriad
+
+# 可选：同机多套部署时再改
+# MYRIAD_DOCKER_NETWORK=myriad-net
+
+# Updater API 鉴权 token（≥32 字符，仅服务端持有）
+UPDATE_TOKEN={{UPDATE_TOKEN}}
+
+# stable | beta | nightly
+CHANNEL={{CHANNEL}}
+
+# 可选：提升 GitHub API rate limit
+# GITHUB_TOKEN=
+
+# 可选：镜像 mirror 前缀
+# REGISTRY_MIRROR=
+
+MYRIAD_GITHUB_REPO=Myriad-You/Myriad
+CHECK_INTERVAL_SECS=3600
+
+# proxy 宿主端口（外层 Nginx 反代到这里）
+HTTP_PORT={{HTTP_PORT}}
+
+# 是否启用 /_updater/* 直连救援通道（默认 false，推荐走 admin API）
+PROXY_ALLOW_DIRECT_UPDATER=false
+
+# cosign 签名验证: off | soft | strict
+COSIGN_VERIFY={{COSIGN_VERIFY}}
+
+# -----------------------------------------------------------------------------
+# REQUIRED SECURITY SETTINGS
+# -----------------------------------------------------------------------------
+POSTGRES_PASSWORD={{POSTGRES_PASSWORD}}
+JWT_SECRET={{JWT_SECRET}}
+
+# -----------------------------------------------------------------------------
+# CORS / PUBLIC URL
+# -----------------------------------------------------------------------------
+# 生产环境必须配置真实域名，禁止 * 或留空
+CORS_ORIGINS={{CORS_ORIGINS}}
+
+# 对外公开访问地址（联邦 / OAuth 依赖）
+BASE_URL=https://{{MAIN_DOMAIN}}
+FRONTEND_URL=https://{{MAIN_DOMAIN}}
+
+# 前端 API URL（留空则使用相对路径，推荐）
+PUBLIC_API_URL=
+
+# 日志级别
+# RUST_LOG=info
+
+# =============================================================================
+# 安全检查清单
+# =============================================================================
+# ✅ POSTGRES_PASSWORD / JWT_SECRET / UPDATE_TOKEN 已生成
+# ✅ CORS_ORIGINS 为实际 HTTPS 域名
+# ✅ pgdata 为 ./pgdata bind mount（updater 快照依赖）
+# ✅ 外层 HTTPS 入口代理到 HTTP_PORT，不要直连 backend:1103
+# ✅ .env 权限建议 chmod 600
+# =============================================================================
+`;
+
+// 默认外层 Nginx：全部流量反代到 Myriad proxy 的 HTTP_PORT
+// （不要再拆 frontend/backend 端口）
+var DEFAULT_NGINX_TEMPLATE = `server {
     listen 80;
     server_name {{MAIN_DOMAIN}};
-    
+
     index index.php index.html index.htm default.php default.htm default.html;
     access_log /www/sites/{{MAIN_DOMAIN}}/log/access.log main;
     error_log /www/sites/{{MAIN_DOMAIN}}/log/error.log;
 
     # ----------------------------------------------------------------------
-    # ⚠️ 关键点 1：使用 ^~ 提升优先级，确保 API 请求绝对不会进前端
-    # ----------------------------------------------------------------------
-    location ^~ /api/ {
-        # ⚠️ 关键点 2：显式指定后端地址和路径
-        proxy_pass http://127.0.0.1:{{BACKEND_PORT}}/api/;
-        
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        
-        # 超时设置 (5分钟)
-        proxy_connect_timeout 300s;
-        proxy_send_timeout 300s;
-        proxy_read_timeout 300s;
-        
-        proxy_cache off;
-        client_max_body_size 20M;
-    }
-
-    # 健康检查
-    location ^~ /health {
-        proxy_pass http://127.0.0.1:{{BACKEND_PORT}}/health;
-        access_log off;
-    }
-
-    # ----------------------------------------------------------------------
-    # 前端转发 (兜底规则)
+    # 全部流量交给 Myriad proxy（唯一宿主入口）
+    # proxy 内部再路由 frontend / backend / 维护页 / updater 救援
     # ----------------------------------------------------------------------
     location / {
-        proxy_pass http://127.0.0.1:{{FRONTEND_PORT}};
-
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
-    }
-
-    # 通用配置
-    if ( $uri ~ "^/\\.well-known/.*\\.(php|jsp|py|js|css|lua|ts|go|zip|tar\\.gz|rar|7z|sql|bak)$" ) {
-        return 403; 
-    }
-    root /www/sites/{{MAIN_DOMAIN}}/index; 
-    error_page 404 /404.html;
-}
-`;
-
-// 默认的 API 域名 Nginx 配置模板（无 SSL）
-var DEFAULT_API_NGINX_TEMPLATE = `server {
-    listen 80; 
-    server_name {{API_DOMAIN}}; 
-    index index.php index.html index.htm default.php default.htm default.html; 
-    access_log /www/sites/{{API_DOMAIN}}/log/access.log main; 
-    error_log /www/sites/{{API_DOMAIN}}/log/error.log; 
-    
-    location / {
-        proxy_pass http://127.0.0.1:{{BACKEND_PORT}};
+        proxy_pass http://127.0.0.1:{{HTTP_PORT}};
 
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
 
-        # WebSocket 支持
+        # WebSocket / 长连接（联邦等）
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
 
-        # ⚠️ 修改处：超时时间延长至 300s
         proxy_connect_timeout 300s;
         proxy_send_timeout 300s;
         proxy_read_timeout 300s;
 
-        # 请求体大小限制
-        client_max_body_size 20M;
+        proxy_buffering off;
+        client_max_body_size 50M;
     }
 
-    # 健康检查端点
-    location /health {
-        proxy_pass http://127.0.0.1:{{BACKEND_PORT}}/health;
+    # 可选：直接探测 proxy 自身健康
+    location = /healthz {
+        proxy_pass http://127.0.0.1:{{HTTP_PORT}}/healthz;
         access_log off;
     }
 
     if ( $uri ~ "^/\\.well-known/.*\\.(php|jsp|py|js|css|lua|ts|go|zip|tar\\.gz|rar|7z|sql|bak)$" ) {
-        return 403; 
+        return 403;
     }
-    root /www/sites/{{API_DOMAIN}}/index; 
+    root /www/sites/{{MAIN_DOMAIN}}/index;
     error_page 404 /404.html;
 }
+`;
+
+// 可选：额外域名（如 www）反代到同一 proxy
+var DEFAULT_EXTRA_NGINX_TEMPLATE = `server {
+    listen 80;
+    server_name {{EXTRA_DOMAIN}};
+
+    index index.php index.html index.htm default.php default.htm default.html;
+    access_log /www/sites/{{EXTRA_DOMAIN}}/log/access.log main;
+    error_log /www/sites/{{EXTRA_DOMAIN}}/log/error.log;
+
+    location / {
+        proxy_pass http://127.0.0.1:{{HTTP_PORT}};
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        proxy_connect_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
+
+        proxy_buffering off;
+        client_max_body_size 50M;
+    }
+
+    if ( $uri ~ "^/\\.well-known/.*\\.(php|jsp|py|js|css|lua|ts|go|zip|tar\\.gz|rar|7z|sql|bak)$" ) {
+        return 403;
+    }
+    root /www/sites/{{EXTRA_DOMAIN}}/index;
+    error_page 404 /404.html;
+}
+`;
+
+// 部署说明（生成结果中的文本卡片）
+var DEPLOY_NOTES_TEMPLATE = `# Myriad 部署说明（生成器 v1.0）
+
+## 推荐流程（按顺序）
+
+1. **准备目录**（任意空目录即可，不必克隆整个仓库）
+2. **放入本生成器产物**：\`docker-compose.yml\` + \`.env\`（必须同目录）
+3. **创建数据目录** → \`docker compose up -d\`
+4. **配置外层 Nginx/Caddy HTTPS**，反代到 \`127.0.0.1:{{HTTP_PORT}}\`
+5. 浏览器打开 https://{{MAIN_DOMAIN}}，完成**首次管理员注册/初始化**
+6. 日常升级：设置/配置 → 关于 → 更新管理
+
+## 架构（单运行槽 + 维护模式）
+
+- 运行时只有一套 backend / frontend / postgres（不是 A/B 双活）
+- 升级时：维护模式 → 停业务容器 → 快照 pgdata → 切换镜像 tag → 启动并探活
+- 外层 HTTPS 只反代到 proxy 的 HTTP_PORT（默认 {{HTTP_PORT}}）
+- 浏览器更新走 /api/admin/updater/*（admin session），不要把 UPDATE_TOKEN 给前端
+
+## 目录布局
+
+\`\`\`
+.
+├── docker-compose.yml   # 本生成器下载
+├── .env                 # 本生成器下载（含密钥，勿提交 Git）
+├── pgdata/              # PostgreSQL bind mount（必须，updater 快照依赖）
+├── state/               # 维护状态 / 锁 / 历史
+│   ├── snapshots/
+│   └── cache/
+└── backups/             # 升级快照与诊断包
+\`\`\`
+
+## 启动命令
+
+\`\`\`bash
+# 0. 进入你放置 compose/.env 的目录
+cd /path/to/myriad-deploy
+
+# 1. 创建目录
+mkdir -p pgdata state state/snapshots state/cache backups
+
+# 2. 权限（建议）
+chmod 600 .env
+
+# 3. 拉取并启动（首次会拉镜像，可能较久）
+docker compose pull
+docker compose up -d
+
+# 4. 查看状态
+docker compose ps
+docker compose logs -f --tail=100
+\`\`\`
+
+> 注意：\`HTTP_PORT={{HTTP_PORT}}\` 是宿主机唯一对外端口。若 80 被占用，请改 .env 中的 HTTP_PORT，并同步改外层反代。
+
+## 外层 Nginx
+
+- 将 **HTTPS** 流量反代到 \`127.0.0.1:{{HTTP_PORT}}\`
+- **不要**直连 backend:1103 或 frontend:1102，否则会绕过维护页与救援路径
+- 站点域名: https://{{MAIN_DOMAIN}}
+- 若上传了 SSL 配置，请确认证书路径对应当前域名
+
+## 更新
+
+1. 浏览器打开 https://{{MAIN_DOMAIN}}
+2. 管理员登录 → 设置/配置 → 关于 → 更新管理
+3. 检查更新并确认升级
+
+> CHANNEL={{CHANNEL}}。若当前跑的是 rc/beta 镜像，检查更新可能只在对应 channel 有结果。
+
+## 救援（backend 挂掉时）
+
+\`\`\`bash
+# 临时打开直连（可选）
+# 在 .env 设 PROXY_ALLOW_DIRECT_UPDATER=true 后：
+# docker compose up -d proxy
+
+docker exec myriad-updater myriad-rescue status
+docker exec myriad-updater myriad-rescue exit-maintenance --force
+\`\`\`
+
+## 版本标签
+
+| 变量 | 当前值 | 说明 |
+|------|--------|------|
+| MYRIAD_TAG | {{MYRIAD_TAG}} | backend + frontend |
+| PROXY_TAG | {{PROXY_TAG}} | 反向代理 |
+| UPDATER_TAG | {{UPDATER_TAG}} | 更新器 |
+
+禁止推送或使用 :latest；回滚依赖旧 tag 仍在 registry。
+
+> 生成时写入的 tag 来自 Docker Hub 当时解析到的最新 versioned 标签。
+> 之后由 updater 按 channel 跟踪更新。
 `;
 
 // ========================================
 // 工具函数
 // ========================================
 
-// 生成随机密码
-function generatePassword(length) {
-  var charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  var password = '';
+// 生成 URL/连接串安全的随机串（避免 DATABASE_URL 被特殊字符破坏）
+function generateSecret(length) {
+  var charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  var out = '';
   var array = new Uint8Array(length);
   crypto.getRandomValues(array);
   for (var i = 0; i < length; i++) {
-    password += charset[array[i] % charset.length];
+    out += charset[array[i] % charset.length];
   }
-  return password;
+  return out;
 }
 
-// 生成 JWT 密钥（64字符）
-function generateJwtSecret() {
-  var charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  var secret = '';
-  var array = new Uint8Array(64);
+// UPDATE_TOKEN：URL-safe 风格（对齐 deploy.sh）
+function generateUpdateToken() {
+  var charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  var out = '';
+  var array = new Uint8Array(48);
   crypto.getRandomValues(array);
-  for (var i = 0; i < 64; i++) {
-    secret += charset[array[i] % charset.length];
+  for (var i = 0; i < 48; i++) {
+    out += charset[array[i] % charset.length];
   }
-  return secret;
+  return out;
 }
 
-// URL 编码密码
-function urlEncodePassword(password) {
-  return encodeURIComponent(password);
+function generateJwtSecret() {
+  return generateSecret(64);
 }
 
-// 替换 Nginx 配置中的域名
-function replaceNginxDomain(config, oldDomain, newDomain) {
-  // 替换 server_name
-  config = config.replace(/server_name\s+[^;]+;/g, function(match) {
+function generatePassword() {
+  return generateSecret(40);
+}
+
+// 替换 Nginx 配置中的域名（含宝塔路径与常见 Let's Encrypt 路径）
+function replaceNginxDomain(config, newDomain) {
+  var oldDomain = extractDomain(config);
+
+  config = config.replace(/server_name\s+[^;]+;/g, function() {
     return 'server_name ' + newDomain + ';';
   });
-  
-  // 替换路径中的域名（如 /www/sites/xxx/）
+
+  // 宝塔 / 1Panel 常见站点目录
   var domainRegex = new RegExp('/www/sites/[^/]+/', 'g');
   config = config.replace(domainRegex, '/www/sites/' + newDomain + '/');
-  
-  // 替换 include 路径
+
   var includeRegex = new RegExp('include\\s+/www/sites/[^/]+/', 'g');
   config = config.replace(includeRegex, 'include /www/sites/' + newDomain + '/');
-  
+
+  // Let's Encrypt live / archive 路径
+  if (oldDomain && oldDomain !== newDomain) {
+    var leLive = new RegExp('/etc/letsencrypt/live/' + escapeRegExp(oldDomain) + '/', 'g');
+    var leArchive = new RegExp('/etc/letsencrypt/archive/' + escapeRegExp(oldDomain) + '/', 'g');
+    config = config.replace(leLive, '/etc/letsencrypt/live/' + newDomain + '/');
+    config = config.replace(leArchive, '/etc/letsencrypt/archive/' + newDomain + '/');
+  } else {
+    config = config.replace(/\/etc\/letsencrypt\/live\/[^/]+\//g, '/etc/letsencrypt/live/' + newDomain + '/');
+    config = config.replace(/\/etc\/letsencrypt\/archive\/[^/]+\//g, '/etc/letsencrypt/archive/' + newDomain + '/');
+  }
+
   return config;
 }
 
-// 替换 Nginx 配置中的端口
-function replaceNginxPorts(config, backendPort, frontendPort) {
-  // 替换后端端口 (默认 3000)
-  config = config.replace(/127\.0\.0\.1:3000/g, '127.0.0.1:' + backendPort);
-  config = config.replace(/localhost:3000/g, 'localhost:' + backendPort);
-  
-  // 替换前端端口 (默认 4321)
-  config = config.replace(/127\.0\.0\.1:4321/g, '127.0.0.1:' + frontendPort);
-  config = config.replace(/localhost:4321/g, 'localhost:' + frontendPort);
-  
+function escapeRegExp(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// ========================================
+// Docker Hub 最新 versioned tag 解析
+// ========================================
+
+var DOCKER_REPOS = {
+  backend: 'myriad-backend',
+  frontend: 'myriad-frontend',
+  proxy: 'myriad-proxy',
+  updater: 'myriad-updater'
+};
+
+var tagFetchState = {
+  loading: false,
+  /** @type {Promise<object|null>|null} */
+  inflight: null,
+  lastError: '',
+  lastResolved: null,
+  channelTouched: false
+};
+
+function parseVersionTag(tag) {
+  if (!tag || typeof tag !== 'string') return null;
+  // 接受 v1.2.3 / 1.2.3 / v1.2.3-rc.1 / v1.2.3-beta.1 / v1.2.3-nightly.20260101
+  var m = tag.match(/^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/i);
+  if (!m) return null;
+  return {
+    raw: tag,
+    major: parseInt(m[1], 10),
+    minor: parseInt(m[2], 10),
+    patch: parseInt(m[3], 10),
+    pre: m[4] || null
+  };
+}
+
+function comparePreRelease(a, b) {
+  if (!a && !b) return 0;
+  if (!a) return 1;  // 无 pre 的正式版更新
+  if (!b) return -1;
+  var pa = a.split('.');
+  var pb = b.split('.');
+  var n = Math.max(pa.length, pb.length);
+  for (var i = 0; i < n; i++) {
+    var xa = pa[i];
+    var xb = pb[i];
+    if (xa === undefined) return -1;
+    if (xb === undefined) return 1;
+    var na = /^\d+$/.test(xa) ? parseInt(xa, 10) : null;
+    var nb = /^\d+$/.test(xb) ? parseInt(xb, 10) : null;
+    if (na !== null && nb !== null) {
+      if (na !== nb) return na - nb;
+    } else {
+      if (xa < xb) return -1;
+      if (xa > xb) return 1;
+    }
+  }
+  return 0;
+}
+
+function compareSemver(a, b) {
+  if (a.major !== b.major) return a.major - b.major;
+  if (a.minor !== b.minor) return a.minor - b.minor;
+  if (a.patch !== b.patch) return a.patch - b.patch;
+  return comparePreRelease(a.pre, b.pre);
+}
+
+function pickLatestVersionedTag(tagNames) {
+  var parsed = [];
+  for (var i = 0; i < tagNames.length; i++) {
+    var p = parseVersionTag(tagNames[i]);
+    if (p) parsed.push(p);
+  }
+  if (!parsed.length) return null;
+  parsed.sort(function(a, b) { return compareSemver(b, a); });
+  return parsed[0].raw;
+}
+
+function pickLatestCommonVersionedTag(tagLists) {
+  if (!tagLists || !tagLists.length) return null;
+  var sets = tagLists.map(function(list) {
+    var s = {};
+    for (var i = 0; i < list.length; i++) s[list[i]] = true;
+    return s;
+  });
+  var candidates = [];
+  var first = tagLists[0] || [];
+  for (var i = 0; i < first.length; i++) {
+    var tag = first[i];
+    if (!parseVersionTag(tag)) continue;
+    var ok = true;
+    for (var j = 1; j < sets.length; j++) {
+      if (!sets[j][tag]) { ok = false; break; }
+    }
+    if (ok) candidates.push(tag);
+  }
+  return pickLatestVersionedTag(candidates);
+}
+
+function suggestChannelFromTag(tag) {
+  var t = String(tag || '').toLowerCase();
+  if (t.indexOf('nightly') !== -1) return 'nightly';
+  if (t.indexOf('beta') !== -1 || t.indexOf('rc') !== -1 || t.indexOf('alpha') !== -1) return 'beta';
+  return 'stable';
+}
+
+function extractTagNamesFromHubPayload(data) {
+  if (!data) return [];
+  // Tapp.api 返回 data 字段；有时可能再包一层
+  var payload = data;
+  if (payload.data && (payload.data.results || Array.isArray(payload.data))) {
+    payload = payload.data;
+  }
+  var results = payload.results;
+  if (!Array.isArray(results)) return [];
+  var names = [];
+  for (var i = 0; i < results.length; i++) {
+    if (results[i] && results[i].name) names.push(results[i].name);
+  }
+  return names;
+}
+
+async function fetchDockerHubTags(repo) {
+  // 优先走声明式 Tapp.api（沙箱内禁止裸 fetch）
+  if (typeof Tapp !== 'undefined' && typeof Tapp.api === 'function') {
+    var data = await Tapp.api('dockerHubTags', { repo: repo });
+    return extractTagNamesFromHubPayload(data);
+  }
+  // 开发/测试环境降级
+  if (typeof fetch === 'function') {
+    var url = 'https://hub.docker.com/v2/repositories/somekawahitomi/' +
+      encodeURIComponent(repo) +
+      '/tags?page_size=100&ordering=-last_updated';
+    var resp = await fetch(url);
+    if (!resp.ok) throw new Error('Docker Hub HTTP ' + resp.status);
+    var json = await resp.json();
+    return extractTagNamesFromHubPayload(json);
+  }
+  throw new Error('当前环境无法请求 Docker Hub');
+}
+
+function setTagStatus(message, kind) {
+  var el = document.getElementById('tag-status');
+  if (!el) return;
+  el.textContent = message;
+  el.classList.remove('is-loading', 'is-ok', 'is-error');
+  if (kind) el.classList.add('is-' + kind);
+}
+
+function shouldFillTagInput(input, force) {
+  if (!input) return false;
+  if (force) return true;
+  var v = (input.value || '').trim();
+  if (!v) return true;
+  // 仅覆盖自动填充过的字段，保留用户手改
+  return input.dataset.autoFilled === 'true';
+}
+
+function applyResolvedTags(resolved, inputs, channelSelect, opts) {
+  if (!resolved) return;
+  opts = opts || {};
+  var force = !!opts.force;
+
+  if (shouldFillTagInput(inputs.myriad, force) && resolved.myriadTag) {
+    inputs.myriad.value = resolved.myriadTag;
+    inputs.myriad.dataset.autoFilled = 'true';
+  }
+  if (shouldFillTagInput(inputs.proxy, force) && resolved.proxyTag) {
+    inputs.proxy.value = resolved.proxyTag;
+    inputs.proxy.dataset.autoFilled = 'true';
+  }
+  if (shouldFillTagInput(inputs.updater, force) && resolved.updaterTag) {
+    inputs.updater.value = resolved.updaterTag;
+    inputs.updater.dataset.autoFilled = 'true';
+  }
+
+  // state 始终反映输入框当前值
+  state.myriadTag = ((inputs.myriad && inputs.myriad.value) || resolved.myriadTag || '').trim();
+  state.proxyTag = ((inputs.proxy && inputs.proxy.value) || resolved.proxyTag || '').trim();
+  state.updaterTag = ((inputs.updater && inputs.updater.value) || resolved.updaterTag || '').trim();
+
+  if (channelSelect && !tagFetchState.channelTouched) {
+    var suggested = suggestChannelFromTag(resolved.myriadTag || resolved.proxyTag || resolved.updaterTag);
+    channelSelect.value = suggested;
+    state.channel = suggested;
+  }
+}
+
+async function resolveLatestImageTags() {
+  // 并行拉取，减少打开页到可生成的等待时间
+  var results = await Promise.all([
+    fetchDockerHubTags(DOCKER_REPOS.backend),
+    fetchDockerHubTags(DOCKER_REPOS.frontend),
+    fetchDockerHubTags(DOCKER_REPOS.proxy),
+    fetchDockerHubTags(DOCKER_REPOS.updater)
+  ]);
+  var backendTags = results[0];
+  var frontendTags = results[1];
+  var proxyTags = results[2];
+  var updaterTags = results[3];
+
+  var myriadTag = pickLatestCommonVersionedTag([backendTags, frontendTags]);
+  // 若 backend/frontend 暂无交集，分别取最新再优先 backend
+  if (!myriadTag) {
+    myriadTag = pickLatestVersionedTag(backendTags) || pickLatestVersionedTag(frontendTags);
+  }
+  var proxyTag = pickLatestVersionedTag(proxyTags) || myriadTag;
+  var updaterTag = pickLatestVersionedTag(updaterTags) || myriadTag;
+
+  if (!myriadTag && !proxyTag && !updaterTag) {
+    throw new Error('Docker Hub 上未找到可用的 versioned tag（vX.Y.Z）');
+  }
+
+  return {
+    myriadTag: myriadTag || '',
+    proxyTag: proxyTag || '',
+    updaterTag: updaterTag || '',
+    backendCount: backendTags.length,
+    frontendCount: frontendTags.length,
+    proxyCount: proxyTags.length,
+    updaterCount: updaterTags.length
+  };
+}
+
+async function refreshLatestTags(inputs, channelSelect, opts) {
+  opts = opts || {};
+  // 复用进行中的请求，避免「启动拉取未完成时点生成」误失败
+  if (tagFetchState.inflight) {
+    return tagFetchState.inflight;
+  }
+
+  tagFetchState.loading = true;
+  tagFetchState.lastError = '';
+
+  var btn = document.getElementById('btn-refresh-tags');
+  if (btn) btn.disabled = true;
+  setTagStatus('正在从 Docker Hub 获取最新 versioned tag…', 'loading');
+
+  tagFetchState.inflight = (async function() {
+    try {
+      var resolved = await resolveLatestImageTags();
+      tagFetchState.lastResolved = resolved;
+      // 手动点「刷新」时强制覆盖；自动拉取只填空/自动字段
+      applyResolvedTags(resolved, inputs, channelSelect, { force: !!opts.force });
+      setTagStatus(
+        '已解析最新版本：MYRIAD=' + resolved.myriadTag +
+        ' · PROXY=' + resolved.proxyTag +
+        ' · UPDATER=' + resolved.updaterTag +
+        '（禁止 :latest）',
+        'ok'
+      );
+      if (opts.notify) {
+        showNotification('已更新为 Docker Hub 最新 versioned tag', 'success');
+      }
+      return resolved;
+    } catch (err) {
+      var msg = (err && err.message) ? err.message : String(err);
+      tagFetchState.lastError = msg;
+      setTagStatus('获取失败：' + msg + '。请手动填写 versioned tag。', 'error');
+      if (opts.notify) {
+        showNotification('获取最新版本失败：' + msg, 'error');
+      }
+      return null;
+    } finally {
+      tagFetchState.loading = false;
+      tagFetchState.inflight = null;
+      if (btn) btn.disabled = false;
+    }
+  })();
+
+  return tagFetchState.inflight;
+}
+
+// 将旧式 backend/frontend 直连端口统一改为 proxy HTTP_PORT
+// 并尽量把 location 合并为单入口反代语义
+function replaceNginxUpstreamToProxy(config, httpPort) {
+  // 常见旧端口与自定义端口 → proxy
+  config = config.replace(/127\.0\.0\.1:(3000|4321|1102|1103|80|8080)\b/g, '127.0.0.1:' + httpPort);
+  config = config.replace(/localhost:(3000|4321|1102|1103|80|8080)\b/g, 'localhost:' + httpPort);
+
+  // 若用户配置已是 proxy_pass 到自定义端口，再统一一次
+  config = config.replace(/proxy_pass\s+http:\/\/127\.0\.0\.1:\d+/g, 'proxy_pass http://127.0.0.1:' + httpPort);
+  config = config.replace(/proxy_pass\s+http:\/\/localhost:\d+/g, 'proxy_pass http://localhost:' + httpPort);
+
   return config;
 }
 
-// 提取原始域名
 function extractDomain(config) {
   var match = config.match(/server_name\s+([^;]+);/);
   if (match) {
-    return match[1].trim();
+    return match[1].trim().split(/\s+/)[0];
   }
   return null;
+}
+
+function normalizeDomain(domain) {
+  return domain
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/.*$/, '')
+    .replace(/:\d+$/, '')
+    .toLowerCase();
+}
+
+function isValidDomain(domain) {
+  if (!domain || domain.length > 253) return false;
+  // 宽松校验：hostname 形态
+  return /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i.test(domain)
+    || domain === 'localhost';
+}
+
+function buildCorsOrigins(mainDomain, extraDomain) {
+  var origins = ['https://' + mainDomain];
+  if (extraDomain && extraDomain !== mainDomain) {
+    origins.push('https://' + extraDomain);
+  }
+  // 常见 www 变体：若主域不是 www 且用户没填额外域，不自动加 www（避免 CORS 过宽）
+  return origins.join(',');
 }
 
 // ========================================
@@ -373,183 +877,241 @@ function extractDomain(config) {
 
 var state = {
   mainDomain: '',
-  apiDomain: '',
+  extraDomain: '',
   dbPassword: '',
   jwtSecret: '',
-  mainNginxConfig: null,
-  apiNginxConfig: null,
-  mainNginxFileName: '',
-  apiNginxFileName: '',
-  // 新增配置
-  backendPort: 3000,
-  frontendPort: 4321,
+  updateToken: '',
+  nginxConfig: null,
+  nginxFileName: '',
+  extraNginxConfig: null,
+  extraNginxFileName: '',
+  httpPort: 80,
   dbVersion: '16',
-  dbCpuLimit: '1.0',
-  dbMemLimit: '1G',
-  backendCpuLimit: '1.0',
-  backendMemLimit: '1G',
+  // 运行时由 Docker Hub 解析填充，不在源码中写死版本
+  myriadTag: '',
+  proxyTag: '',
+  updaterTag: '',
+  channel: 'stable',
+  cosignVerify: 'off',
+  dbCpuLimit: '2.0',
+  dbMemLimit: '2G',
+  backendCpuLimit: '2.0',
+  backendMemLimit: '2G',
   frontendCpuLimit: '1.0',
   frontendMemLimit: '1G'
 };
-
-// 防抖定时器
-var apiDomainDebounceTimer = null;
 
 // ========================================
 // UI 交互
 // ========================================
 
 function initPage() {
-  // 域名输入
   var mainDomainInput = document.getElementById('main-domain');
-  var apiDomainInput = document.getElementById('api-domain');
-  
-  // 密码/密钥输入
+  var extraDomainInput = document.getElementById('extra-domain');
   var dbPasswordInput = document.getElementById('db-password');
   var jwtSecretInput = document.getElementById('jwt-secret');
-  
-  // 生成按钮
+  var updateTokenInput = document.getElementById('update-token');
+
   var genDbPasswordBtn = document.getElementById('gen-db-password');
   var genJwtSecretBtn = document.getElementById('gen-jwt-secret');
+  var genUpdateTokenBtn = document.getElementById('gen-update-token');
   var generateAllBtn = document.getElementById('btn-generate-all');
-  
-  // 文件上传
-  var uploadMainConf = document.getElementById('upload-main-conf');
-  var uploadApiConf = document.getElementById('upload-api-conf');
-  var fileMainConf = document.getElementById('file-main-conf');
-  var fileApiConf = document.getElementById('file-api-conf');
-  
-  // 服务配置输入
-  var backendPortInput = document.getElementById('backend-port');
-  var frontendPortInput = document.getElementById('frontend-port');
+
+  var uploadNginx = document.getElementById('upload-nginx-conf');
+  var fileNginx = document.getElementById('file-nginx-conf');
+  var uploadExtraNginx = document.getElementById('upload-extra-nginx-conf');
+  var fileExtraNginx = document.getElementById('file-extra-nginx-conf');
+
+  var httpPortInput = document.getElementById('http-port');
   var dbVersionSelect = document.getElementById('db-version');
-  
-  // 资源限制输入
+  var myriadTagInput = document.getElementById('myriad-tag');
+  var proxyTagInput = document.getElementById('proxy-tag');
+  var updaterTagInput = document.getElementById('updater-tag');
+  var channelSelect = document.getElementById('channel');
+  var cosignSelect = document.getElementById('cosign-verify');
+
   var dbCpuLimitInput = document.getElementById('db-cpu-limit');
   var dbMemLimitInput = document.getElementById('db-mem-limit');
   var backendCpuLimitInput = document.getElementById('backend-cpu-limit');
   var backendMemLimitInput = document.getElementById('backend-mem-limit');
   var frontendCpuLimitInput = document.getElementById('frontend-cpu-limit');
   var frontendMemLimitInput = document.getElementById('frontend-mem-limit');
-  
-  // 自动填充 API 域名 - 使用防抖，等用户输入完成后再生成
-  mainDomainInput.addEventListener('input', function() {
-    // 清除之前的定时器
-    if (apiDomainDebounceTimer) {
-      clearTimeout(apiDomainDebounceTimer);
-    }
-    
-    // 设置新的定时器，500ms 后执行
-    apiDomainDebounceTimer = setTimeout(function() {
-      var val = mainDomainInput.value.trim();
-      // 只有当用户没有手动修改过 API 域名时才自动填充
-      if (val && (!apiDomainInput.value || apiDomainInput.dataset.autoFilled === 'true')) {
-        apiDomainInput.value = 'api.' + val;
-        apiDomainInput.dataset.autoFilled = 'true';
-      }
-    }, 500);
+  var refreshTagsBtn = document.getElementById('btn-refresh-tags');
+
+  var tagInputs = {
+    myriad: myriadTagInput,
+    proxy: proxyTagInput,
+    updater: updaterTagInput
+  };
+
+  function markTagManual(input) {
+    if (!input) return;
+    input.dataset.autoFilled = 'false';
+  }
+
+  [myriadTagInput, proxyTagInput, updaterTagInput].forEach(function(input) {
+    if (!input) return;
+    input.addEventListener('input', function() {
+      markTagManual(input);
+    });
   });
-  
-  // 当用户手动修改 API 域名时，标记为非自动填充
-  apiDomainInput.addEventListener('input', function() {
-    apiDomainInput.dataset.autoFilled = 'false';
-  });
-  
-  // 主域名失去焦点时立即填充（如果还没填充的话）
-  mainDomainInput.addEventListener('blur', function() {
-    if (apiDomainDebounceTimer) {
-      clearTimeout(apiDomainDebounceTimer);
-      apiDomainDebounceTimer = null;
-    }
-    var val = mainDomainInput.value.trim();
-    if (val && (!apiDomainInput.value || apiDomainInput.dataset.autoFilled === 'true')) {
-      apiDomainInput.value = 'api.' + val;
-      apiDomainInput.dataset.autoFilled = 'true';
-    }
-  });
-  
-  // 生成数据库密码
+
+  if (channelSelect) {
+    channelSelect.addEventListener('change', function() {
+      tagFetchState.channelTouched = true;
+    });
+  }
+
   genDbPasswordBtn.addEventListener('click', function() {
-    dbPasswordInput.value = generatePassword(32);
+    dbPasswordInput.value = generatePassword();
     animateButton(genDbPasswordBtn);
   });
-  
-  // 生成 JWT 密钥
+
   genJwtSecretBtn.addEventListener('click', function() {
     jwtSecretInput.value = generateJwtSecret();
     animateButton(genJwtSecretBtn);
   });
-  
-  // 文件上传 - 主域名配置
-  setupFileUpload(uploadMainConf, fileMainConf, function(content, fileName) {
-    state.mainNginxConfig = content;
-    state.mainNginxFileName = fileName;
-    showUploadSuccess(uploadMainConf, fileName);
+
+  genUpdateTokenBtn.addEventListener('click', function() {
+    updateTokenInput.value = generateUpdateToken();
+    animateButton(genUpdateTokenBtn);
   });
-  
-  // 文件上传 - API 域名配置
-  setupFileUpload(uploadApiConf, fileApiConf, function(content, fileName) {
-    state.apiNginxConfig = content;
-    state.apiNginxFileName = fileName;
-    showUploadSuccess(uploadApiConf, fileName);
+
+  if (refreshTagsBtn) {
+    refreshTagsBtn.addEventListener('click', function() {
+      // 用户明确刷新：覆盖自动/当前值为最新
+      refreshLatestTags(tagInputs, channelSelect, { notify: true, force: true });
+    });
+  }
+
+  setupFileUpload(uploadNginx, fileNginx, function(content, fileName) {
+    state.nginxConfig = content;
+    state.nginxFileName = fileName;
+    showUploadSuccess(uploadNginx, fileName);
+  }, function() {
+    state.nginxConfig = null;
+    state.nginxFileName = '';
   });
-  
-  // 生成配置
+
+  if (uploadExtraNginx && fileExtraNginx) {
+    setupFileUpload(uploadExtraNginx, fileExtraNginx, function(content, fileName) {
+      state.extraNginxConfig = content;
+      state.extraNginxFileName = fileName;
+      showUploadSuccess(uploadExtraNginx, fileName);
+    }, function() {
+      state.extraNginxConfig = null;
+      state.extraNginxFileName = '';
+    });
+  }
+
   generateAllBtn.addEventListener('click', async function() {
-    var mainDomain = mainDomainInput.value.trim();
-    var apiDomain = apiDomainInput.value.trim();
-    var dbPassword = dbPasswordInput.value.trim();
-    var jwtSecret = jwtSecretInput.value.trim();
-    
-    // 验证
-    if (!mainDomain) {
-      showNotification('请输入主域名', 'error');
-      mainDomainInput.focus();
-      return;
+    if (generateAllBtn.disabled) return;
+    generateAllBtn.disabled = true;
+
+    try {
+      var mainDomain = normalizeDomain(mainDomainInput.value);
+      var extraDomain = normalizeDomain(extraDomainInput.value || '');
+      var dbPassword = dbPasswordInput.value.trim();
+      var jwtSecret = jwtSecretInput.value.trim();
+      var updateToken = updateTokenInput.value.trim();
+
+      if (!mainDomain) {
+        showNotification('请输入主域名', 'error');
+        mainDomainInput.focus();
+        return;
+      }
+
+      if (!isValidDomain(mainDomain)) {
+        showNotification('主域名格式无效', 'error');
+        mainDomainInput.focus();
+        return;
+      }
+
+      if (extraDomain && !isValidDomain(extraDomain)) {
+        showNotification('额外域名格式无效', 'error');
+        extraDomainInput.focus();
+        return;
+      }
+
+      // 密钥不足时当场补齐并继续，避免「生成后还要再点一次」
+      if (!dbPassword || dbPassword.length < 32) {
+        dbPassword = generatePassword();
+        dbPasswordInput.value = dbPassword;
+      }
+      if (!jwtSecret || jwtSecret.length < 32) {
+        jwtSecret = generateJwtSecret();
+        jwtSecretInput.value = jwtSecret;
+      }
+      if (!updateToken || updateToken.length < 32) {
+        updateToken = generateUpdateToken();
+        updateTokenInput.value = updateToken;
+      }
+
+      state.mainDomain = mainDomain;
+      state.extraDomain = extraDomain;
+      state.dbPassword = dbPassword;
+      state.jwtSecret = jwtSecret;
+      state.updateToken = updateToken;
+
+      state.httpPort = parseInt(httpPortInput.value, 10) || 80;
+      if (state.httpPort < 1 || state.httpPort > 65535) {
+        showNotification('HTTP 端口无效', 'error');
+        httpPortInput.focus();
+        return;
+      }
+
+      state.dbVersion = dbVersionSelect.value || '16';
+
+      // 若 tag 为空：等待进行中的拉取，或发起新拉取（不强制覆盖手改字段）
+      var myriadTag = (myriadTagInput.value || '').trim();
+      var proxyTag = (proxyTagInput.value || '').trim();
+      var updaterTag = (updaterTagInput.value || '').trim();
+      if (!myriadTag || !proxyTag || !updaterTag) {
+        var resolved = await refreshLatestTags(tagInputs, channelSelect, { notify: false, force: false });
+        if (!resolved && (!myriadTag || !proxyTag || !updaterTag)) {
+          showNotification('镜像 tag 为空且无法自动获取，请点击「刷新最新版本」或手动填写', 'error');
+          myriadTagInput.focus();
+          return;
+        }
+        myriadTag = (myriadTagInput.value || '').trim();
+        proxyTag = (proxyTagInput.value || '').trim();
+        updaterTag = (updaterTagInput.value || '').trim();
+      }
+
+      state.myriadTag = myriadTag;
+      state.proxyTag = proxyTag;
+      state.updaterTag = updaterTag;
+      state.channel = channelSelect.value || 'stable';
+      state.cosignVerify = cosignSelect.value || 'off';
+
+      state.dbCpuLimit = dbCpuLimitInput.value.trim() || '2.0';
+      state.dbMemLimit = dbMemLimitInput.value.trim() || '2G';
+      state.backendCpuLimit = backendCpuLimitInput.value.trim() || '2.0';
+      state.backendMemLimit = backendMemLimitInput.value.trim() || '2G';
+      state.frontendCpuLimit = frontendCpuLimitInput.value.trim() || '1.0';
+      state.frontendMemLimit = frontendMemLimitInput.value.trim() || '1G';
+
+      if (!state.myriadTag || !state.proxyTag || !state.updaterTag) {
+        showNotification('请填写完整的镜像 tag', 'error');
+        return;
+      }
+
+      if (/^latest$/i.test(state.myriadTag) || /^latest$/i.test(state.proxyTag) || /^latest$/i.test(state.updaterTag)) {
+        showNotification('禁止使用 :latest 标签。请使用 versioned tag，或点「刷新最新版本」', 'error');
+        return;
+      }
+
+      if (!parseVersionTag(state.myriadTag) || !parseVersionTag(state.proxyTag) || !parseVersionTag(state.updaterTag)) {
+        showNotification('tag 格式应为 vX.Y.Z 或 vX.Y.Z-rc.N 等 versioned 形式', 'error');
+        return;
+      }
+
+      generateConfigs();
+    } finally {
+      generateAllBtn.disabled = false;
     }
-    
-    if (!apiDomain) {
-      showNotification('请输入 API 域名', 'error');
-      apiDomainInput.focus();
-      return;
-    }
-    
-    if (!dbPassword) {
-      showNotification('请生成数据库密码', 'error');
-      genDbPasswordBtn.click();
-      return;
-    }
-    
-    if (!jwtSecret) {
-      showNotification('请生成 JWT 密钥', 'error');
-      genJwtSecretBtn.click();
-      return;
-    }
-    
-    // 保存状态
-    state.mainDomain = mainDomain;
-    state.apiDomain = apiDomain;
-    state.dbPassword = dbPassword;
-    state.jwtSecret = jwtSecret;
-    
-    // 保存服务配置
-    state.backendPort = parseInt(backendPortInput.value) || 3000;
-    state.frontendPort = parseInt(frontendPortInput.value) || 4321;
-    state.dbVersion = dbVersionSelect.value || '16';
-    
-    // 保存资源限制
-    state.dbCpuLimit = dbCpuLimitInput.value.trim() || '1.0';
-    state.dbMemLimit = dbMemLimitInput.value.trim() || '1G';
-    state.backendCpuLimit = backendCpuLimitInput.value.trim() || '1.0';
-    state.backendMemLimit = backendMemLimitInput.value.trim() || '1G';
-    state.frontendCpuLimit = frontendCpuLimitInput.value.trim() || '1.0';
-    state.frontendMemLimit = frontendMemLimitInput.value.trim() || '1G';
-    
-    // 生成配置
-    generateConfigs();
   });
-  
-  // 复制和下载按钮
+
   document.querySelectorAll('.btn-copy').forEach(function(btn) {
     btn.addEventListener('click', function() {
       var target = btn.getAttribute('data-target');
@@ -557,55 +1119,57 @@ function initPage() {
       copyToClipboard(content, btn);
     });
   });
-  
+
   document.querySelectorAll('.btn-download').forEach(function(btn) {
     btn.addEventListener('click', function() {
       var target = btn.getAttribute('data-target');
       var content = document.getElementById('result-' + target).textContent;
       var filename = btn.getAttribute('data-filename');
-      
-      // 动态文件名
+
       if (target === 'main-nginx') {
         filename = state.mainDomain + '.conf';
-      } else if (target === 'api-nginx') {
-        filename = state.apiDomain + '.conf';
+      } else if (target === 'extra-nginx') {
+        filename = (state.extraDomain || 'extra') + '.conf';
       }
-      
+
       downloadFile(content, filename);
     });
   });
-  
-  // 自动生成密码和密钥
+
+  // 自动生成密钥
   genDbPasswordBtn.click();
   genJwtSecretBtn.click();
+  genUpdateTokenBtn.click();
+
+  // 启动时解析 Docker Hub 最新 versioned tag（不写死版本号）
+  refreshLatestTags(tagInputs, channelSelect, { notify: false });
 }
 
-function setupFileUpload(uploadBox, fileInput, onLoad) {
-  // 点击上传
+function setupFileUpload(uploadBox, fileInput, onLoad, onClear) {
+  if (!uploadBox || !fileInput) return;
+
   uploadBox.addEventListener('click', function(e) {
     if (e.target.classList.contains('btn-remove')) {
       return;
     }
     fileInput.click();
   });
-  
-  // 文件选择
+
   fileInput.addEventListener('change', function() {
     if (fileInput.files.length > 0) {
       readFile(fileInput.files[0], onLoad);
     }
   });
-  
-  // 拖拽
+
   uploadBox.addEventListener('dragover', function(e) {
     e.preventDefault();
     uploadBox.classList.add('dragover');
   });
-  
+
   uploadBox.addEventListener('dragleave', function() {
     uploadBox.classList.remove('dragover');
   });
-  
+
   uploadBox.addEventListener('drop', function(e) {
     e.preventDefault();
     uploadBox.classList.remove('dragover');
@@ -613,23 +1177,14 @@ function setupFileUpload(uploadBox, fileInput, onLoad) {
       readFile(e.dataTransfer.files[0], onLoad);
     }
   });
-  
-  // 移除按钮
+
   var removeBtn = uploadBox.querySelector('.btn-remove');
   if (removeBtn) {
     removeBtn.addEventListener('click', function(e) {
       e.stopPropagation();
       hideUploadSuccess(uploadBox);
       fileInput.value = '';
-      
-      // 清除状态
-      if (uploadBox.id === 'upload-main-conf') {
-        state.mainNginxConfig = null;
-        state.mainNginxFileName = '';
-      } else if (uploadBox.id === 'upload-api-conf') {
-        state.apiNginxConfig = null;
-        state.apiNginxFileName = '';
-      }
+      if (typeof onClear === 'function') onClear();
     });
   }
 }
@@ -646,7 +1201,7 @@ function showUploadSuccess(uploadBox, fileName) {
   var placeholder = uploadBox.querySelector('.upload-placeholder');
   var success = uploadBox.querySelector('.upload-success');
   var fileNameEl = success.querySelector('.file-name');
-  
+
   placeholder.hidden = true;
   success.hidden = false;
   fileNameEl.textContent = fileName;
@@ -655,7 +1210,7 @@ function showUploadSuccess(uploadBox, fileName) {
 function hideUploadSuccess(uploadBox) {
   var placeholder = uploadBox.querySelector('.upload-placeholder');
   var success = uploadBox.querySelector('.upload-success');
-  
+
   placeholder.hidden = false;
   success.hidden = true;
 }
@@ -671,73 +1226,90 @@ function animateButton(btn) {
 // 生成配置
 // ========================================
 
+function applyPlaceholders(template, map) {
+  var out = template;
+  Object.keys(map).forEach(function(key) {
+    var re = new RegExp('\\{\\{' + key + '\\}\\}', 'g');
+    out = out.replace(re, map[key]);
+  });
+  return out;
+}
+
 function generateConfigs() {
-  var dbPasswordUrlEncoded = urlEncodePassword(state.dbPassword);
-  
-  // 生成 Docker Compose
-  var dockerCompose = DOCKER_COMPOSE_TEMPLATE
-    .replace(/\{\{DB_PASSWORD\}\}/g, state.dbPassword)
-    .replace(/\{\{DB_PASSWORD_URL_ENCODED\}\}/g, dbPasswordUrlEncoded)
-    .replace(/\{\{JWT_SECRET\}\}/g, state.jwtSecret)
-    .replace(/\{\{MAIN_DOMAIN\}\}/g, state.mainDomain)
-    .replace(/\{\{API_DOMAIN\}\}/g, state.apiDomain)
-    // 端口配置
-    .replace(/\{\{BACKEND_PORT\}\}/g, state.backendPort)
-    .replace(/\{\{FRONTEND_PORT\}\}/g, state.frontendPort)
-    // 数据库版本
-    .replace(/\{\{DB_VERSION\}\}/g, state.dbVersion)
-    // 资源限制
-    .replace(/\{\{DB_CPU_LIMIT\}\}/g, state.dbCpuLimit)
-    .replace(/\{\{DB_MEM_LIMIT\}\}/g, state.dbMemLimit)
-    .replace(/\{\{BACKEND_CPU_LIMIT\}\}/g, state.backendCpuLimit)
-    .replace(/\{\{BACKEND_MEM_LIMIT\}\}/g, state.backendMemLimit)
-    .replace(/\{\{FRONTEND_CPU_LIMIT\}\}/g, state.frontendCpuLimit)
-    .replace(/\{\{FRONTEND_MEM_LIMIT\}\}/g, state.frontendMemLimit);
-  
-  // 生成主域名 Nginx 配置
+  var corsOrigins = buildCorsOrigins(state.mainDomain, state.extraDomain);
+
+  var map = {
+    DB_VERSION: state.dbVersion,
+    DB_CPU_LIMIT: state.dbCpuLimit,
+    DB_MEM_LIMIT: state.dbMemLimit,
+    BACKEND_CPU_LIMIT: state.backendCpuLimit,
+    BACKEND_MEM_LIMIT: state.backendMemLimit,
+    FRONTEND_CPU_LIMIT: state.frontendCpuLimit,
+    FRONTEND_MEM_LIMIT: state.frontendMemLimit,
+    POSTGRES_PASSWORD: state.dbPassword,
+    JWT_SECRET: state.jwtSecret,
+    UPDATE_TOKEN: state.updateToken,
+    MAIN_DOMAIN: state.mainDomain,
+    EXTRA_DOMAIN: state.extraDomain || '',
+    CORS_ORIGINS: corsOrigins,
+    HTTP_PORT: String(state.httpPort),
+    MYRIAD_TAG: state.myriadTag,
+    PROXY_TAG: state.proxyTag,
+    UPDATER_TAG: state.updaterTag,
+    CHANNEL: state.channel,
+    COSIGN_VERIFY: state.cosignVerify
+  };
+
+  var dockerCompose = applyPlaceholders(DOCKER_COMPOSE_TEMPLATE, map);
+  var envFile = applyPlaceholders(ENV_TEMPLATE, map);
+  var deployNotes = applyPlaceholders(DEPLOY_NOTES_TEMPLATE, map);
+
+  // 主域名 Nginx
   var mainNginx;
-  if (state.mainNginxConfig) {
-    // 使用上传的配置，替换域名和端口
-    mainNginx = replaceNginxDomain(state.mainNginxConfig, extractDomain(state.mainNginxConfig), state.mainDomain);
-    mainNginx = replaceNginxPorts(mainNginx, state.backendPort, state.frontendPort);
+  if (state.nginxConfig) {
+    mainNginx = replaceNginxDomain(state.nginxConfig, state.mainDomain);
+    mainNginx = replaceNginxUpstreamToProxy(mainNginx, state.httpPort);
   } else {
-    // 使用默认模板
-    mainNginx = DEFAULT_MAIN_NGINX_TEMPLATE
-      .replace(/\{\{MAIN_DOMAIN\}\}/g, state.mainDomain)
-      .replace(/\{\{BACKEND_PORT\}\}/g, state.backendPort)
-      .replace(/\{\{FRONTEND_PORT\}\}/g, state.frontendPort);
+    mainNginx = applyPlaceholders(DEFAULT_NGINX_TEMPLATE, map);
   }
-  
-  // 生成 API 域名 Nginx 配置
-  var apiNginx;
-  if (state.apiNginxConfig) {
-    // 使用上传的配置，替换域名和端口
-    apiNginx = replaceNginxDomain(state.apiNginxConfig, extractDomain(state.apiNginxConfig), state.apiDomain);
-    apiNginx = replaceNginxPorts(apiNginx, state.backendPort, state.frontendPort);
-  } else {
-    // 使用默认模板
-    apiNginx = DEFAULT_API_NGINX_TEMPLATE
-      .replace(/\{\{API_DOMAIN\}\}/g, state.apiDomain)
-      .replace(/\{\{BACKEND_PORT\}\}/g, state.backendPort);
+
+  // 额外域名 Nginx（可选）
+  var hasExtra = !!state.extraDomain;
+  var extraNginx = '';
+  var cardExtra = document.getElementById('card-extra-nginx');
+  if (hasExtra) {
+    if (state.extraNginxConfig) {
+      extraNginx = replaceNginxDomain(state.extraNginxConfig, state.extraDomain);
+      extraNginx = replaceNginxUpstreamToProxy(extraNginx, state.httpPort);
+    } else {
+      extraNginx = applyPlaceholders(DEFAULT_EXTRA_NGINX_TEMPLATE, map);
+    }
+    if (cardExtra) cardExtra.hidden = false;
+  } else if (cardExtra) {
+    cardExtra.hidden = true;
   }
-  
-  // 显示结果
+
   document.getElementById('result-docker-compose').textContent = dockerCompose;
+  document.getElementById('result-env').textContent = envFile;
   document.getElementById('result-main-nginx').textContent = mainNginx;
-  document.getElementById('result-api-nginx').textContent = apiNginx;
-  
-  // 更新文件名
+  document.getElementById('result-deploy-notes').textContent = deployNotes;
+
+  var extraResult = document.getElementById('result-extra-nginx');
+  if (extraResult) {
+    extraResult.textContent = extraNginx;
+  }
+
   document.getElementById('name-main-nginx').textContent = state.mainDomain + '.conf';
-  document.getElementById('name-api-nginx').textContent = state.apiDomain + '.conf';
-  
-  // 显示结果区域
+  var nameExtra = document.getElementById('name-extra-nginx');
+  if (nameExtra && hasExtra) {
+    nameExtra.textContent = state.extraDomain + '.conf';
+  }
+
   var resultsSection = document.getElementById('results-section');
   resultsSection.hidden = false;
-  
-  // 滚动到结果
   resultsSection.scrollIntoView({ behavior: 'smooth' });
-  
-  showNotification('配置文件生成成功！', 'success');
+
+  showNotification('配置文件生成成功！请同时保存 docker-compose.yml 与 .env', 'success');
 }
 
 // ========================================
@@ -746,33 +1318,29 @@ function generateConfigs() {
 
 function copyToClipboard(text, btn) {
   var originalHTML = btn.innerHTML;
-  
-  // 尝试使用现代 Clipboard API
+
   function onSuccess() {
     btn.classList.add('copied');
     btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg> 已复制';
-    
+
     setTimeout(function() {
       btn.classList.remove('copied');
       btn.innerHTML = originalHTML;
     }, 2000);
-    
+
     showNotification('已复制到剪贴板', 'success');
   }
-  
+
   function onError(err) {
     console.error('复制失败:', err);
     showNotification('复制失败，请手动选择复制', 'error');
   }
-  
-  // 方法1: 尝试使用 Clipboard API
+
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(onSuccess).catch(function(err) {
-      // 方法2: 降级使用 execCommand
+    navigator.clipboard.writeText(text).then(onSuccess).catch(function() {
       fallbackCopy(text, onSuccess, onError);
     });
   } else {
-    // 方法2: 降级使用 execCommand
     fallbackCopy(text, onSuccess, onError);
   }
 }
@@ -780,8 +1348,6 @@ function copyToClipboard(text, btn) {
 function fallbackCopy(text, onSuccess, onError) {
   var textArea = document.createElement('textarea');
   textArea.value = text;
-  
-  // 确保不影响页面布局
   textArea.style.position = 'fixed';
   textArea.style.top = '0';
   textArea.style.left = '0';
@@ -793,11 +1359,11 @@ function fallbackCopy(text, onSuccess, onError) {
   textArea.style.boxShadow = 'none';
   textArea.style.background = 'transparent';
   textArea.style.opacity = '0';
-  
+
   document.body.appendChild(textArea);
   textArea.focus();
   textArea.select();
-  
+
   try {
     var successful = document.execCommand('copy');
     if (successful) {
@@ -808,12 +1374,11 @@ function fallbackCopy(text, onSuccess, onError) {
   } catch (err) {
     onError(err);
   }
-  
+
   document.body.removeChild(textArea);
 }
 
 function downloadFile(content, filename) {
-  // 使用 Tapp SDK 的文件下载 API（绕过 iframe 沙盒限制）
   if (typeof Tapp !== 'undefined' && Tapp.file && Tapp.file.download) {
     Tapp.file.download(content, filename, 'text/plain;charset=utf-8')
       .then(function() {
@@ -821,33 +1386,30 @@ function downloadFile(content, filename) {
       })
       .catch(function(err) {
         console.error('Tapp.file.download 失败:', err);
-        // 降级到备用方案
         fallbackDownload(content, filename);
       });
   } else {
-    // 降级到传统方案
     fallbackDownload(content, filename);
   }
 }
 
 function fallbackDownload(content, filename) {
-  // 使用 Data URL 方式
   var dataUrl = 'data:text/plain;charset=utf-8,' + encodeURIComponent(content);
-  
+
   var a = document.createElement('a');
   a.href = dataUrl;
   a.download = filename;
   a.style.display = 'none';
-  
+
   document.body.appendChild(a);
   a.click();
-  
+
   setTimeout(function() {
     if (a.parentNode) {
       a.parentNode.removeChild(a);
     }
   }, 100);
-  
+
   showNotification('文件下载已开始: ' + filename, 'success');
 }
 
@@ -870,7 +1432,7 @@ async function showNotification(message, type) {
 (function() {
   var mode = window._TAPP_MODE;
   var hasHtml = window._TAPP_HAS_HTML;
-  
+
   if (mode === 'page' || hasHtml) {
     Tapp.lifecycle.onReady(function() {
       initPage();

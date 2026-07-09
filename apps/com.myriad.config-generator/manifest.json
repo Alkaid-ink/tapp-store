@@ -2,7 +2,7 @@
   "id": "com.myriad.config-generator",
   "name": "Myriad 安装配置生成",
   "version": "1.0.0",
-  "description": "一键生成 Myriad 部署所需的 Docker Compose 和 Nginx 配置文件",
+  "description": "一键生成 Myriad proxy + updater 生产部署配置；运行时从 Docker Hub 解析最新 versioned 镜像 tag",
   "main": "main.js",
   "author": {
     "name": "Myriad Team"
@@ -20,5 +20,18 @@
   "pageStyles": "page.css",
   "pageTemplate": "page.html",
   "widgets": [],
-  "settings": []
+  "settings": [],
+  "apis": {
+    "dockerHubTags": {
+      "access": "public",
+      "type": "http",
+      "method": "GET",
+      "endpoint": "https://hub.docker.com/v2/repositories/somekawahitomi/{{params.repo}}/tags",
+      "params": {
+        "page_size": "100",
+        "ordering": "-last_updated"
+      },
+      "cacheTtl": 300
+    }
+  }
 }

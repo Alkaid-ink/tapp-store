@@ -1,10 +1,10 @@
 {
   "$schema": "https://myriad.app/schemas/tapp-store-v1.json",
   "name": "Myriad Official Tapp Store",
-  "version": "1.7.0",
+  "version": "1.8.1",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2025-12-14T00:00:00Z",
+  "updated_at": "2026-07-09T00:00:00Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.app",
@@ -130,8 +130,8 @@
       "id": "com.myriad.config-generator",
       "name": "Myriad 安装配置生成",
       "version": "1.0.0",
-      "description": "一键生成 Myriad 部署所需的 Docker Compose 和 Nginx 配置文件",
-      "long_description": "Myriad 安装配置生成器，帮助您快速生成部署所需的全部配置文件。支持自定义域名、自动生成安全密钥，并可上传现有 Nginx 配置以保留 SSL 设置。",
+      "description": "一键生成 Myriad proxy + updater 生产部署配置；自动解析 Docker Hub 最新 versioned 镜像 tag",
+      "long_description": "Myriad 安装配置生成器，对齐 proxy + updater 单运行槽架构。生成 docker-compose.yml、.env、外层 Nginx 与部署说明；自动生成密钥；运行时从 Docker Hub 解析最新 versioned 镜像 tag（禁止 :latest）；支持 channel、cosign 与资源限制；可上传现有 Nginx 以保留 SSL 并统一反代到 HTTP_PORT。",
       "author": {
         "name": "Myriad Team",
         "url": "https://github.com/Myriad-You"
@@ -140,7 +140,7 @@
       "homepage": "https://github.com/Myriad-You/tapp-store/tree/main/apps/com.myriad.config-generator",
       "repository": "https://github.com/Myriad-You/tapp-store",
       "category": "developer",
-      "tags": ["配置", "部署", "Docker", "Nginx", "工具", "开发者"],
+      "tags": ["配置", "部署", "Docker", "Nginx", "Updater", "工具", "开发者"],
       "permissions": ["storage", "ui:notification", "ui:theme", "ui:confirm"],
       "min_myriad_version": "0.1.0",
       "icon_svg": "<svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/><polyline points='14,2 14,8 20,8' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/><path d='M12 18v-6M9 15l3 3 3-3' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>",
@@ -153,13 +153,13 @@
         "page_styles": "apps/com.myriad.config-generator/page.css",
         "page_template": "apps/com.myriad.config-generator/page.html"
       },
-      "size": 20480,
+      "size": 51200,
       "downloads": 0,
       "rating": 0,
       "featured": true,
       "verified": true,
       "created_at": "2025-12-14T00:00:00Z",
-      "updated_at": "2025-12-14T00:00:00Z"
+      "updated_at": "2026-07-09T00:00:00Z"
     }
   ]
 }

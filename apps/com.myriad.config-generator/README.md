@@ -1,38 +1,66 @@
 # Myriad 安装配置生成器
 
-一键生成 Myriad 部署所需的配置文件。
+一键生成 Myriad **proxy + updater 单运行槽**生产部署所需的配置文件。
+
+> 对齐 Myriad 仓库的 `docker-compose.yml` / `.env.production.example` /
+> `docs/updater-spec.md`。旧版「backend/frontend 直连宿主端口 + named volume」布局已移除。
 
 ## 功能
 
-- **Docker Compose 配置**：自动生成包含 PostgreSQL、Backend、Frontend 的完整配置
-- **Nginx 配置**：生成主域名和 API 域名的反向代理配置
-- **安全密钥生成**：自动生成强随机数据库密码和 JWT 密钥
-- **SSL 配置保留**：上传现有 Nginx 配置后，保留原有 SSL 设置，仅替换域名
+- **Docker Compose**：postgres / backend / frontend / proxy / updater 完整栈
+- **.env**：密钥、镜像 tag、CORS、updater channel 等部署契约
+- **最新镜像 tag**：运行时从 Docker Hub 解析最新 **versioned** tag（禁止 `:latest`）
+- **Nginx**：外层 HTTPS 入口反代到 `HTTP_PORT`（唯一宿主端口）
+- **DEPLOY.md**：目录布局、启动步骤、升级与救援说明
+- **安全密钥**：自动生成 `POSTGRES_PASSWORD` / `JWT_SECRET` / `UPDATE_TOKEN`
+- **SSL 保留**：上传现有 Nginx 时尽量保留证书路径，统一反代目标
+
+## 架构要点
+
+```text
+外层 Nginx (HTTPS)
+        │
+        ▼
+proxy (HTTP_PORT) ──┬──► frontend:1102
+                    ├──► backend:1103 ──► postgres (./pgdata bind mount)
+                    └──► updater:1101（内网；UI 经 /api/admin/updater/*）
+```
+
+- **单运行槽**：不是 A/B 双活。升级时进入维护模式，快照 `pgdata`，切换 `.env` 中的镜像 tag。
+- **禁止 `:latest`**：回滚依赖 registry 中的旧 tag。
+- **`pgdata` 必须是 bind mount**：updater 做文件级快照，不能用 Docker named volume。
 
 ## 使用方法
 
-1. 填写您的主域名（如 `example.com`）和 API 域名（如 `api.example.com`）
-2. 点击生成按钮自动生成数据库密码和 JWT 密钥
-3. (可选) 上传您现有的 Nginx 配置文件以保留 SSL 设置
-4. 点击"生成配置文件"按钮
-5. 复制或下载生成的配置文件
+1. 填写主域名（可选额外域名，如 `www`）
+2. 自动/手动生成三项密钥
+3. 等待/点击「刷新最新版本」自动填入 Docker Hub 最新 versioned tag，确认 `HTTP_PORT`
+4. （可选）上传已有 SSL Nginx 配置
+5. 点击「生成配置文件」
+6. 下载 `docker-compose.yml`、`.env`、Nginx 配置
 
-## 生成的配置文件
+## 生成的文件
 
-### docker-compose.yml
+| 文件 | 说明 |
+|------|------|
+| `docker-compose.yml` | 五服务生产栈，资源限制可配 |
+| `.env` | 密钥与 tag；`chmod 600` 后与 compose 同目录 |
+| `<domain>.conf` | 反代到 `127.0.0.1:HTTP_PORT` |
+| `DEPLOY.md` | 启动 / 升级 / 救援速查 |
 
-包含以下服务：
-- PostgreSQL 16 数据库（含性能优化配置）
-- Myriad Backend API
-- Myriad Frontend
+## 启动摘要
 
-### Nginx 配置
+```bash
+mkdir -p pgdata state state/snapshots state/cache backups
+chmod 600 .env
+docker compose up -d
+```
 
-- **主域名配置**：前端静态文件服务 + API 代理
-- **API 域名配置**：后端 API 反向代理（含 WebSocket 支持）
+日常升级：管理员登录 → 设置/配置 → 关于 → 更新管理。
 
 ## 注意事项
 
-- 生成的密码包含特殊字符，已自动进行 URL 编码处理
-- 如果不上传 Nginx 配置，将生成不含 SSL 的基础配置
-- 上传现有配置时，会保留原有的 SSL 证书路径和相关设置
+- 密钥使用字母数字，避免 `DATABASE_URL` 被特殊字符破坏
+- 不上传 Nginx 时生成无 SSL 模板，需自行配证书
+- 上传的配置会把旧式 `3000/4321/1102/1103` 上游统一改为 `HTTP_PORT`
+- PostgreSQL 当前 release 契约锁定 **16**
