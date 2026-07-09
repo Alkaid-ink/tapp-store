@@ -155,138 +155,137 @@
             <span class="form-hint">更新器自身版本（拉镜像、快照数据库、切 tag）。独立节奏，有时需先升 updater 再升业务。</span>
           </div>
         </div>
-        <div class="form-row">
-          <div class="form-group form-group-half">
-            <label for="channel">发布通道 (CHANNEL)</label>
-            <select id="channel" class="form-input form-select">
-              <option value="stable" selected>stable（正式版，推荐生产）</option>
-              <option value="beta">beta（预发布 / rc）</option>
-              <option value="nightly">nightly（每日构建，不稳定）</option>
-            </select>
-            <span class="form-hint">
-              updater「检查更新」时只看该通道的 GitHub Release。<br>
-              stable = 正式；beta = 测试/rc；nightly = 最激进。若当前 tag 带 rc/beta，生成器会建议选 beta。
-            </span>
-          </div>
-          <div class="form-group form-group-half">
-            <label for="cosign-verify">升级签名验证 (COSIGN_VERIFY)</label>
-            <select id="cosign-verify" class="form-input form-select">
-              <option value="off" selected>off — 不验证（兼容旧 release）</option>
-              <option value="soft">soft — 失败只告警，仍允许升级</option>
-              <option value="strict">strict — 失败则拒绝升级（推荐生产）</option>
-            </select>
-            <span class="form-hint">
-              是否用 cosign 校验 release 签名，防止下到被篡改的升级包。<br>
-              老 release 可能没有签名 → 用 off/soft；确认流水线已签过名后建议 strict。
-            </span>
-          </div>
-        </div>
       </section>
 
-      <!-- 服务配置 -->
-      <section class="form-section">
-        <h2 class="section-title">
-          <span class="section-icon">🔧</span>
-          服务配置
-        </h2>
-        <p class="section-desc">
-          控制 Docker 在<strong>宿主机</strong>上暴露哪个端口，以及数据库镜像大版本。业务端口（1102/1103）在容器内固定，无需也不应映射到公网。
-        </p>
-        <div class="form-row">
-          <div class="form-group form-group-half">
-            <label for="http-port">HTTP_PORT（proxy 宿主端口）</label>
-            <input type="number" id="http-port" class="form-input" value="80" min="1" max="65535">
-            <span class="form-hint">
-              Myriad 在本机<strong>唯一</strong>对外开放的端口，默认 80。<br>
-              外层 Nginx/Caddy 应反代到 <code>127.0.0.1:这个端口</code>。若 80 被占用，可改成 8080 等，并同步改反代配置。
+      <!-- 高级选项：默认折叠 -->
+      <details class="advanced-panel form-section">
+        <summary class="advanced-summary">
+          <span class="advanced-summary-main">
+            <span class="section-icon">⚙️</span>
+            <span class="advanced-summary-text">
+              <span class="advanced-summary-title">高级选项</span>
+              <span class="advanced-summary-sub">通道 · 签名 · 端口 · 资源限制（可选，多数人不用改）</span>
             </span>
-          </div>
-          <div class="form-group form-group-half">
-            <label for="db-version">PostgreSQL 版本</label>
-            <select id="db-version" class="form-input form-select">
-              <option value="16" selected>PostgreSQL 16（官方支持）</option>
-            </select>
-            <span class="form-hint">
-              数据目录在 <code>./pgdata</code>（主机目录绑定，不是 Docker 匿名卷），以便 updater 做文件级快照回滚。<br>
-              当前发布契约锁定 16；乱升大版本可能导致升级/回滚失败。
-            </span>
-          </div>
-        </div>
-        <div class="section-warning" style="margin-top: 12px;">
-          <span class="section-warning-icon">📌</span>
-          <div class="section-warning-content">
-            <span class="section-warning-title">内网端口（由镜像固定，不要改、不要映射到公网）</span>
-            frontend <code>1102</code> · backend <code>1103</code> · updater <code>1101</code> · postgres <code>5432</code><br>
-            它们只在 Docker 网络里互通；对外只保留上面的 HTTP_PORT。
-          </div>
-        </div>
-      </section>
+          </span>
+          <span class="advanced-chevron" aria-hidden="true">▼</span>
+        </summary>
+        <div class="advanced-body">
+          <p class="section-desc">
+            以下均有合理默认值。只有要钉通道、改宿主机端口、或调容器资源上限时再展开。
+          </p>
 
-      <!-- 资源限制 -->
-      <section class="form-section">
-        <h2 class="section-title">
-          <span class="section-icon">📊</span>
-          资源限制
-        </h2>
-        <p class="section-desc">
-          限制各容器最多能用多少 CPU / 内存，避免一台机器上某个服务吃光资源把整机拖死。<br>
-          默认值对齐官方 compose，一般小规格 VPS 可直接用；内存紧张可适当调低，高负载再调高。
-        </p>
-
-        <div class="resource-group">
-          <div class="resource-label">🗄️ PostgreSQL（数据库）</div>
-          <p class="resource-desc">存用户与业务数据。一般最吃内存；过小会变慢，过大会挤占其他服务。</p>
+          <h3 class="advanced-subtitle">发布与安全策略</h3>
           <div class="form-row">
             <div class="form-group form-group-half">
-              <label for="db-cpu-limit">CPU 上限</label>
-              <input type="text" id="db-cpu-limit" class="form-input" value="2.0" placeholder="2.0">
-              <span class="form-hint">核心数，如 0.5 / 1.0 / 2.0</span>
+              <label for="channel">发布通道 (CHANNEL)</label>
+              <select id="channel" class="form-input form-select">
+                <option value="stable" selected>stable（正式版，推荐生产）</option>
+                <option value="beta">beta（预发布 / rc）</option>
+                <option value="nightly">nightly（每日构建，不稳定）</option>
+              </select>
+              <span class="form-hint">
+                updater「检查更新」时只看该通道的 GitHub Release。<br>
+                若当前 tag 带 rc/beta，生成器会自动建议 beta。
+              </span>
             </div>
             <div class="form-group form-group-half">
-              <label for="db-mem-limit">内存上限</label>
-              <input type="text" id="db-mem-limit" class="form-input" value="2G" placeholder="2G">
-              <span class="form-hint">如 512M / 1G / 2G</span>
+              <label for="cosign-verify">升级签名验证 (COSIGN_VERIFY)</label>
+              <select id="cosign-verify" class="form-input form-select">
+                <option value="off" selected>off — 不验证（兼容旧 release）</option>
+                <option value="soft">soft — 失败只告警，仍允许升级</option>
+                <option value="strict">strict — 失败则拒绝升级（推荐生产）</option>
+              </select>
+              <span class="form-hint">
+                校验 release 是否被篡改。老 release 可能无签名 → 保持 off；确认有签名后再 strict。
+              </span>
             </div>
           </div>
-        </div>
 
-        <div class="resource-group">
-          <div class="resource-label">⚙️ Backend（后端 API）</div>
-          <p class="resource-desc">处理登录、接口、同步与管理员升级代理。分析任务多时可适当加大。</p>
+          <h3 class="advanced-subtitle">宿主端口与数据库</h3>
           <div class="form-row">
             <div class="form-group form-group-half">
-              <label for="backend-cpu-limit">CPU 上限</label>
-              <input type="text" id="backend-cpu-limit" class="form-input" value="2.0" placeholder="2.0">
-              <span class="form-hint">核心数，如 0.5 / 1.0 / 2.0</span>
+              <label for="http-port">HTTP_PORT（proxy 宿主端口）</label>
+              <input type="number" id="http-port" class="form-input" value="80" min="1" max="65535">
+              <span class="form-hint">
+                本机唯一对外开放端口，默认 80。外层 Nginx 反代到这里；被占用可改 8080 等。
+              </span>
             </div>
             <div class="form-group form-group-half">
-              <label for="backend-mem-limit">内存上限</label>
-              <input type="text" id="backend-mem-limit" class="form-input" value="2G" placeholder="2G">
-              <span class="form-hint">如 512M / 1G / 2G</span>
+              <label for="db-version">PostgreSQL 版本</label>
+              <select id="db-version" class="form-input form-select">
+                <option value="16" selected>PostgreSQL 16（官方支持）</option>
+              </select>
+              <span class="form-hint">
+                数据在 <code>./pgdata</code> bind mount。发布契约锁定 16，一般无需改。
+              </span>
             </div>
           </div>
-        </div>
+          <div class="section-warning">
+            <span class="section-warning-icon">📌</span>
+            <div class="section-warning-content">
+              <span class="section-warning-title">内网端口（固定，不要映射到公网）</span>
+              frontend <code>1102</code> · backend <code>1103</code> · updater <code>1101</code> · postgres <code>5432</code>
+            </div>
+          </div>
 
-        <div class="resource-group">
-          <div class="resource-label">🎨 Frontend（前端静态站）</div>
-          <p class="resource-desc">提供网页界面，负载通常低于 backend。默认 1 核 / 1G 足够多数场景。</p>
-          <div class="form-row">
-            <div class="form-group form-group-half">
-              <label for="frontend-cpu-limit">CPU 上限</label>
-              <input type="text" id="frontend-cpu-limit" class="form-input" value="1.0" placeholder="1.0">
-              <span class="form-hint">核心数，如 0.25 / 0.5 / 1.0</span>
+          <h3 class="advanced-subtitle">资源上限（已放宽默认）</h3>
+          <p class="section-desc" style="margin-top: 0;">
+            限制各容器最多可用 CPU / 内存。默认比官方 compose 更宽裕，减少误 OOM；机器很小可自行调低。
+            proxy / updater 仍不设上限（避免升级被误杀）。
+          </p>
+
+          <div class="resource-group">
+            <div class="resource-label">🗄️ PostgreSQL（数据库）</div>
+            <p class="resource-desc">存用户与业务数据，通常最吃内存。</p>
+            <div class="form-row">
+              <div class="form-group form-group-half">
+                <label for="db-cpu-limit">CPU 上限</label>
+                <input type="text" id="db-cpu-limit" class="form-input" value="4.0" placeholder="4.0">
+                <span class="form-hint">核心数，如 1.0 / 2.0 / 4.0</span>
+              </div>
+              <div class="form-group form-group-half">
+                <label for="db-mem-limit">内存上限</label>
+                <input type="text" id="db-mem-limit" class="form-input" value="4G" placeholder="4G">
+                <span class="form-hint">如 1G / 2G / 4G</span>
+              </div>
             </div>
-            <div class="form-group form-group-half">
-              <label for="frontend-mem-limit">内存上限</label>
-              <input type="text" id="frontend-mem-limit" class="form-input" value="1G" placeholder="1G">
-              <span class="form-hint">如 256M / 512M / 1G</span>
+          </div>
+
+          <div class="resource-group">
+            <div class="resource-label">⚙️ Backend（后端 API）</div>
+            <p class="resource-desc">登录、接口、同步与升级代理；分析任务多时可再加大。</p>
+            <div class="form-row">
+              <div class="form-group form-group-half">
+                <label for="backend-cpu-limit">CPU 上限</label>
+                <input type="text" id="backend-cpu-limit" class="form-input" value="4.0" placeholder="4.0">
+                <span class="form-hint">核心数，如 1.0 / 2.0 / 4.0</span>
+              </div>
+              <div class="form-group form-group-half">
+                <label for="backend-mem-limit">内存上限</label>
+                <input type="text" id="backend-mem-limit" class="form-input" value="4G" placeholder="4G">
+                <span class="form-hint">如 1G / 2G / 4G</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="resource-group">
+            <div class="resource-label">🎨 Frontend（前端静态站）</div>
+            <p class="resource-desc">网页界面，负载通常低于 backend。</p>
+            <div class="form-row">
+              <div class="form-group form-group-half">
+                <label for="frontend-cpu-limit">CPU 上限</label>
+                <input type="text" id="frontend-cpu-limit" class="form-input" value="2.0" placeholder="2.0">
+                <span class="form-hint">核心数，如 0.5 / 1.0 / 2.0</span>
+              </div>
+              <div class="form-group form-group-half">
+                <label for="frontend-mem-limit">内存上限</label>
+                <input type="text" id="frontend-mem-limit" class="form-input" value="2G" placeholder="2G">
+                <span class="form-hint">如 512M / 1G / 2G</span>
+              </div>
             </div>
           </div>
         </div>
-        <p class="form-hint" style="margin-top: 8px; display: block;">
-          proxy（入口）与 updater（升级）与官方 compose 一致，默认不设 deploy 资源上限，避免升级拉镜像时被误杀。
-        </p>
-      </section>
+      </details>
 
       <!-- Nginx 配置上传 -->
       <section class="form-section">

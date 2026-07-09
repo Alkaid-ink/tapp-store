@@ -271,6 +271,94 @@
 }
 
 /* ========================================
+   高级选项折叠面板
+   ======================================== */
+
+.advanced-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+.advanced-panel > .advanced-summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  user-select: none;
+}
+
+.advanced-panel > .advanced-summary::-webkit-details-marker {
+  display: none;
+}
+
+.advanced-summary-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.advanced-summary-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.advanced-summary-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--config-text);
+}
+
+.advanced-summary-sub {
+  font-size: 12px;
+  color: var(--config-text-muted);
+  line-height: 1.4;
+}
+
+.advanced-chevron {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--config-text-muted);
+  transition: transform var(--config-transition);
+}
+
+.advanced-panel[open] > .advanced-summary .advanced-chevron {
+  transform: rotate(180deg);
+}
+
+.advanced-panel[open] > .advanced-summary {
+  border-bottom: 1px solid var(--config-border);
+}
+
+.advanced-body {
+  padding: 16px 20px 20px;
+}
+
+.advanced-subtitle {
+  margin: 16px 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--config-text);
+}
+
+.advanced-body > .advanced-subtitle:first-of-type {
+  margin-top: 0;
+}
+
+.advanced-body .section-desc {
+  margin: 0 0 14px;
+}
+
+.advanced-body .section-warning {
+  margin: 0 0 16px;
+}
+
+/* ========================================
    提示框 - 警告样式
    ======================================== */
 

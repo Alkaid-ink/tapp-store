@@ -893,12 +893,13 @@ var state = {
   updaterTag: '',
   channel: 'stable',
   cosignVerify: 'off',
-  dbCpuLimit: '2.0',
-  dbMemLimit: '2G',
-  backendCpuLimit: '2.0',
-  backendMemLimit: '2G',
-  frontendCpuLimit: '1.0',
-  frontendMemLimit: '1G'
+  // 比官方 compose 更宽裕，减少误 OOM；高级面板可再调
+  dbCpuLimit: '4.0',
+  dbMemLimit: '4G',
+  backendCpuLimit: '4.0',
+  backendMemLimit: '4G',
+  frontendCpuLimit: '2.0',
+  frontendMemLimit: '2G'
 };
 
 // ========================================
@@ -1084,12 +1085,12 @@ function initPage() {
       state.channel = channelSelect.value || 'stable';
       state.cosignVerify = cosignSelect.value || 'off';
 
-      state.dbCpuLimit = dbCpuLimitInput.value.trim() || '2.0';
-      state.dbMemLimit = dbMemLimitInput.value.trim() || '2G';
-      state.backendCpuLimit = backendCpuLimitInput.value.trim() || '2.0';
-      state.backendMemLimit = backendMemLimitInput.value.trim() || '2G';
-      state.frontendCpuLimit = frontendCpuLimitInput.value.trim() || '1.0';
-      state.frontendMemLimit = frontendMemLimitInput.value.trim() || '1G';
+      state.dbCpuLimit = dbCpuLimitInput.value.trim() || '4.0';
+      state.dbMemLimit = dbMemLimitInput.value.trim() || '4G';
+      state.backendCpuLimit = backendCpuLimitInput.value.trim() || '4.0';
+      state.backendMemLimit = backendMemLimitInput.value.trim() || '4G';
+      state.frontendCpuLimit = frontendCpuLimitInput.value.trim() || '2.0';
+      state.frontendMemLimit = frontendMemLimitInput.value.trim() || '2G';
 
       if (!state.myriadTag || !state.proxyTag || !state.updaterTag) {
         showNotification('请填写完整的镜像 tag', 'error');
