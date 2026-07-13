@@ -93,6 +93,8 @@ services:
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: 1103
       JWT_SECRET: \${JWT_SECRET}
+      # bundled proxy 会覆盖客户端伪造的转发头，backend 可据此读取真实来源 IP
+      TRUST_PROXY_HEADERS: "true"
       CORS_ORIGINS: \${CORS_ORIGINS:-http://localhost}
       CSP_CONNECT_SRC: \${CSP_CONNECT_SRC:-'self' https:}
       ENVIRONMENT: \${ENVIRONMENT:-production}
@@ -195,7 +197,8 @@ services:
       MYRIAD_GITHUB_REPO: \${MYRIAD_GITHUB_REPO:-Myriad-You/Myriad}
       CHECK_INTERVAL_SECS: \${CHECK_INTERVAL_SECS:-3600}
       UPDATER_ENV_FILE: /host/compose/.env
-      COSIGN_VERIFY: \${COSIGN_VERIFY:-off}
+      # 当前 updater 的安全默认值是 strict
+      COSIGN_VERIFY: \${COSIGN_VERIFY:-strict}
       COMPOSE_PROJECT_NAME: \${COMPOSE_PROJECT_NAME:-myriad}
       MYRIAD_DOCKER_NETWORK: \${MYRIAD_DOCKER_NETWORK:-myriad-net}
       MYRIAD_VERSION: \${UPDATER_TAG}
@@ -241,6 +244,10 @@ MYRIAD_TAG={{MYRIAD_TAG}}
 PROXY_TAG={{PROXY_TAG}}
 UPDATER_TAG={{UPDATER_TAG}}
 
+# 业务镜像仓库（不含 tag）。commit 更新与 last-good 回滚固定依赖这两项。
+BACKEND_IMAGE=docker.io/somekawahitomi/myriad-backend
+FRONTEND_IMAGE=docker.io/somekawahitomi/myriad-frontend
+
 COMPOSE_PROJECT_NAME=myriad
 
 # 可选：同机多套部署时再改
@@ -249,8 +256,11 @@ COMPOSE_PROJECT_NAME=myriad
 # Updater API 鉴权 token（≥32 字符，仅服务端持有）
 UPDATE_TOKEN={{UPDATE_TOKEN}}
 
-# stable | beta | nightly
+# stable | preview（当前 updater 仅接受这两个值）
 CHANNEL={{CHANNEL}}
+
+# release（GitHub Release）| commit（CI dev-<sha>）；首次部署默认 release
+UPDATE_MODE=release
 
 # 可选：提升 GitHub API rate limit
 # GITHUB_TOKEN=
@@ -457,7 +467,7 @@ docker compose logs -f --tail=100
 2. 管理员登录 → 设置/配置 → 关于 → 更新管理
 3. 检查更新并确认升级
 
-> CHANNEL={{CHANNEL}}。若当前跑的是 rc/beta 镜像，检查更新可能只在对应 channel 有结果。
+> CHANNEL={{CHANNEL}}。若当前跑的是 rc/beta/nightly 等预发布镜像，应使用 preview channel。
 
 ## 救援（backend 挂掉时）
 
@@ -651,10 +661,8 @@ function pickLatestCommonVersionedTag(tagLists) {
 }
 
 function suggestChannelFromTag(tag) {
-  var t = String(tag || '').toLowerCase();
-  if (t.indexOf('nightly') !== -1) return 'nightly';
-  if (t.indexOf('beta') !== -1 || t.indexOf('rc') !== -1 || t.indexOf('alpha') !== -1) return 'beta';
-  return 'stable';
+  var parsed = parseVersionTag(String(tag || ''));
+  return parsed && parsed.pre ? 'preview' : 'stable';
 }
 
 function extractTagNamesFromHubPayload(data) {
@@ -892,7 +900,7 @@ var state = {
   proxyTag: '',
   updaterTag: '',
   channel: 'stable',
-  cosignVerify: 'off',
+  cosignVerify: 'strict',
   // 比官方 compose 更宽裕，减少误 OOM；高级面板可再调
   dbCpuLimit: '4.0',
   dbMemLimit: '4G',
@@ -1083,7 +1091,7 @@ function initPage() {
       state.proxyTag = proxyTag;
       state.updaterTag = updaterTag;
       state.channel = channelSelect.value || 'stable';
-      state.cosignVerify = cosignSelect.value || 'off';
+      state.cosignVerify = cosignSelect.value || 'strict';
 
       state.dbCpuLimit = dbCpuLimitInput.value.trim() || '4.0';
       state.dbMemLimit = dbMemLimitInput.value.trim() || '4G';

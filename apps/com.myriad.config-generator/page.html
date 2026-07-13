@@ -180,23 +180,22 @@
               <label for="channel">发布通道 (CHANNEL)</label>
               <select id="channel" class="form-input form-select">
                 <option value="stable" selected>stable（正式版，推荐生产）</option>
-                <option value="beta">beta（预发布 / rc）</option>
-                <option value="nightly">nightly（每日构建，不稳定）</option>
+                <option value="preview">preview（预发布 / rc）</option>
               </select>
               <span class="form-hint">
                 updater「检查更新」时只看该通道的 GitHub Release。<br>
-                若当前 tag 带 rc/beta，生成器会自动建议 beta。
+                若当前 tag 带 rc/beta/nightly 等预发布标记，生成器会自动建议 preview。
               </span>
             </div>
             <div class="form-group form-group-half">
               <label for="cosign-verify">升级签名验证 (COSIGN_VERIFY)</label>
               <select id="cosign-verify" class="form-input form-select">
-                <option value="off" selected>off — 不验证（兼容旧 release）</option>
+                <option value="strict" selected>strict — 失败则拒绝升级（推荐生产）</option>
                 <option value="soft">soft — 失败只告警，仍允许升级</option>
-                <option value="strict">strict — 失败则拒绝升级（推荐生产）</option>
+                <option value="off">off — 不验证（仅兼容无签名旧 release）</option>
               </select>
               <span class="form-hint">
-                校验 release 是否被篡改。老 release 可能无签名 → 保持 off；确认有签名后再 strict。
+                校验 release 是否被篡改。当前 updater 默认 strict；只有明确使用无签名旧 release 时才降级。
               </span>
             </div>
           </div>

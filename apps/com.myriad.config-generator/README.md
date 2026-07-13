@@ -8,8 +8,8 @@
 ## 功能
 
 - **Docker Compose**：postgres / backend / frontend / proxy / updater 完整栈
-- **.env**：密钥、镜像 tag、CORS、updater channel 等部署契约
-- **最新镜像 tag**：运行时从 Docker Hub 解析最新 **versioned** tag（禁止 `:latest`）
+- **.env**：密钥、镜像仓库与 tag、CORS、updater mode/channel 等部署契约
+- **最新镜像 tag**：运行时从 Docker Hub 解析最新 **versioned** tag（禁止 `:latest`）；预发布 tag 使用 `preview` channel
 - **Nginx**：外层 HTTPS 入口反代到 `HTTP_PORT`（唯一宿主端口）
 - **DEPLOY.md**：目录布局、启动步骤、升级与救援说明
 - **安全密钥**：自动生成 `POSTGRES_PASSWORD` / `JWT_SECRET` / `UPDATE_TOKEN`
@@ -29,6 +29,8 @@ proxy (HTTP_PORT) ──┬──► frontend:1102
 - **单运行槽**：不是 A/B 双活。升级时进入维护模式，快照 `pgdata`，切换 `.env` 中的镜像 tag。
 - **禁止 `:latest`**：回滚依赖 registry 中的旧 tag。
 - **`pgdata` 必须是 bind mount**：updater 做文件级快照，不能用 Docker named volume。
+- **channel 仅为 `stable` / `preview`**：与当前 updater 的启动配置严格一致。
+- **签名默认 `strict`**：只有兼容无签名旧 release 时才手动降级。
 
 ## 使用方法
 
