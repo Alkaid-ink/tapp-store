@@ -30,14 +30,6 @@ services:
   postgres:
     image: postgres:{{DB_VERSION}}-alpine
     container_name: myriad-postgres
-    deploy:
-      resources:
-        limits:
-          cpus: '{{DB_CPU_LIMIT}}'
-          memory: {{DB_MEM_LIMIT}}
-        reservations:
-          cpus: '0.5'
-          memory: 512M
     environment:
       POSTGRES_DB: myriad
       POSTGRES_USER: myriad
@@ -60,8 +52,9 @@ services:
       POSTGRES_MAX_PARALLEL_MAINTENANCE_WORKERS: 2
       TZ: Asia/Shanghai
     volumes:
+      # PostgreSQL 18+ 使用 /var/lib/postgresql；挂载父目录也兼容 16/17。
       # IMPORTANT: bind mount，不可改为 named volume。updater 依赖文件级快照。
-      - ./pgdata:/var/lib/postgresql/data
+      - ./pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U myriad -d myriad"]
       interval: 10s
@@ -894,16 +887,14 @@ var state = {
   extraNginxConfig: null,
   extraNginxFileName: '',
   httpPort: 80,
-  dbVersion: '16',
+  dbVersion: '18',
   // 运行时由 Docker Hub 解析填充，不在源码中写死版本
   myriadTag: '',
   proxyTag: '',
   updaterTag: '',
   channel: 'stable',
   cosignVerify: 'strict',
-  // 比官方 compose 更宽裕，减少误 OOM；高级面板可再调
-  dbCpuLimit: '4.0',
-  dbMemLimit: '4G',
+  // backend / frontend 可按宿主机条件限制；PostgreSQL 不设置资源硬上限
   backendCpuLimit: '4.0',
   backendMemLimit: '4G',
   frontendCpuLimit: '2.0',
@@ -939,8 +930,6 @@ function initPage() {
   var channelSelect = document.getElementById('channel');
   var cosignSelect = document.getElementById('cosign-verify');
 
-  var dbCpuLimitInput = document.getElementById('db-cpu-limit');
-  var dbMemLimitInput = document.getElementById('db-mem-limit');
   var backendCpuLimitInput = document.getElementById('backend-cpu-limit');
   var backendMemLimitInput = document.getElementById('backend-mem-limit');
   var frontendCpuLimitInput = document.getElementById('frontend-cpu-limit');
@@ -1069,7 +1058,7 @@ function initPage() {
         return;
       }
 
-      state.dbVersion = dbVersionSelect.value || '16';
+      state.dbVersion = dbVersionSelect.value || '18';
 
       // 若 tag 为空：等待进行中的拉取，或发起新拉取（不强制覆盖手改字段）
       var myriadTag = (myriadTagInput.value || '').trim();
@@ -1093,8 +1082,6 @@ function initPage() {
       state.channel = channelSelect.value || 'stable';
       state.cosignVerify = cosignSelect.value || 'strict';
 
-      state.dbCpuLimit = dbCpuLimitInput.value.trim() || '4.0';
-      state.dbMemLimit = dbMemLimitInput.value.trim() || '4G';
       state.backendCpuLimit = backendCpuLimitInput.value.trim() || '4.0';
       state.backendMemLimit = backendMemLimitInput.value.trim() || '4G';
       state.frontendCpuLimit = frontendCpuLimitInput.value.trim() || '2.0';
@@ -1249,8 +1236,6 @@ function generateConfigs() {
 
   var map = {
     DB_VERSION: state.dbVersion,
-    DB_CPU_LIMIT: state.dbCpuLimit,
-    DB_MEM_LIMIT: state.dbMemLimit,
     BACKEND_CPU_LIMIT: state.backendCpuLimit,
     BACKEND_MEM_LIMIT: state.backendMemLimit,
     FRONTEND_CPU_LIMIT: state.frontendCpuLimit,

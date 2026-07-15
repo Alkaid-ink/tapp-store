@@ -45,7 +45,7 @@ proxy (HTTP_PORT) ──┬──► frontend:1102
 
 | 文件 | 说明 |
 |------|------|
-| `docker-compose.yml` | 五服务生产栈，资源限制可配 |
+| `docker-compose.yml` | 五服务生产栈；PostgreSQL 不设资源硬上限 |
 | `.env` | 密钥与 tag；`chmod 600` 后与 compose 同目录 |
 | `<domain>.conf` | 反代到 `127.0.0.1:HTTP_PORT` |
 | `DEPLOY.md` | 启动 / 升级 / 救援速查 |
@@ -65,4 +65,5 @@ docker compose up -d
 - 密钥使用字母数字，避免 `DATABASE_URL` 被特殊字符破坏
 - 不上传 Nginx 时生成无 SSL 模板，需自行配证书
 - 上传的配置会把旧式 `3000/4321/1102/1103` 上游统一改为 `HTTP_PORT`
-- PostgreSQL 当前 release 契约锁定 **16**
+- 新部署默认 PostgreSQL **18**；发布契约最低兼容 **16**，不设置最高版本
+- PostgreSQL 18+ 的 `pgdata` 挂载点为 `/var/lib/postgresql`；已有数据库跨主版本升级前必须先执行 `pg_upgrade` 或 dump/restore

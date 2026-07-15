@@ -171,7 +171,7 @@
         </summary>
         <div class="advanced-body">
           <p class="section-desc">
-            以下均有合理默认值。只有要钉通道、改宿主机端口、或调容器资源上限时再展开。
+            以下均有合理默认值。只有要钉通道、改宿主机端口、或调后端/前端资源上限时再展开。
           </p>
 
           <h3 class="advanced-subtitle">发布与安全策略</h3>
@@ -212,10 +212,12 @@
             <div class="form-group form-group-half">
               <label for="db-version">PostgreSQL 版本</label>
               <select id="db-version" class="form-input form-select">
-                <option value="16" selected>PostgreSQL 16（官方支持）</option>
+                <option value="18" selected>PostgreSQL 18（新部署默认）</option>
+                <option value="17">PostgreSQL 17（已有环境兼容）</option>
+                <option value="16">PostgreSQL 16（最低兼容版本）</option>
               </select>
               <span class="form-hint">
-                数据在 <code>./pgdata</code> bind mount。发布契约锁定 16，一般无需改。
+                新部署使用 18；已有数据库切换主版本前必须先执行 pg_upgrade 或 dump/restore。发布契约只要求最低 16，不设置最高版本。
               </span>
             </div>
           </div>
@@ -227,28 +229,11 @@
             </div>
           </div>
 
-          <h3 class="advanced-subtitle">资源上限（已放宽默认）</h3>
+          <h3 class="advanced-subtitle">后端与前端资源上限</h3>
           <p class="section-desc" style="margin-top: 0;">
-            限制各容器最多可用 CPU / 内存。默认比官方 compose 更宽裕，减少误 OOM；机器很小可自行调低。
-            proxy / updater 仍不设上限（避免升级被误杀）。
+            PostgreSQL、proxy 和 updater 不设置 CPU / 内存硬上限。下面仅保留 backend / frontend
+            的可选保护值，机器很小可自行调低。
           </p>
-
-          <div class="resource-group">
-            <div class="resource-label">🗄️ PostgreSQL（数据库）</div>
-            <p class="resource-desc">存用户与业务数据，通常最吃内存。</p>
-            <div class="form-row">
-              <div class="form-group form-group-half">
-                <label for="db-cpu-limit">CPU 上限</label>
-                <input type="text" id="db-cpu-limit" class="form-input" value="4.0" placeholder="4.0">
-                <span class="form-hint">核心数，如 1.0 / 2.0 / 4.0</span>
-              </div>
-              <div class="form-group form-group-half">
-                <label for="db-mem-limit">内存上限</label>
-                <input type="text" id="db-mem-limit" class="form-input" value="4G" placeholder="4G">
-                <span class="form-hint">如 1G / 2G / 4G</span>
-              </div>
-            </div>
-          </div>
 
           <div class="resource-group">
             <div class="resource-label">⚙️ Backend（后端 API）</div>
