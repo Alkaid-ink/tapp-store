@@ -1012,7 +1012,7 @@ var state = {
   channel: 'stable',
   cosignVerify: 'strict',
   // backend / frontend 可按宿主机条件限制；PostgreSQL 不设置资源硬上限
-  backendCpuLimit: '4.0',
+  backendCpuLimit: '2.0',
   backendMemLimit: '4G',
   frontendCpuLimit: '2.0',
   frontendMemLimit: '2G'
@@ -1207,7 +1207,7 @@ function initPage() {
       state.channel = channelSelect.value || 'stable';
       state.cosignVerify = cosignSelect.value || 'strict';
 
-      state.backendCpuLimit = backendCpuLimitInput.value.trim() || '4.0';
+      state.backendCpuLimit = backendCpuLimitInput.value.trim() || '2.0';
       state.backendMemLimit = backendMemLimitInput.value.trim() || '4G';
       state.frontendCpuLimit = frontendCpuLimitInput.value.trim() || '2.0';
       state.frontendMemLimit = frontendMemLimitInput.value.trim() || '2G';
