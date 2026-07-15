@@ -41,6 +41,6 @@ docker compose up -d
 - 不要公开或提交 `.env`。
 - 1Panel 默认只在 `127.0.0.1:8080` 提供 proxy；也可选择所有网卡和其他端口。
 - Nginx 只反代到 proxy，不要开放其他服务端口。
-- 新部署默认 PostgreSQL 18，数据库不设资源硬上限。
+- 新部署默认 PostgreSQL 18，数据库 CPU 和内存上限可设置。
 - 更换 PostgreSQL 主版本前需先迁移数据。
 - 不要使用 `:latest` 镜像标签。

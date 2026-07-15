@@ -231,10 +231,27 @@
             </div>
           </div>
 
-          <h3 class="advanced-subtitle">后端与前端资源上限</h3>
+          <h3 class="advanced-subtitle">资源上限</h3>
           <p class="section-desc" style="margin-top: 0;">
-            PostgreSQL、proxy 和 updater 不设上限。这里只限制 backend 和 frontend。
+            PostgreSQL、backend 和 frontend 可设置上限；proxy 和 updater 不设上限。
           </p>
+
+          <div class="resource-group">
+            <div class="resource-label">🗄️ PostgreSQL（数据库）</div>
+            <p class="resource-desc">保存用户和业务数据。</p>
+            <div class="form-row">
+              <div class="form-group form-group-half">
+                <label for="db-cpu-limit">CPU 上限</label>
+                <input type="text" id="db-cpu-limit" class="form-input" value="2.0" placeholder="2.0">
+                <span class="form-hint">不要超过服务器 CPU 核数</span>
+              </div>
+              <div class="form-group form-group-half">
+                <label for="db-mem-limit">内存上限</label>
+                <input type="text" id="db-mem-limit" class="form-input" value="2G" placeholder="2G">
+                <span class="form-hint">如 1G / 2G / 4G</span>
+              </div>
+            </div>
+          </div>
 
           <div class="resource-group">
             <div class="resource-label">⚙️ Backend（后端 API）</div>

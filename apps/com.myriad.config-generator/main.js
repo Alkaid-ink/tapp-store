@@ -30,6 +30,14 @@ services:
   postgres:
     image: postgres:{{DB_VERSION}}-alpine
     container_name: myriad-postgres
+    deploy:
+      resources:
+        limits:
+          cpus: '{{DB_CPU_LIMIT}}'
+          memory: {{DB_MEM_LIMIT}}
+        reservations:
+          cpus: '0.5'
+          memory: 512M
     environment:
       POSTGRES_DB: myriad
       POSTGRES_USER: myriad
@@ -1005,13 +1013,15 @@ var state = {
   httpBindAddress: '127.0.0.1',
   httpPort: 8080,
   dbVersion: '18',
+  dbCpuLimit: '2.0',
+  dbMemLimit: '2G',
   // 运行时由 Docker Hub 解析填充，不在源码中写死版本
   myriadTag: '',
   proxyTag: '',
   updaterTag: '',
   channel: 'stable',
   cosignVerify: 'strict',
-  // backend / frontend 可按宿主机条件限制；PostgreSQL 不设置资源硬上限
+  // PostgreSQL / backend / frontend 可按宿主机条件限制
   backendCpuLimit: '2.0',
   backendMemLimit: '4G',
   frontendCpuLimit: '2.0',
@@ -1048,6 +1058,8 @@ function initPage() {
   var channelSelect = document.getElementById('channel');
   var cosignSelect = document.getElementById('cosign-verify');
 
+  var dbCpuLimitInput = document.getElementById('db-cpu-limit');
+  var dbMemLimitInput = document.getElementById('db-mem-limit');
   var backendCpuLimitInput = document.getElementById('backend-cpu-limit');
   var backendMemLimitInput = document.getElementById('backend-mem-limit');
   var frontendCpuLimitInput = document.getElementById('frontend-cpu-limit');
@@ -1207,6 +1219,8 @@ function initPage() {
       state.channel = channelSelect.value || 'stable';
       state.cosignVerify = cosignSelect.value || 'strict';
 
+      state.dbCpuLimit = dbCpuLimitInput.value.trim() || '2.0';
+      state.dbMemLimit = dbMemLimitInput.value.trim() || '2G';
       state.backendCpuLimit = backendCpuLimitInput.value.trim() || '2.0';
       state.backendMemLimit = backendMemLimitInput.value.trim() || '4G';
       state.frontendCpuLimit = frontendCpuLimitInput.value.trim() || '2.0';
@@ -1365,6 +1379,8 @@ function generateConfigs() {
 
   var map = {
     DB_VERSION: state.dbVersion,
+    DB_CPU_LIMIT: state.dbCpuLimit,
+    DB_MEM_LIMIT: state.dbMemLimit,
     BACKEND_CPU_LIMIT: state.backendCpuLimit,
     BACKEND_MEM_LIMIT: state.backendMemLimit,
     FRONTEND_CPU_LIMIT: state.frontendCpuLimit,
