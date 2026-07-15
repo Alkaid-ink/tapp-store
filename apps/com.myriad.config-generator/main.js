@@ -13,7 +13,7 @@ var DOCKER_COMPOSE_TEMPLATE = `# Myriad Docker Compose (v2 — proxy + updater)
 # 由 Myriad 安装配置生成器生成
 #
 # 架构:
-#   proxy (\${HTTP_PORT:-80}) ──┬──► frontend:1102
+#   proxy (\${HTTP_PORT:-8080}) ──┬──► frontend:1102
 #                              └──► backend:1103 ──► postgres
 #   updater (内网) — 快照 pgdata / 切换版本 tag / 维护模式
 #
@@ -158,7 +158,7 @@ services:
     image: \${PROXY_IMAGE:-docker.io/somekawahitomi/myriad-proxy}:\${PROXY_TAG}
     container_name: myriad-proxy
     ports:
-      - "\${HTTP_PORT:-80}:80"
+      - "\${HTTP_PORT:-8080}:80"
     environment:
       PROXY_STATE_FILE: /state/maintenance.json
       PROXY_BACKEND_UPSTREAM: http://backend:1103
@@ -397,6 +397,12 @@ var DEPLOY_NOTES_TEMPLATE = `# Myriad 部署说明
 
 将 \`docker-compose.yml\` 和 \`.env\` 放在同一目录。\`.env\` 包含密钥，不要公开或提交到 Git。
 
+## 1Panel
+
+1. 在“容器 → 编排”中新建编排。
+2. 将 \`docker-compose.yml\` 全文粘到编排编辑器。
+3. 将 \`.env\` 全文粘到“环境变量”框，然后创建编排。
+
 ## 启动
 
 \`\`\`bash
@@ -484,16 +490,17 @@ function generatePassword() {
 function replaceNginxDomain(config, newDomain) {
   var oldDomain = extractDomain(config);
 
-  config = config.replace(/server_name\s+[^;]+;/g, function() {
+  config = config.replace(/server_name\s+([^;]+);/g, function(directive, namesText) {
+    var names = namesText.trim().split(/\s+/);
+    if (!oldDomain || names.indexOf(oldDomain) === -1) return directive;
     return 'server_name ' + newDomain + ';';
   });
 
   // 宝塔 / 1Panel 常见站点目录
-  var domainRegex = new RegExp('/www/sites/[^/]+/', 'g');
-  config = config.replace(domainRegex, '/www/sites/' + newDomain + '/');
-
-  var includeRegex = new RegExp('include\\s+/www/sites/[^/]+/', 'g');
-  config = config.replace(includeRegex, 'include /www/sites/' + newDomain + '/');
+  if (oldDomain) {
+    var domainRegex = new RegExp('/www/sites/' + escapeRegExp(oldDomain) + '/', 'g');
+    config = config.replace(domainRegex, '/www/sites/' + newDomain + '/');
+  }
 
   // Let's Encrypt live / archive 路径
   if (oldDomain && oldDomain !== newDomain) {
@@ -782,16 +789,166 @@ async function refreshLatestTags(inputs, channelSelect, opts) {
   return tagFetchState.inflight;
 }
 
-// 将旧式 backend/frontend 直连端口统一改为 proxy HTTP_PORT
-// 并尽量把 location 合并为单入口反代语义
-function replaceNginxUpstreamToProxy(config, httpPort) {
-  // 常见旧端口与自定义端口 → proxy
-  config = config.replace(/127\.0\.0\.1:(3000|4321|1102|1103|80|8080)\b/g, '127.0.0.1:' + httpPort);
-  config = config.replace(/localhost:(3000|4321|1102|1103|80|8080)\b/g, 'localhost:' + httpPort);
+function buildNginxProxyLocation(httpPort, indent) {
+  var childIndent = indent + '    ';
+  return [
+    indent + '# Myriad 唯一入口：交给 proxy 再路由前端、后端和更新服务',
+    indent + 'location / {',
+    childIndent + 'proxy_pass http://127.0.0.1:' + httpPort + ';',
+    '',
+    childIndent + 'proxy_set_header Host $host;',
+    childIndent + 'proxy_set_header X-Real-IP $remote_addr;',
+    childIndent + 'proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;',
+    childIndent + 'proxy_set_header X-Forwarded-Proto $scheme;',
+    '',
+    childIndent + 'proxy_http_version 1.1;',
+    childIndent + 'proxy_set_header Upgrade $http_upgrade;',
+    childIndent + 'proxy_set_header Connection "upgrade";',
+    '',
+    childIndent + 'proxy_connect_timeout 300s;',
+    childIndent + 'proxy_send_timeout 300s;',
+    childIndent + 'proxy_read_timeout 300s;',
+    childIndent + 'proxy_buffering off;',
+    childIndent + 'client_max_body_size 50M;',
+    indent + '}'
+  ].join('\n');
+}
 
-  // 若用户配置已是 proxy_pass 到自定义端口，再统一一次
-  config = config.replace(/proxy_pass\s+http:\/\/127\.0\.0\.1:\d+/g, 'proxy_pass http://127.0.0.1:' + httpPort);
-  config = config.replace(/proxy_pass\s+http:\/\/localhost:\d+/g, 'proxy_pass http://localhost:' + httpPort);
+function findClosingBrace(config, openBraceIndex) {
+  var depth = 0;
+  var quote = '';
+  var escaped = false;
+  var inComment = false;
+
+  for (var i = openBraceIndex; i < config.length; i += 1) {
+    var char = config[i];
+
+    if (inComment) {
+      if (char === '\n') inComment = false;
+      continue;
+    }
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === quote) {
+        quote = '';
+      }
+      continue;
+    }
+    if (char === '#') {
+      inComment = true;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '{') depth += 1;
+    if (char === '}') {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+function replaceRootLocation(config, httpPort) {
+  var rootLocation = /(^|\n)([ \t]*)location\s+(?:(?:=|\^~)\s+)?\/\s*\{/g;
+  var match = rootLocation.exec(config);
+  if (!match) return null;
+
+  var start = match.index + match[1].length;
+  var openBrace = config.indexOf('{', start);
+  var closeBrace = findClosingBrace(config, openBrace);
+  if (closeBrace === -1) return null;
+
+  var proxyLocation = buildNginxProxyLocation(httpPort, match[2]);
+  return config.slice(0, start) + proxyLocation + config.slice(closeBrace + 1);
+}
+
+function findServerBlocks(config) {
+  var blocks = [];
+  var serverPattern = /^([ \t]*)server\s*\{/gm;
+  var match;
+
+  while ((match = serverPattern.exec(config)) !== null) {
+    var openBrace = config.indexOf('{', match.index);
+    var closeBrace = findClosingBrace(config, openBrace);
+    if (closeBrace === -1) break;
+    blocks.push({
+      start: match.index,
+      end: closeBrace + 1,
+      indent: match[1],
+      text: config.slice(match.index, closeBrace + 1)
+    });
+    serverPattern.lastIndex = closeBrace + 1;
+  }
+
+  return blocks;
+}
+
+function serverHasDomain(serverConfig, domain) {
+  var directives = serverConfig.match(/server_name\s+[^;]+;/g) || [];
+  return directives.some(function(directive) {
+    var names = directive.replace(/^server_name\s+/, '').replace(/;$/, '').trim().split(/\s+/);
+    return names.indexOf(domain) !== -1;
+  });
+}
+
+function isRedirectOnlyServer(serverConfig) {
+  var servesTls = /\blisten\b[^;]*\bssl\b/.test(serverConfig) || /\bssl_certificate\b/.test(serverConfig);
+  var redirectIndex = serverConfig.search(/\breturn\s+30(?:1|2|7|8)\b/);
+  var firstLocationIndex = serverConfig.search(/\blocation\b/);
+  var redirectsWholeServer = redirectIndex !== -1 &&
+    (firstLocationIndex === -1 || redirectIndex < firstLocationIndex);
+  var hasUpstreamHandler = /\b(?:proxy_pass|fastcgi_pass|uwsgi_pass|grpc_pass)\b/.test(serverConfig);
+  return !servesTls && redirectsWholeServer && !hasUpstreamHandler;
+}
+
+function transformServerBlock(serverConfig, httpPort, serverIndent) {
+  var childIndent = serverIndent + '    ';
+  var proxyLocation = buildNginxProxyLocation(httpPort, childIndent);
+  var proxyInclude = /^[ \t]*include\s+[^;\n]*\/proxy\/\*\.conf\s*;[ \t]*$/gm;
+  var replacedRoot = replaceRootLocation(serverConfig, httpPort);
+
+  if (replacedRoot !== null) {
+    // Myriad 独占根路径；移除 1Panel 外置代理入口，避免重复 location /。
+    return replacedRoot.replace(proxyInclude, '');
+  }
+  if (proxyInclude.test(serverConfig)) {
+    proxyInclude.lastIndex = 0;
+    return serverConfig.replace(proxyInclude, proxyLocation);
+  }
+
+  var closeBrace = serverConfig.lastIndexOf('}');
+  return serverConfig.slice(0, closeBrace).replace(/[ \t]*$/, '') +
+    '\n\n' + proxyLocation + '\n' + serverConfig.slice(closeBrace);
+}
+
+// 将上传的站点配置规范化为 Myriad proxy 单入口。
+// 支持同一站点常见的 HTTP 跳转块 + HTTPS 服务块，不修改其他域名。
+function replaceNginxUpstreamToProxy(config, httpPort, domain) {
+  var blocks = findServerBlocks(config);
+  var replacements = blocks.filter(function(block) {
+    return serverHasDomain(block.text, domain) && !isRedirectOnlyServer(block.text);
+  }).map(function(block) {
+    return {
+      start: block.start,
+      end: block.end,
+      text: transformServerBlock(block.text, httpPort, block.indent)
+    };
+  });
+
+  // 从后向前替换，保持前面 block 的索引稳定。
+  replacements.reverse().forEach(function(replacement) {
+    config = config.slice(0, replacement.start) + replacement.text + config.slice(replacement.end);
+  });
+
+  if (replacements.length === 0) {
+    throw new Error('上传的 Nginx 配置中未找到域名 ' + domain + ' 的可用 server 块');
+  }
 
   return config;
 }
@@ -843,7 +1000,7 @@ var state = {
   nginxFileName: '',
   extraNginxConfig: null,
   extraNginxFileName: '',
-  httpPort: 80,
+  httpPort: 8080,
   dbVersion: '18',
   // 运行时由 Docker Hub 解析填充，不在源码中写死版本
   myriadTag: '',
@@ -1008,7 +1165,7 @@ function initPage() {
       state.jwtSecret = jwtSecret;
       state.updateToken = updateToken;
 
-      state.httpPort = parseInt(httpPortInput.value, 10) || 80;
+      state.httpPort = parseInt(httpPortInput.value, 10) || 8080;
       if (state.httpPort < 1 || state.httpPort > 65535) {
         showNotification('HTTP 端口无效', 'error');
         httpPortInput.focus();
@@ -1059,7 +1216,11 @@ function initPage() {
         return;
       }
 
-      generateConfigs();
+      try {
+        generateConfigs();
+      } catch (err) {
+        showNotification((err && err.message) ? err.message : 'Nginx 配置无法处理', 'error');
+      }
     } finally {
       generateAllBtn.disabled = false;
     }
@@ -1219,7 +1380,7 @@ function generateConfigs() {
   var mainNginx;
   if (state.nginxConfig) {
     mainNginx = replaceNginxDomain(state.nginxConfig, state.mainDomain);
-    mainNginx = replaceNginxUpstreamToProxy(mainNginx, state.httpPort);
+    mainNginx = replaceNginxUpstreamToProxy(mainNginx, state.httpPort, state.mainDomain);
   } else {
     mainNginx = applyPlaceholders(DEFAULT_NGINX_TEMPLATE, map);
   }
@@ -1231,7 +1392,7 @@ function generateConfigs() {
   if (hasExtra) {
     if (state.extraNginxConfig) {
       extraNginx = replaceNginxDomain(state.extraNginxConfig, state.extraDomain);
-      extraNginx = replaceNginxUpstreamToProxy(extraNginx, state.httpPort);
+      extraNginx = replaceNginxUpstreamToProxy(extraNginx, state.httpPort, state.extraDomain);
     } else {
       extraNginx = applyPlaceholders(DEFAULT_EXTRA_NGINX_TEMPLATE, map);
     }
@@ -1260,7 +1421,7 @@ function generateConfigs() {
   resultsSection.hidden = false;
   resultsSection.scrollIntoView({ behavior: 'smooth' });
 
-  showNotification('配置文件生成成功！请同时保存 docker-compose.yml 与 .env', 'success');
+  showNotification('生成成功：1Panel 中将 YAML 粘到“编排”，将 .env 粘到“环境变量”', 'success');
 }
 
 // ========================================

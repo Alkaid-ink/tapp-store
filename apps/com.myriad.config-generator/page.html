@@ -25,7 +25,7 @@
       <div class="section-info-content">
         <span class="section-info-title">用途</span>
         为新的自托管 Myriad 生成启动配置、密钥、Nginx 配置和部署步骤。<br>
-        只有 proxy 对外开放；HTTPS 请反代到 <code>HTTP_PORT</code>。
+        1Panel：YAML 粘到“编排”，生成的 .env 全文粘到“环境变量”。
       </div>
     </div>
 
@@ -192,9 +192,9 @@
           <div class="form-row">
             <div class="form-group form-group-half">
               <label for="http-port">HTTP_PORT（proxy 宿主端口）</label>
-              <input type="number" id="http-port" class="form-input" value="80" min="1" max="65535">
+              <input type="number" id="http-port" class="form-input" value="8080" min="1" max="65535">
               <span class="form-hint">
-                proxy 对外端口，默认 80。端口占用时可改为 8080 等。
+                默认 8080，避免与 1Panel 的 80/443 端口冲突。
               </span>
             </div>
             <div class="form-group form-group-half">
@@ -272,7 +272,7 @@
           <span class="section-warning-icon">⚠️</span>
           <div class="section-warning-content">
             <span class="section-warning-title">上传要求</span>
-            上传现有配置可保留 SSL 路径，并把代理目标改为 HTTP_PORT；不上传则生成 HTTP 模板。
+            上传该域名的站点配置会保留 SSL，并补齐 Myriad 代理；不要上传包含其他站点的完整 nginx.conf。
           </div>
         </div>
 
@@ -338,7 +338,7 @@
     <div id="results-section" class="results-section" hidden>
       <h2 class="results-title">📦 生成结果</h2>
       <p class="section-desc" style="margin: -8px 0 16px; padding: 0 4px;">
-        将 <strong>docker-compose.yml</strong> 和 <strong>.env</strong> 放在同一目录，再按 DEPLOY.md 启动。
+        1Panel：复制 docker-compose.yml 到“编排”，复制 .env 到“环境变量”。
       </p>
 
       <!-- Docker Compose -->
@@ -368,14 +368,14 @@
       <div class="result-card">
         <div class="result-header">
           <span class="result-icon">🔑</span>
-          <span class="result-name">.env</span>
-          <span class="result-badge">密钥与版本 · 勿公开</span>
+          <span class="result-name">环境变量（.env）</span>
+          <span class="result-badge">1Panel 环境变量框 · 勿公开</span>
           <button type="button" class="btn-copy" data-target="env">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
             </svg>
-            复制
+            复制到 1Panel
           </button>
           <button type="button" class="btn-download" data-filename=".env" data-target="env">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

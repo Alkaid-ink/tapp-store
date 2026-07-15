@@ -16,6 +16,9 @@
 3. 如有现成的 Nginx SSL 配置，可选择上传。
 4. 点击“生成配置文件”并下载结果。
 
+在 1Panel 中，将 `docker-compose.yml` 粘到“编排”，将 `.env` 全文粘到“环境变量”。
+Nginx 请上传当前域名的站点配置，不要上传包含其他站点的完整 `nginx.conf`。
+
 ## 生成的文件
 
 | 文件 | 说明 |
@@ -36,7 +39,8 @@ docker compose up -d
 ## 注意事项
 
 - 不要公开或提交 `.env`。
-- 只有 proxy 的 `HTTP_PORT` 应对外开放。
+- `HTTP_PORT` 默认 8080，避免与 1Panel 的 80/443 端口冲突。
+- Nginx 只反代到 proxy，不要开放其他服务端口。
 - 新部署默认 PostgreSQL 18，数据库不设资源硬上限。
 - 更换 PostgreSQL 主版本前需先迁移数据。
 - 不要使用 `:latest` 镜像标签。
