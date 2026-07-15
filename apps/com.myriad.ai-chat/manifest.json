@@ -2,13 +2,16 @@
   "id": "com.myriad.ai-chat",
   "name": "AI 聊天助手",
   "version": "1.0.0",
+  "minSystemVersion": "0.2.0",
   "description": "AI 驱动的智能对话助手",
   "main": "main.js",
   "author": {
-    "name": "Myriad Team"
+    "name": "Myriad Team",
+    "url": "https://github.com/Myriad-You"
   },
   "permissions": [
     "storage",
+    "widget:register",
     "ui:notification",
     "ui:theme",
     "ai:chat"
@@ -27,7 +30,10 @@
       "icon": "🤖",
       "defaultSize": "4x2",
       "sizes": ["4x2", "4x4"],
-      "minRefreshInterval": 1000,
+      "refreshPolicy": {
+        "mode": "event",
+        "refreshOnVisible": true
+      },
       "category": "utility",
       "templates": {
         "4x2": "widget-4x2.html",

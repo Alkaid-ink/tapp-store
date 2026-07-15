@@ -38,19 +38,20 @@ com.myriad.quick-notes/
 
 ## 权限说明
 
-| 权限              | 用途              |
-| ----------------- | ----------------- |
-| `storage`         | 保存笔记内容      |
-| `ui:notification` | 操作成功提示      |
-| `ui:theme`        | 适配深色/浅色主题 |
+| 权限              | 用途                  |
+| ----------------- | --------------------- |
+| `storage`         | 保存笔记内容          |
+| `widget:register` | 注册 Dashboard 小组件 |
+| `ui:notification` | 操作成功提示          |
+| `ui:theme`        | 适配深色/浅色主题     |
 
 ## 设置选项
 
-| 设置项       | 类型   | 默认值 | 说明               |
-| ------------ | ------ | ------ | ------------------ |
-| `maxNotes`   | number | 100    | 最大笔记数量       |
-| `showTimestamp` | toggle | true  | 显示创建时间    |
-| `saveHistory` | toggle | true  | 保存历史记录      |
+| 设置项          | 类型   | 默认值 | 说明         |
+| --------------- | ------ | ------ | ------------ |
+| `maxNotes`      | number | 100    | 最大笔记数量 |
+| `showTimestamp` | toggle | true   | 显示创建时间 |
+| `saveHistory`   | toggle | true   | 保存历史记录 |
 
 ## 更新日志
 
@@ -65,8 +66,8 @@ com.myriad.quick-notes/
 - 🎨 全新 UI：Glass Morphism 设计
 - 🎨 动态光效：基于壁纸色的装饰
 - ⚡ 性能优化：更快的加载和渲染
+- 🔧 适配严格 Manifest、事件驱动 Widget 刷新和注册权限
 
 ### v0.1.0
 
 - 初始版本
-

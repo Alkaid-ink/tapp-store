@@ -2,13 +2,16 @@
   "id": "com.myriad.quick-notes",
   "name": "便携便签",
   "version": "1.0.0",
+  "minSystemVersion": "0.2.0",
   "description": "简单高效的笔记工具，快速记录想法和灵感",
   "main": "main.js",
   "author": {
-    "name": "Myriad Team"
+    "name": "Myriad Team",
+    "url": "https://github.com/Myriad-You"
   },
   "permissions": [
     "storage",
+    "widget:register",
     "ui:notification",
     "ui:theme",
     "ui:confirm"
@@ -28,7 +31,10 @@
       "icon": "📝",
       "defaultSize": "2x2",
       "sizes": ["2x2", "4x2", "4x4"],
-      "minRefreshInterval": 1000,
+      "refreshPolicy": {
+        "mode": "event",
+        "refreshOnVisible": true
+      },
       "category": "utility",
       "templates": {
         "2x2": "widget-2x2.html",

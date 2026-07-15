@@ -107,13 +107,13 @@ document.cookie; // 不可访问（credentialless）
 
 ### 替代方案
 
-| 被阻止的 API               | 替代方案                 |
-| -------------------------- | ------------------------ |
-| `fetch` / `XMLHttpRequest` | `Tapp.http.request()`    |
-| `localStorage`             | `Tapp.storage.set/get()` |
-| `sessionStorage`           | `Tapp.storage.set/get()` |
-| `document.cookie`          | 不可用                   |
-| `window.open`              | `Tapp.ui.openUrl()`      |
+| 被阻止的 API               | 替代方案                       |
+| -------------------------- | ------------------------------ |
+| `fetch` / `XMLHttpRequest` | Manifest `apis` + `Tapp.api()` |
+| `localStorage`             | `Tapp.storage.set/get()`       |
+| `sessionStorage`           | `Tapp.storage.set/get()`       |
+| `document.cookie`          | 不可用                         |
+| `window.open`              | `Tapp.ui.openUrl()`            |
 
 ---
 
@@ -180,32 +180,35 @@ try {
 
 ```json
 {
-  "api_declarations": [
-    {
+  "permissions": ["network:fetch"],
+  "apis": {
+    "data": {
+      "type": "http",
       "endpoint": "https://api.example.com/data",
-      "methods": ["GET"],
+      "method": "GET",
+      "access": "protected",
       "description": "获取数据"
     }
-  ]
+  }
 }
 ```
 
+沙箱按名称调用 `await Tapp.api("data", params)`；不接受任意 URL。
+
 ### Spoof 模式
 
-允许隐藏真实 API 端点，防止分析：
+区域伪装由命名 API 的字符串字段声明：
 
 ```json
 {
-  "api_declarations": [
-    {
+  "apis": {
+    "secret": {
+      "type": "http",
       "endpoint": "https://api.example.com/secret",
-      "methods": ["GET", "POST"],
-      "spoof": {
-        "enabled": true,
-        "display_endpoint": "https://public.example.com/api"
-      }
+      "method": "GET",
+      "spoof": "japan"
     }
-  ]
+  }
 }
 ```
 
@@ -264,12 +267,7 @@ function processUserInput(input) {
 
 ```json
 {
-  "permissions": {
-    // 只申请必需的权限
-    "basic": ["storage", "ui.theme"],
-    "elevated": ["platform.read"]
-    // 不要申请不需要的权限
-  }
+  "permissions": ["storage", "ui:theme", "platform:read"]
 }
 ```
 
@@ -277,13 +275,10 @@ function processUserInput(input) {
 
 ```javascript
 try {
-  const data = await Tapp.http.request({
-    url: "/api/data",
-    method: "GET",
-  });
+  const data = await Tapp.api("data", {});
 } catch (error) {
   // 不要暴露敏感信息
-  Tapp.ui.notify({
+  Tapp.ui.showNotification({
     type: "error",
     message: "获取数据失败，请稍后重试",
   });

@@ -50,7 +50,7 @@ Tapp.media.mute();
 Tapp.media.unmute();
 
 // 播放模式
-Tapp.media.setMode('repeat'); // repeat | single | shuffle
+Tapp.media.setMode("repeat"); // repeat | single | shuffle
 
 // 播放指定曲目
 Tapp.media.playTrack(trackId, trackIndex);
@@ -68,27 +68,27 @@ const playlist = await Tapp.media.getPlaylist();
 
 // 监听状态变化
 Tapp.media.onStateChange((state) => {
-  console.log('播放状态:', state);
+  console.log("播放状态:", state);
 });
 ```
 
 ## 权限要求
 
-| 权限 | 用途 |
-|------|------|
-| `storage` | 保存用户设置 |
-| `ui:notification` | 显示通知提示 |
-| `ui:theme` | 获取主题和颜色 |
-| `media:control` | 控制音乐播放 |
-| `media:read` | 读取播放状态 |
+| 权限              | 用途           |
+| ----------------- | -------------- |
+| `storage`         | 保存用户设置   |
+| `ui:notification` | 显示通知提示   |
+| `ui:theme`        | 获取主题和颜色 |
+| `media:control`   | 控制音乐播放   |
+| `media:read`      | 读取播放状态   |
 
 ## 设置选项
 
-| 设置 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `showLyrics` | toggle | true | 显示歌词面板 |
-| `autoScroll` | toggle | true | 歌词自动滚动 |
-| `showSpectrum` | toggle | true | 显示频谱动画 |
+| 设置           | 类型   | 默认值 | 说明         |
+| -------------- | ------ | ------ | ------------ |
+| `showLyrics`   | toggle | true   | 显示歌词面板 |
+| `autoScroll`   | toggle | true   | 歌词自动滚动 |
+| `showSpectrum` | toggle | true   | 显示频谱动画 |
 
 ## 多语言支持
 

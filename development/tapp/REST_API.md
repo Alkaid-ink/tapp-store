@@ -512,43 +512,15 @@ GET /api/tapp-store/tapps/{tappId}?source={sourceId}
 
 ---
 
-## HTTP 代理
+## Manifest 声明 API
 
-Tapp 的 HTTP 请求通过代理服务转发：
+| 方法 | 路径                               | 说明                          |
+| ---- | ---------------------------------- | ----------------------------- |
+| GET  | `/api/tapp/{tappId}/apis`          | 列出当前上下文可用的命名 API  |
+| POST | `/api/tapp/{tappId}/api/{apiName}` | 执行 Manifest `apis[apiName]` |
 
-### 代理请求
-
-```http
-POST /api/tapp/{tappId}/proxy
-Content-Type: application/json
-
-{
-  "url": "https://api.example.com/data",
-  "method": "GET",
-  "headers": {
-    "Authorization": "Bearer token"
-  },
-  "body": null
-}
-```
-
-**响应**：
-
-```json
-{
-  "success": true,
-  "data": {
-    "status": 200,
-    "headers": {},
-    "body": "..."
-  }
-}
-```
-
-**限制**：
-
-- URL 必须在 `api_declarations` 中声明
-- 请求频率限制：100 次/分钟
+请求体为 `{ "params": { "city": "Tokyo" } }`。这不是任意 URL 代理；旧的
+`POST /api/tapp/{tappId}/proxy` 不存在。后端负责权限、模板注入、SSRF 防护与缓存隔离。
 
 ---
 

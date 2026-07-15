@@ -271,7 +271,7 @@ const analysis = await Tapp.ai.analyze({
 const chat = await Tapp.ai.chat(
   [{ role: "user", content: "你好" }], // messages
   { includePlatformStats: true }, // context (可选)
-  { maxTokens: 1000 } // options (可选)
+  { maxTokens: 1000 }, // options (可选)
 );
 // 返回: {
 //   message: { role: 'assistant', content: 'AI 回复内容' },
@@ -313,7 +313,7 @@ await Tapp.widget.register({
   name: "我的小组件",
   defaultSize: "2x2",
   sizes: ["1x1", "2x2", "4x2"],
-  minRefreshInterval: 60000,
+  refreshPolicy: { mode: "event", refreshOnVisible: true },
   category: "tool",
 });
 
@@ -328,6 +328,10 @@ await Tapp.widget.updateConfig("my-widget", {
   title: "新标题",
 });
 ```
+
+在 Widget 沙箱中，`Tapp.widget.getInstanceSettings()` 读取当前 Dashboard 实例设置，
+`updateInstanceSettings(patch)` 更新 Manifest 已声明字段，`invalidate(reason)` 请求刷新。
+同一 Tapp 其他运行实例修改 storage 时可通过 `Tapp.storage.onChanged(callback)` 订阅。
 
 ---
 
@@ -352,7 +356,7 @@ const newReport = await Tapp.report.create(
   "我的报告", // title
   "summary", // reportType
   { summary: "..." }, // content
-  { tags: ["test"] } // metadata (可选)
+  { tags: ["test"] }, // metadata (可选)
 );
 
 // 更新报告
@@ -460,7 +464,7 @@ await Tapp.file.download(content, filename, mimeType);
 await Tapp.file.download(
   "version: 3.8\nservices:\n  ...",
   "docker-compose.yml",
-  "text/yaml"
+  "text/yaml",
 );
 
 // 示例：下载 JSON 数据
@@ -468,16 +472,16 @@ const data = { name: "test", value: 123 };
 await Tapp.file.download(
   JSON.stringify(data, null, 2),
   "data.json",
-  "application/json"
+  "application/json",
 );
 ```
 
 ### 参数说明
 
-| 参数       | 类型     | 必填 | 说明                                    |
-| ---------- | -------- | ---- | --------------------------------------- |
-| `content`  | `string` | 是   | 文件内容                                |
-| `filename` | `string` | 是   | 文件名（禁止包含路径字符）              |
+| 参数       | 类型     | 必填 | 说明                                       |
+| ---------- | -------- | ---- | ------------------------------------------ |
+| `content`  | `string` | 是   | 文件内容                                   |
+| `filename` | `string` | 是   | 文件名（禁止包含路径字符）                 |
 | `mimeType` | `string` | 否   | MIME 类型，默认 `text/plain;charset=utf-8` |
 
 ### 限制
@@ -662,7 +666,7 @@ const unsubscribe = Tapp.event.on("user:login", (payload) => {
 await Tapp.event.publish(
   "my-event",
   { message: "Hello!" },
-  "broadcast" // broadcast | self | tappId
+  "broadcast", // broadcast | self | tappId
 );
 
 // 取消订阅

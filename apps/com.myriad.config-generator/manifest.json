@@ -2,25 +2,20 @@
   "id": "com.myriad.config-generator",
   "name": "Myriad 安装配置生成",
   "version": "1.0.0",
+  "minSystemVersion": "0.2.0",
   "description": "一键生成 Myriad proxy + updater 生产部署配置；运行时从 Docker Hub 解析最新 versioned 镜像 tag",
   "main": "main.js",
   "author": {
-    "name": "Myriad Team"
+    "name": "Myriad Team",
+    "url": "https://github.com/Myriad-You"
   },
-  "permissions": [
-    "storage",
-    "ui:notification",
-    "ui:theme",
-    "ui:confirm"
-  ],
+  "permissions": ["storage", "ui:notification", "ui:theme", "ui:confirm"],
   "iconSvg": "<svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/><polyline points='14,2 14,8 20,8' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/><path d='M12 18v-6M9 15l3 3 3-3' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>",
   "themeColor": "#6366F1",
   "hasPage": true,
   "cssMode": "separated",
   "pageStyles": "page.css",
   "pageTemplate": "page.html",
-  "widgets": [],
-  "settings": [],
   "apis": {
     "dockerHubTags": {
       "access": "public",
