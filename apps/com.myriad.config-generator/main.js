@@ -13,7 +13,7 @@ var DOCKER_COMPOSE_TEMPLATE = `# Myriad Docker Compose (v2 — proxy + updater)
 # 由 Myriad 安装配置生成器生成
 #
 # 架构:
-#   proxy (\${HTTP_PORT:-8080}) ──┬──► frontend:1102
+#   proxy (\${HTTP_BIND_ADDRESS:-127.0.0.1}:\${HTTP_PORT:-8080}) ──┬──► frontend:1102
 #                              └──► backend:1103 ──► postgres
 #   updater (内网) — 快照 pgdata / 切换版本 tag / 维护模式
 #
@@ -158,7 +158,7 @@ services:
     image: \${PROXY_IMAGE:-docker.io/somekawahitomi/myriad-proxy}:\${PROXY_TAG}
     container_name: myriad-proxy
     ports:
-      - "\${HTTP_PORT:-8080}:80"
+      - "\${HTTP_BIND_ADDRESS:-127.0.0.1}:\${HTTP_PORT:-8080}:80"
     environment:
       PROXY_STATE_FILE: /state/maintenance.json
       PROXY_BACKEND_UPSTREAM: http://backend:1103
@@ -264,7 +264,8 @@ UPDATE_MODE=release
 MYRIAD_GITHUB_REPO=Myriad-You/Myriad
 CHECK_INTERVAL_SECS=3600
 
-# proxy 宿主端口（外层 Nginx 反代到这里）
+# proxy 宿主监听地址和端口（1Panel / 外层 Nginx 推荐仅本机）
+HTTP_BIND_ADDRESS={{HTTP_BIND_ADDRESS}}
 HTTP_PORT={{HTTP_PORT}}
 
 # 是否启用 /_updater/* 直连救援通道（默认 false，推荐走 admin API）
@@ -418,6 +419,7 @@ docker compose logs -f --tail=100
 ## HTTPS
 
 - 将 https://{{MAIN_DOMAIN}} 反代到 \`127.0.0.1:{{HTTP_PORT}}\`。
+- proxy 当前监听 \`{{HTTP_BIND_ADDRESS}}:{{HTTP_PORT}}\`；选择 \`127.0.0.1\` 时只能从本机访问。
 - 不要把 backend、frontend、postgres 或 updater 端口暴露到公网。
 
 ## 首次使用和更新
@@ -1000,6 +1002,7 @@ var state = {
   nginxFileName: '',
   extraNginxConfig: null,
   extraNginxFileName: '',
+  httpBindAddress: '127.0.0.1',
   httpPort: 8080,
   dbVersion: '18',
   // 运行时由 Docker Hub 解析填充，不在源码中写死版本
@@ -1036,6 +1039,7 @@ function initPage() {
   var uploadExtraNginx = document.getElementById('upload-extra-nginx-conf');
   var fileExtraNginx = document.getElementById('file-extra-nginx-conf');
 
+  var httpBindAddressSelect = document.getElementById('http-bind-address');
   var httpPortInput = document.getElementById('http-port');
   var dbVersionSelect = document.getElementById('db-version');
   var myriadTagInput = document.getElementById('myriad-tag');
@@ -1164,6 +1168,13 @@ function initPage() {
       state.dbPassword = dbPassword;
       state.jwtSecret = jwtSecret;
       state.updateToken = updateToken;
+
+      state.httpBindAddress = httpBindAddressSelect.value || '127.0.0.1';
+      if (state.httpBindAddress !== '127.0.0.1' && state.httpBindAddress !== '0.0.0.0') {
+        showNotification('HTTP 监听地址无效', 'error');
+        httpBindAddressSelect.focus();
+        return;
+      }
 
       state.httpPort = parseInt(httpPortInput.value, 10) || 8080;
       if (state.httpPort < 1 || state.httpPort > 65535) {
@@ -1364,6 +1375,7 @@ function generateConfigs() {
     MAIN_DOMAIN: state.mainDomain,
     EXTRA_DOMAIN: state.extraDomain || '',
     CORS_ORIGINS: corsOrigins,
+    HTTP_BIND_ADDRESS: state.httpBindAddress,
     HTTP_PORT: String(state.httpPort),
     MYRIAD_TAG: state.myriadTag,
     PROXY_TAG: state.proxyTag,
