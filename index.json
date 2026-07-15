@@ -148,8 +148,8 @@
       "id": "com.myriad.config-generator",
       "name": "Myriad 安装配置生成",
       "version": "1.0.0",
-      "description": "一键生成 Myriad proxy + updater 生产部署配置；自动解析 Docker Hub 最新 versioned 镜像 tag",
-      "long_description": "Myriad 安装配置生成器，对齐 proxy + updater 单运行槽架构。生成 docker-compose.yml、.env、外层 Nginx 与部署说明；自动生成密钥；运行时从 Docker Hub 解析最新 versioned 镜像 tag（禁止 :latest）；支持 channel、cosign 与资源限制；可上传现有 Nginx 以保留 SSL 并统一反代到 HTTP_PORT。",
+      "description": "生成 Myriad 自托管所需的 Compose、.env、Nginx 和部署说明",
+      "long_description": "填写域名后即可生成部署文件和安全密钥。支持选择版本、更新通道和上传现有 Nginx 配置。",
       "author": {
         "name": "Myriad Team",
         "url": "https://github.com/Myriad-You"

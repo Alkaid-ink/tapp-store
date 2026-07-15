@@ -15,7 +15,7 @@
       <div class="header-icon">⚙️</div>
       <div class="header-info">
         <h1 class="header-title">Myriad 安装配置生成</h1>
-        <p class="header-subtitle">proxy + updater 单运行槽 · Docker Compose / .env / Nginx</p>
+        <p class="header-subtitle">生成 Compose、.env、Nginx 和部署说明</p>
       </div>
     </header>
 
@@ -23,13 +23,9 @@
     <div class="section-info">
       <span class="section-info-icon">ℹ️</span>
       <div class="section-info-content">
-        <span class="section-info-title">这是什么？</span>
-        本工具帮你生成<strong>自托管 Myriad</strong> 首次部署所需的配置文件（不是改已有站点设置）。<br>
-        产出：<code>docker-compose.yml</code>（启动服务）、<code>.env</code>（密钥与版本）、外层 Nginx、部署说明。<br><br>
-        <span class="section-info-title">当前生产架构（先了解再填）</span>
-        只有 <strong>proxy</strong> 对宿主机开端口；backend / frontend / 数据库 / updater 都在 Docker 内网。<br>
-        升级是<strong>单运行槽 + 维护模式</strong>：先停业务、快照 <code>./pgdata</code>、再换镜像版本；不是两套系统同时跑。<br>
-        外层 HTTPS（宝塔 / 1Panel / Caddy 等）必须反代到 <code>HTTP_PORT</code>，不要直连 backend:1103。
+        <span class="section-info-title">用途</span>
+        为新的自托管 Myriad 生成启动配置、密钥、Nginx 配置和部署步骤。<br>
+        只有 proxy 对外开放；HTTPS 请反代到 <code>HTTP_PORT</code>。
       </div>
     </div>
 
@@ -42,22 +38,20 @@
           域名配置
         </h2>
         <p class="section-desc">
-          告诉 Myriad「用户从哪个网址访问你」。会写入 CORS（允许哪些网站调 API）、OAuth 回调、联邦公开地址，以及 Nginx 的 <code>server_name</code>。
+          用于访问地址、登录回调、CORS、联邦地址和 Nginx。
         </p>
         <div class="form-group">
           <label for="main-domain">主域名</label>
           <input type="text" id="main-domain" class="form-input" placeholder="example.com" autocomplete="off">
           <span class="form-hint">
-            用户浏览器地址栏里的域名，例如 <code>myriad.example.com</code>（一般不写 https://）。<br>
-            会生成：<code>BASE_URL</code> / <code>FRONTEND_URL</code> / <code>CORS_ORIGINS</code> = <code>https://你的域名</code>。填错会导致登录回调、跨域或联邦地址错误。
+            例如 <code>myriad.example.com</code>，不要填写 <code>https://</code>。
           </span>
         </div>
         <div class="form-group">
           <label for="extra-domain">额外域名（可选）</label>
           <input type="text" id="extra-domain" class="form-input" placeholder="www.example.com" autocomplete="off">
           <span class="form-hint">
-            若还要用 <code>www.</code> 或备用域名打开同一站点，填在这里。<br>
-            作用：把该域名加入 CORS 白名单，并<strong>额外生成一份</strong>反代到同一 proxy 的 Nginx 配置。没有第二域名可留空。
+            用于 <code>www.</code> 或备用域名；没有则留空。
           </span>
         </div>
       </section>
@@ -69,8 +63,7 @@
           安全配置
         </h2>
         <p class="section-desc">
-          三项密钥都会写入 <code>.env</code>，启动时由 Docker 读入。页面打开时会自动生成；也可点右侧按钮重新生成或自行粘贴。
-          <strong>请妥善保存 .env，勿提交到 Git 或发给别人。</strong>
+          密钥会自动生成并写入 <code>.env</code>。请保存好，不要提交到 Git 或分享给别人。
         </p>
         <div class="form-group">
           <label for="db-password">数据库密码 (POSTGRES_PASSWORD)</label>
@@ -83,8 +76,7 @@
             </button>
           </div>
           <span class="form-hint">
-            PostgreSQL 的登录密码，backend 连接数据库也用它。<br>
-            要求 ≥32 字符；此处生成字母数字，避免特殊字符弄坏连接串。首次初始化后改密码较麻烦，建议用生成值并备份 .env。
+            数据库连接密码，至少 32 个字符。部署后请勿随意更改。
           </span>
         </div>
         <div class="form-group">
@@ -98,8 +90,7 @@
             </button>
           </div>
           <span class="form-hint">
-            用于签发/校验登录令牌（Cookie / JWT）。只有服务器知道这个密钥，别人才能伪造登录态。<br>
-            要求 ≥32 字符（生成器默认 64）。若部署后改掉它，所有用户需要重新登录。
+            用于用户登录，至少 32 个字符。更改后所有用户需要重新登录。
           </span>
         </div>
         <div class="form-group">
@@ -113,8 +104,7 @@
             </button>
           </div>
           <span class="form-hint">
-            updater 服务的内部鉴权口令：backend 代替管理员调用升级 API 时使用。<br>
-            <strong>浏览器和前端都不会看到它</strong>；正常升级走「管理员登录 → 关于 → 更新管理」。请勿贴到聊天/截图。救援直连时才可能手动用到。
+            backend 调用 updater 时使用。不要发到聊天或截图中。
           </span>
         </div>
       </section>
@@ -126,8 +116,7 @@
           版本与更新器
         </h2>
         <p class="section-desc">
-          决定「第一次 <code>docker compose up</code> 拉哪些镜像版本」，以及以后 updater 从哪个发布通道检查更新。<br>
-          镜像必须使用<strong>固定版本号</strong>（如 <code>v0.0.2-rc.4</code>），<strong>禁止 <code>:latest</code></strong>——回滚依赖旧 tag 仍在仓库里。打开本页会从 Docker Hub 自动填最新 versioned tag。
+          页面会自动填写 Docker Hub 上最新的固定版本。不要使用 <code>:latest</code>。
         </p>
         <div class="tag-status-row">
           <span id="tag-status" class="tag-status">正在获取最新版本…</span>
@@ -142,17 +131,17 @@
           <div class="form-group form-group-third">
             <label for="myriad-tag">MYRIAD_TAG</label>
             <input type="text" id="myriad-tag" class="form-input" value="" placeholder="自动获取…" autocomplete="off">
-            <span class="form-hint">业务镜像版本：backend + frontend 共用。日常「检查更新」主要会改这个。</span>
+            <span class="form-hint">backend 和 frontend 共用的版本。</span>
           </div>
           <div class="form-group form-group-third">
             <label for="proxy-tag">PROXY_TAG</label>
             <input type="text" id="proxy-tag" class="form-input" value="" placeholder="自动获取…" autocomplete="off">
-            <span class="form-hint">入口代理镜像版本（对外路由、维护页）。改动少，通常与业务同步即可。</span>
+            <span class="form-hint">入口代理版本。</span>
           </div>
           <div class="form-group form-group-third">
             <label for="updater-tag">UPDATER_TAG</label>
             <input type="text" id="updater-tag" class="form-input" value="" placeholder="自动获取…" autocomplete="off">
-            <span class="form-hint">更新器自身版本（拉镜像、快照数据库、切 tag）。独立节奏，有时需先升 updater 再升业务。</span>
+            <span class="form-hint">更新器版本。</span>
           </div>
         </div>
       </section>
@@ -164,14 +153,14 @@
             <span class="section-icon">⚙️</span>
             <span class="advanced-summary-text">
               <span class="advanced-summary-title">高级选项</span>
-              <span class="advanced-summary-sub">通道 · 签名 · 端口 · 资源限制（可选，多数人不用改）</span>
+              <span class="advanced-summary-sub">通道、签名、端口和资源限制</span>
             </span>
           </span>
           <span class="advanced-chevron" aria-hidden="true">▼</span>
         </summary>
         <div class="advanced-body">
           <p class="section-desc">
-            以下均有合理默认值。只有要钉通道、改宿主机端口、或调后端/前端资源上限时再展开。
+            默认值适合大多数部署。
           </p>
 
           <h3 class="advanced-subtitle">发布与安全策略</h3>
@@ -183,8 +172,7 @@
                 <option value="preview">preview（预发布 / rc）</option>
               </select>
               <span class="form-hint">
-                updater「检查更新」时只看该通道的 GitHub Release。<br>
-                若当前 tag 带 rc/beta/nightly 等预发布标记，生成器会自动建议 preview。
+                正式版选 stable，预发布版选 preview。
               </span>
             </div>
             <div class="form-group form-group-half">
@@ -195,7 +183,7 @@
                 <option value="off">off — 不验证（仅兼容无签名旧 release）</option>
               </select>
               <span class="form-hint">
-                校验 release 是否被篡改。当前 updater 默认 strict；只有明确使用无签名旧 release 时才降级。
+                strict 最安全；只有旧版本没有签名时才降级。
               </span>
             </div>
           </div>
@@ -206,7 +194,7 @@
               <label for="http-port">HTTP_PORT（proxy 宿主端口）</label>
               <input type="number" id="http-port" class="form-input" value="80" min="1" max="65535">
               <span class="form-hint">
-                本机唯一对外开放端口，默认 80。外层 Nginx 反代到这里；被占用可改 8080 等。
+                proxy 对外端口，默认 80。端口占用时可改为 8080 等。
               </span>
             </div>
             <div class="form-group form-group-half">
@@ -217,7 +205,7 @@
                 <option value="16">PostgreSQL 16（最低兼容版本）</option>
               </select>
               <span class="form-hint">
-                新部署使用 18；已有数据库切换主版本前必须先执行 pg_upgrade 或 dump/restore。发布契约只要求最低 16，不设置最高版本。
+                新部署选 18。已有数据库更换主版本前需先迁移数据。
               </span>
             </div>
           </div>
@@ -231,13 +219,12 @@
 
           <h3 class="advanced-subtitle">后端与前端资源上限</h3>
           <p class="section-desc" style="margin-top: 0;">
-            PostgreSQL、proxy 和 updater 不设置 CPU / 内存硬上限。下面仅保留 backend / frontend
-            的可选保护值，机器很小可自行调低。
+            PostgreSQL、proxy 和 updater 不设上限。这里只限制 backend 和 frontend。
           </p>
 
           <div class="resource-group">
             <div class="resource-label">⚙️ Backend（后端 API）</div>
-            <p class="resource-desc">登录、接口、同步与升级代理；分析任务多时可再加大。</p>
+            <p class="resource-desc">处理接口、同步和分析任务。</p>
             <div class="form-row">
               <div class="form-group form-group-half">
                 <label for="backend-cpu-limit">CPU 上限</label>
@@ -254,7 +241,7 @@
 
           <div class="resource-group">
             <div class="resource-label">🎨 Frontend（前端静态站）</div>
-            <p class="resource-desc">网页界面，负载通常低于 backend。</p>
+            <p class="resource-desc">提供网页界面。</p>
             <div class="form-row">
               <div class="form-group form-group-half">
                 <label for="frontend-cpu-limit">CPU 上限</label>
@@ -278,24 +265,21 @@
           外层 Nginx（可选）
         </h2>
         <p class="section-desc">
-          Myriad 自带的 proxy 只听 HTTP。公网 HTTPS 通常由<strong>外面一层</strong> Nginx/Caddy/面板提供证书并反代进来。<br>
-          本区用于生成或改写那一层配置：全部流量转到 <code>127.0.0.1:HTTP_PORT</code>。
+          生成外层 HTTPS 反向代理配置，流量会转到 <code>127.0.0.1:HTTP_PORT</code>。
         </p>
 
         <div class="section-warning">
           <span class="section-warning-icon">⚠️</span>
           <div class="section-warning-content">
             <span class="section-warning-title">上传要求</span>
-            适合上传：已配好 SSL、结构简单的站点 conf（如宝塔单站）。<br>
-            生成器会尽量保留证书路径，并把旧的 3000/4321 等上游<strong>统一改成</strong> Myriad 的 HTTP_PORT。<br>
-            不上传：生成<strong>无 SSL</strong>的 HTTP 模板，证书需你之后在面板里自己配。
+            上传现有配置可保留 SSL 路径，并把代理目标改为 HTTP_PORT；不上传则生成 HTTP 模板。
           </div>
         </div>
 
         <div class="upload-group">
           <div class="upload-item">
             <label>主域名 Nginx 配置</label>
-            <span class="form-hint" style="display:block;margin:-4px 0 8px;">对应上面的「主域名」。拖入现有 .conf 可保留 SSL 路径。</span>
+            <span class="form-hint" style="display:block;margin:-4px 0 8px;">可上传现有 .conf 以保留 SSL 配置。</span>
             <div class="upload-box" id="upload-nginx-conf">
               <input type="file" id="file-nginx-conf" accept=".conf" hidden>
               <div class="upload-placeholder">
@@ -317,7 +301,7 @@
 
           <div class="upload-item">
             <label>额外域名 Nginx（可选）</label>
-            <span class="form-hint" style="display:block;margin:-4px 0 8px;">仅当你填了「额外域名」时需要；否则可忽略。</span>
+            <span class="form-hint" style="display:block;margin:-4px 0 8px;">只在填写额外域名时需要。</span>
             <div class="upload-box" id="upload-extra-nginx-conf">
               <input type="file" id="file-extra-nginx-conf" accept=".conf" hidden>
               <div class="upload-placeholder">
@@ -354,8 +338,7 @@
     <div id="results-section" class="results-section" hidden>
       <h2 class="results-title">📦 生成结果</h2>
       <p class="section-desc" style="margin: -8px 0 16px; padding: 0 4px;">
-        请把 <strong>docker-compose.yml</strong> 与 <strong>.env</strong> 放在同一目录，再按 DEPLOY.md 启动。
-        Nginx 配置给外层面板/主机用；密钥只在 .env 里，勿泄露。
+        将 <strong>docker-compose.yml</strong> 和 <strong>.env</strong> 放在同一目录，再按 DEPLOY.md 启动。
       </p>
 
       <!-- Docker Compose -->

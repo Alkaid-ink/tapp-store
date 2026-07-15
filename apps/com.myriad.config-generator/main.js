@@ -393,98 +393,55 @@ var DEFAULT_EXTRA_NGINX_TEMPLATE = `server {
 `;
 
 // 部署说明（生成结果中的文本卡片）
-var DEPLOY_NOTES_TEMPLATE = `# Myriad 部署说明（生成器 v1.0）
+var DEPLOY_NOTES_TEMPLATE = `# Myriad 部署说明
 
-## 推荐流程（按顺序）
+将 \`docker-compose.yml\` 和 \`.env\` 放在同一目录。\`.env\` 包含密钥，不要公开或提交到 Git。
 
-1. **准备目录**（任意空目录即可，不必克隆整个仓库）
-2. **放入本生成器产物**：\`docker-compose.yml\` + \`.env\`（必须同目录）
-3. **创建数据目录** → \`docker compose up -d\`
-4. **配置外层 Nginx/Caddy HTTPS**，反代到 \`127.0.0.1:{{HTTP_PORT}}\`
-5. 浏览器打开 https://{{MAIN_DOMAIN}}，完成**首次管理员注册/初始化**
-6. 日常升级：设置/配置 → 关于 → 更新管理
-
-## 架构（单运行槽 + 维护模式）
-
-- 运行时只有一套 backend / frontend / postgres（不是 A/B 双活）
-- 升级时：维护模式 → 停业务容器 → 快照 pgdata → 切换镜像 tag → 启动并探活
-- 外层 HTTPS 只反代到 proxy 的 HTTP_PORT（默认 {{HTTP_PORT}}）
-- 浏览器更新走 /api/admin/updater/*（admin session），不要把 UPDATE_TOKEN 给前端
-
-## 目录布局
-
-\`\`\`
-.
-├── docker-compose.yml   # 本生成器下载
-├── .env                 # 本生成器下载（含密钥，勿提交 Git）
-├── pgdata/              # PostgreSQL bind mount（必须，updater 快照依赖）
-├── state/               # 维护状态 / 锁 / 历史
-│   ├── snapshots/
-│   └── cache/
-└── backups/             # 升级快照与诊断包
-\`\`\`
-
-## 启动命令
+## 启动
 
 \`\`\`bash
-# 0. 进入你放置 compose/.env 的目录
 cd /path/to/myriad-deploy
-
-# 1. 创建目录
 mkdir -p pgdata state state/snapshots state/cache backups
-
-# 2. 权限（建议）
 chmod 600 .env
-
-# 3. 拉取并启动（首次会拉镜像，可能较久）
 docker compose pull
 docker compose up -d
-
-# 4. 查看状态
 docker compose ps
 docker compose logs -f --tail=100
 \`\`\`
 
-> 注意：\`HTTP_PORT={{HTTP_PORT}}\` 是宿主机唯一对外端口。若 80 被占用，请改 .env 中的 HTTP_PORT，并同步改外层反代。
+## HTTPS
 
-## 外层 Nginx
+- 将 https://{{MAIN_DOMAIN}} 反代到 \`127.0.0.1:{{HTTP_PORT}}\`。
+- 不要把 backend、frontend、postgres 或 updater 端口暴露到公网。
 
-- 将 **HTTPS** 流量反代到 \`127.0.0.1:{{HTTP_PORT}}\`
-- **不要**直连 backend:1103 或 frontend:1102，否则会绕过维护页与救援路径
-- 站点域名: https://{{MAIN_DOMAIN}}
-- 若上传了 SSL 配置，请确认证书路径对应当前域名
+## 首次使用和更新
 
-## 更新
+1. 打开 https://{{MAIN_DOMAIN}} 并完成管理员初始化。
+2. 以后在“设置 → 关于 → 更新管理”中升级。
 
-1. 浏览器打开 https://{{MAIN_DOMAIN}}
-2. 管理员登录 → 设置/配置 → 关于 → 更新管理
-3. 检查更新并确认升级
+当前更新通道：\`{{CHANNEL}}\`。
 
-> CHANNEL={{CHANNEL}}。若当前跑的是 rc/beta/nightly 等预发布镜像，应使用 preview channel。
+## 数据库
 
-## 救援（backend 挂掉时）
+- 数据保存在 \`./pgdata\`。
+- 更换 PostgreSQL 主版本前需先执行 \`pg_upgrade\` 或 dump/restore。
+
+## 救援
 
 \`\`\`bash
-# 临时打开直连（可选）
-# 在 .env 设 PROXY_ALLOW_DIRECT_UPDATER=true 后：
-# docker compose up -d proxy
-
 docker exec myriad-updater myriad-rescue status
 docker exec myriad-updater myriad-rescue exit-maintenance --force
 \`\`\`
 
-## 版本标签
+## 当前版本
 
 | 变量 | 当前值 | 说明 |
 |------|--------|------|
 | MYRIAD_TAG | {{MYRIAD_TAG}} | backend + frontend |
-| PROXY_TAG | {{PROXY_TAG}} | 反向代理 |
+| PROXY_TAG | {{PROXY_TAG}} | proxy |
 | UPDATER_TAG | {{UPDATER_TAG}} | 更新器 |
 
-禁止推送或使用 :latest；回滚依赖旧 tag 仍在 registry。
-
-> 生成时写入的 tag 来自 Docker Hub 当时解析到的最新 versioned 标签。
-> 之后由 updater 按 channel 跟踪更新。
+不要使用 \`:latest\`，否则无法可靠回滚。
 `;
 
 // ========================================

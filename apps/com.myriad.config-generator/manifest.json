@@ -3,7 +3,7 @@
   "name": "Myriad 安装配置生成",
   "version": "1.0.0",
   "minSystemVersion": "0.2.0",
-  "description": "一键生成 Myriad proxy + updater 生产部署配置；运行时从 Docker Hub 解析最新 versioned 镜像 tag",
+  "description": "生成 Myriad 自托管所需的 Compose、.env、Nginx 和部署说明",
   "main": "main.js",
   "author": {
     "name": "Myriad Team",
