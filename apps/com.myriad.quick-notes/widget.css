@@ -339,11 +339,23 @@
   flex-shrink: 0;
 }
 
-.note-item:hover .note-delete {
-  opacity: 1;
+/* 支持 hover 的设备：悬停时显示删除 */
+@media (hover: hover) and (pointer: fine) {
+  .note-item:hover .note-delete,
+  .note-delete:focus-visible {
+    opacity: 1;
+  }
 }
 
-.note-delete:hover {
+/* 触屏 / 无 hover：删除按钮常驻可见 */
+@media (hover: none) {
+  .note-delete {
+    opacity: 1;
+  }
+}
+
+.note-delete:hover,
+.note-delete:focus-visible {
   background: rgba(239, 68, 68, 0.15);
   color: var(--notes-danger);
 }

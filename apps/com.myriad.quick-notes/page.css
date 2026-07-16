@@ -488,23 +488,157 @@
   font-size: 14px;
   opacity: 0;
   transition: var(--notes-transition);
+  flex-shrink: 0;
 }
 
-.sticky-note:hover .sticky-delete {
-  opacity: 1;
+/* 支持 hover 的设备：悬停时显示删除 */
+@media (hover: hover) and (pointer: fine) {
+  .sticky-note:hover .sticky-delete,
+  .sticky-delete:focus-visible {
+    opacity: 1;
+  }
 }
 
-.sticky-delete:hover {
+/* 触屏 / 无 hover：删除按钮常驻可见 */
+@media (hover: none) {
+  .sticky-delete {
+    opacity: 1;
+  }
+}
+
+.sticky-delete:hover,
+.sticky-delete:focus-visible {
   background: var(--notes-error);
   color: white;
 }
 
 /* ========================================
-   空状态（不再占位，隐藏）
+   编辑模式
+   ======================================== */
+
+.sticky-note.editing {
+  max-height: none;
+  min-height: 160px;
+  cursor: default;
+}
+
+.sticky-note.editing:hover {
+  transform: none;
+}
+
+.sticky-edit-content {
+  gap: 10px;
+}
+
+.sticky-edit-input {
+  width: 100%;
+  min-height: 96px;
+  max-height: 180px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.55);
+  padding: 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #1f2937;
+  resize: vertical;
+  outline: none;
+  font-family: 'Comic Sans MS', 'Segoe Print', cursive, sans-serif;
+}
+
+.dark .sticky-edit-input {
+  background: rgba(0, 0, 0, 0.25);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #e5e7eb;
+}
+
+.sticky-edit-input:focus {
+  border-color: var(--notes-primary);
+  box-shadow: 0 0 0 2px rgba(var(--notes-primary-rgb), 0.15);
+}
+
+.sticky-edit-footer {
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.sticky-edit-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--notes-transition);
+}
+
+.sticky-edit-cancel {
+  background: rgba(0, 0, 0, 0.08);
+  color: rgba(0, 0, 0, 0.65);
+}
+
+.dark .sticky-edit-cancel {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.sticky-edit-save {
+  background: var(--notes-primary);
+  color: white;
+}
+
+.sticky-edit-save:hover {
+  filter: brightness(1.05);
+}
+
+/* ========================================
+   空状态（可见：图标 + 标题）
    ======================================== */
 
 .notes-area.empty {
-  display: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notes-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px 20px;
+  text-align: center;
+  animation: empty-fade-in 0.4s ease-out;
+}
+
+@keyframes empty-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.notes-empty-state .empty-icon {
+  font-size: 48px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.notes-empty-state .empty-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--notes-text);
+}
+
+.notes-empty-state .empty-subtitle {
+  font-size: 13px;
+  color: var(--notes-text-secondary);
+  max-width: 240px;
 }
 
 /* ========================================
@@ -577,6 +711,12 @@
 .char-count {
   font-size: 11px;
   color: var(--notes-text-secondary);
+  transition: var(--notes-transition);
+}
+
+.char-count.char-count-limit {
+  color: var(--notes-error);
+  font-weight: 600;
 }
 
 .page-send-btn {
