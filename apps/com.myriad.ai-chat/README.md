@@ -96,8 +96,8 @@ com.myriad.ai-chat/
 
 ### API 使用
 
-- **AI Chat API**: `Tapp.ai.chat(messages, context, options)`
-  - 返回: `{ message: { role, content }, usage: { ... }, sessionId }`
+- **AI Task API**: `Tapp.ai.tasks.create/get/cancel()`
+  - 创建 `chat` 任务并读取服务端治理的任务结果
 - **设置集成**: `Tapp.settings.getAll()` 读取配置
 - **存储 API**: `Tapp.storage.get/set()` 保存历史
 - **主色调 API**: `Tapp.ui.getPrimaryColor()` 获取壁纸色

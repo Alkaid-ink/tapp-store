@@ -2,7 +2,7 @@
   "id": "com.myriad.music-player",
   "name": "音乐播放器",
   "version": "1.0.0",
-  "minSystemVersion": "0.2.0",
+  "minSystemVersion": "0.2.1",
   "description": "功能完整的音乐播放器，支持歌词显示、播放列表和多种播放模式",
   "main": "main.js",
   "author": {

@@ -36,6 +36,11 @@ Manifest 使用严格字段校验；未声明或已移除的字段会使安装�
 直接安装、商店安装与更新时和当前 Myriad 版本比较。所有权限直接声明在 `permissions`，
 不再使用 `optionalPermissions`。
 
+`version` 必须是语义版本；`themeColor` 使用 `#RRGGBB`；`homepage`、`repository` 和
+作者主页只接受 HTTP(S)。声明 Widget 必须同时声明 `widget:register`；受保护 HTTP API
+必须声明 `network:fetch`，内置 AI API 必须声明对应的 `ai:*` 权限。`pageModules` 只接受
+不重复的 `.js` 文件名。
+
 ## 完整示例
 
 ```json
@@ -151,6 +156,10 @@ Manifest 使用严格字段校验；未声明或已移除的字段会使安装�
 顶层 `settings` 是整个 Tapp 共用的全局设置；`widgets[].settings` 是 Dashboard 实例设置。
 刷新默认事件驱动，当前 Widget 用 `Tapp.widget.invalidate()` 请求刷新；可选 interval 只在
 页面和 Widget 可见时运行，后台周期任务应使用 scheduler/headless core。
+
+模板按 `Widget ID + 尺寸` 隔离。同一个 Tapp 的多个 Widget 可以各自声明不同的 `2x2`
+模板，不会互相覆盖。商店索引中的 `download.widget_templates` 必须使用
+`{ "widgetId": { "2x2": "path/to/template.html" } }` 结构。
 
 ### 支持的尺寸
 
@@ -393,6 +402,10 @@ HTTP 声明使用 `endpoint`、`method`、`headers`、`body`、`inject`、`cache
 `access` 默认为 `protected` 并要求 `network:fetch`。内置声明使用 `type: "builtin"` 与
 `builtin: "geo" | "ai:chat" | "ai:generate"`，不能混入 HTTP 字段。
 
+解析缓存包含安装 owner 与 `apis` 内容指纹，响应缓存还包含用户/角色、客户端上下文、完整
+API 定义与参数摘要。更新 API 声明后不会继续命中旧 endpoint 的缓存，也不会跨安装 owner
+复用响应；所有进程内缓存都有 TTL 和容量回收。
+
 ### 区域伪装 (spoof.region)
 
 用于绕过地区限制，自动添加对应地区的请求头：
@@ -416,6 +429,51 @@ const response = await Tapp.api("data", { region: "jp" });
 > `Tapp.api(name, params)` 只能调用当前 Manifest 的 `apis[name]`；不存在任意 URL 代理。
 
 ---
+
+## 跨 Tapp 数据契约 (`dataExchange`)
+
+跨 Tapp 不能直接读取对方的 storage、表或文件。提供方声明具名 `exports`，调用方声明匹配
+的 `imports`；声明只表示接口兼容，不会授予长期权限。每次调用都会进入 Myriad 宿主授权
+队列，弹窗显示双方 Tapp、数据名称、请求范围、用途、返回上限和过期时间，用户只能拒绝或
+“仅允许本次”。
+
+```json
+{
+  "dataExchange": {
+    "exports": [
+      {
+        "id": "playlist.current",
+        "description": "当前播放列表",
+        "maxBytes": 262144,
+        "maxRecords": 200,
+        "schema": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "type": "object",
+            "required": ["title"],
+            "properties": {
+              "title": { "type": "string", "maxLength": 200 },
+              "artist": { "type": "string", "maxLength": 200 }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    ],
+    "imports": [
+      {
+        "tappId": "com.example.player",
+        "exportId": "playlist.current"
+      }
+    ]
+  }
+}
+```
+
+每个方向最多 32 条；`maxBytes` 为 1–524288，`maxRecords` 为 1–10000。响应必须匹配内联
+JSON schema。Grant 只保留在宿主和后端，完成、失败、拒绝、runtime 销毁或超时都会失效，
+不会进入 Tapp iframe。
 
 ## 权限列表
 

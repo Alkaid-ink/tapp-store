@@ -2,8 +2,8 @@
   "id": "com.myriad.config-generator",
   "name": "Myriad 安装配置生成",
   "version": "1.0.0",
-  "minSystemVersion": "0.2.0",
-  "description": "生成 Myriad 自托管所需的 Compose、.env、Nginx 和部署说明",
+  "minSystemVersion": "0.2.1",
+  "description": "填写部署和数据库设置，生成 Myriad 的 Compose、环境变量与 Nginx 配置",
   "main": "main.js",
   "author": {
     "name": "Myriad Team",
@@ -21,11 +21,7 @@
       "access": "public",
       "type": "http",
       "method": "GET",
-      "endpoint": "https://hub.docker.com/v2/repositories/somekawahitomi/{{params.repo}}/tags",
-      "params": {
-        "page_size": "100",
-        "ordering": "-last_updated"
-      },
+      "endpoint": "https://hub.docker.com/v2/repositories/somekawahitomi/{{params.repo}}/tags?page_size=100&ordering=-last_updated",
       "cacheTtl": 300
     }
   }

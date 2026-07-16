@@ -153,11 +153,15 @@ Tapp 需要在 manifest 中声明所需权限：
 
 ### 权限级别
 
-| 级别 | 说明           | 示例权限                     |
-| ---- | -------------- | ---------------------------- |
-| 基础 | 默认授予       | `storage`, `ui`, `theme`     |
-| 提升 | 需要用户确认   | `platform.read`, `ai.chat`   |
-| 特权 | 需要管理员审核 | `system.admin`, `http.write` |
+| 级别         | 说明                        | 示例权限                             |
+| ------------ | --------------------------- | ------------------------------------ |
+| `public`     | action 不要求 Manifest 权限 | `context.getUser`, `user.getRole`    |
+| `basic`      | 仍须申请并由宿主授予        | `storage`, `platform:read`           |
+| `elevated`   | 可由管理员向非管理员下放    | `ai:chat`, `event:publish`           |
+| `privileged` | 仅管理员                    | `tappList:manage`, `component:agent` |
+
+权限名使用冒号，例如 `platform:read`，不是旧文档中的点号形式。前端只做快速拒绝，后端会
+按 Runtime Grant、当前 subject、安装 owner 和最终授权再次校验。
 
 ### 权限检查
 
@@ -166,7 +170,12 @@ Tapp 需要在 manifest 中声明所需权限：
 ```javascript
 // 如果未声明权限，API 调用会失败
 try {
-  await Tapp.ai.chat([...]); // 需要 ai.chat 权限
+  await Tapp.ai.tasks.create({
+    version: 2,
+    operation: 'chat',
+    input: { messages: [...] },
+    output: { format: 'text' }
+  }); // 需要 manifest.ai 声明与 ai:chat 权限
 } catch (e) {
   console.error("权限不足:", e.message);
 }

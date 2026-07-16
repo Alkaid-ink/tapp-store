@@ -105,6 +105,34 @@ function t(key) {
   return (i18n[currentLocale] || i18n['zh-CN'])[key] || key;
 }
 
+async function runChatTask(messages) {
+  var snapshot = await Tapp.ai.tasks.create({
+    version: 2,
+    operation: 'chat',
+    input: { messages: messages },
+    output: { format: 'text' },
+    delivery: 'result'
+  });
+  var deadline = Date.now() + 135000;
+
+  while (snapshot.status === 'queued' || snapshot.status === 'running') {
+    if (Date.now() >= deadline) {
+      await Tapp.ai.tasks.cancel(snapshot.taskId).catch(function() {});
+      throw new Error('AI task timed out');
+    }
+    await new Promise(function(resolve) { setTimeout(resolve, 400); });
+    snapshot = await Tapp.ai.tasks.get(snapshot.taskId);
+  }
+
+  if (snapshot.status !== 'completed') {
+    throw new Error(snapshot.error?.message || ('AI task ' + snapshot.status));
+  }
+  if (!snapshot.result || typeof snapshot.result.value !== 'string') {
+    throw new Error(t('errorFormat'));
+  }
+  return snapshot.result.value;
+}
+
 // ========================================
 // 工具函数
 // ========================================
@@ -262,12 +290,11 @@ function init4x2Widget() {
     addMessage('user', text);
     setTimeout(addTypingIndicator, 150);
 
-    Tapp.ai.chat([{ role: 'user', content: text }], {}, { maxTokens: 300 })
-      .then(function(resp) {
+    runChatTask([{ role: 'user', content: text }])
+      .then(function(content) {
         var ind = document.getElementById('typing-indicator-4x2');
         if (ind) ind.remove();
 
-        var content = resp?.message?.content || resp?.content;
         if (content) {
           widgetState.messages.push({ role: 'assistant', content: content });
           addMessage('assistant', content, true);
@@ -405,12 +432,11 @@ function init4x4Widget() {
       return { role: m.role, content: m.content };
     });
 
-    Tapp.ai.chat(chatMsgs, {}, { maxTokens: 500 })
-      .then(function(resp) {
+    runChatTask(chatMsgs)
+      .then(function(content) {
         var ind = document.getElementById('typing-indicator');
         if (ind) ind.remove();
 
-        var content = resp?.message?.content || resp?.content;
         if (content) {
           widgetState.messages.push({ role: 'assistant', content: content });
           addMessage('assistant', content, true);
@@ -647,11 +673,10 @@ async function sendPageMessage(prefillText) {
       msgs.unshift({ role: 'system', content: pageState.settings.systemPrompt });
     }
 
-    var resp = await Tapp.ai.chat(msgs, {}, { maxTokens: 1500 });
+    var content = await runChatTask(msgs);
     var loadEl = document.getElementById('page-loading');
     if (loadEl) loadEl.remove();
 
-    var content = resp?.message?.content || resp?.content;
     if (content) {
       pageState.messages.push({ role: 'assistant', content: content });
       saveHistory();

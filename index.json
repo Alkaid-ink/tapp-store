@@ -33,7 +33,6 @@
         "media:control",
         "media:read"
       ],
-      "min_myriad_version": "0.2.0",
       "icon_svg": "<svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M9 18V5l12-2v13' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/><circle cx='6' cy='18' r='3' stroke='currentColor' stroke-width='2'/><circle cx='18' cy='16' r='3' stroke='currentColor' stroke-width='2'/></svg>",
       "theme_color": "#E91E63",
       "screenshots": [],
@@ -74,7 +73,6 @@
         "ui:theme",
         "ui:confirm"
       ],
-      "min_myriad_version": "0.2.0",
       "icon_svg": "<svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M8 2v3M16 2v3M3 9h18M21 8.5V17c0 3-1.5 5-5 5H8c-3.5 0-5-2-5-5V8.5c0-3 1.5-5 5-5h8c3.5 0 5 2 5 5z' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/><path d='M8 14h4M8 18h8' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg>",
       "theme_color": "#FFA726",
       "screenshots": [],
@@ -86,9 +84,11 @@
         "page_styles": "apps/com.myriad.quick-notes/page.css",
         "page_template": "apps/com.myriad.quick-notes/page.html",
         "widget_templates": {
-          "2x2": "apps/com.myriad.quick-notes/widget-2x2.html",
-          "4x2": "apps/com.myriad.quick-notes/widget-4x2.html",
-          "4x4": "apps/com.myriad.quick-notes/widget-4x4.html"
+          "notes": {
+            "2x2": "apps/com.myriad.quick-notes/widget-2x2.html",
+            "4x2": "apps/com.myriad.quick-notes/widget-4x2.html",
+            "4x4": "apps/com.myriad.quick-notes/widget-4x4.html"
+          }
         }
       },
       "size": 28672,
@@ -121,7 +121,6 @@
         "ui:theme",
         "ai:chat"
       ],
-      "min_myriad_version": "0.2.0",
       "icon_svg": "<svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M12 2C12 7 9 10 4 12c5 2 8 5 8 10 0-5 3-8 8-10-5-2-8-5-8-10z' fill='currentColor'/></svg>",
       "theme_color": "#00ACC1",
       "screenshots": [],
@@ -132,8 +131,10 @@
         "page_styles": "apps/com.myriad.ai-chat/page.css",
         "page_template": "apps/com.myriad.ai-chat/page.html",
         "widget_templates": {
-          "4x2": "apps/com.myriad.ai-chat/widget-4x2.html",
-          "4x4": "apps/com.myriad.ai-chat/widget-4x4.html"
+          "ai-chat": {
+            "4x2": "apps/com.myriad.ai-chat/widget-4x2.html",
+            "4x4": "apps/com.myriad.ai-chat/widget-4x4.html"
+          }
         }
       },
       "size": 25840,
@@ -148,8 +149,8 @@
       "id": "com.myriad.config-generator",
       "name": "Myriad 安装配置生成",
       "version": "1.0.0",
-      "description": "生成 Myriad 自托管所需的 Compose、.env、Nginx 和部署说明",
-      "long_description": "填写域名后即可生成部署文件和安全密钥。支持选择版本、更新通道和上传现有 Nginx 配置。",
+      "description": "填写部署和数据库设置，生成 Myriad 的 Compose、环境变量与 Nginx 配置",
+      "long_description": "填写域名、数据库和资源设置，直接生成 1Panel 所需的编排、环境变量与 Nginx 配置。",
       "author": {
         "name": "Myriad Team",
         "url": "https://github.com/Myriad-You"
@@ -160,7 +161,6 @@
       "category": "developer",
       "tags": ["配置", "部署", "Docker", "Nginx", "Updater", "工具", "开发者"],
       "permissions": ["storage", "ui:notification", "ui:theme", "ui:confirm"],
-      "min_myriad_version": "0.2.0",
       "icon_svg": "<svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/><polyline points='14,2 14,8 20,8' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/><path d='M12 18v-6M9 15l3 3 3-3' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>",
       "theme_color": "#6366F1",
       "screenshots": [],

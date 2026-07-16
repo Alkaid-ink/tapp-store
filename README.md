@@ -90,7 +90,6 @@ tapp-store/
       "homepage": "https://...",
       "repository": "https://...",
       "tags": ["标签1", "标签2"],
-      "min_myriad_version": "1.0.0",
       "theme_color": "#FF66AB",
       "screenshots": ["url1", "url2"],
       "size": 12345, // 字节

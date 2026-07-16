@@ -2,7 +2,7 @@
   "id": "com.myriad.quick-notes",
   "name": "便携便签",
   "version": "1.0.0",
-  "minSystemVersion": "0.2.0",
+  "minSystemVersion": "0.2.1",
   "description": "简单高效的笔记工具，快速记录想法和灵感",
   "main": "main.js",
   "author": {

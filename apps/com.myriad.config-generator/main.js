@@ -39,8 +39,8 @@ services:
           cpus: '0.5'
           memory: 512M
     environment:
-      POSTGRES_DB: myriad
-      POSTGRES_USER: myriad
+      POSTGRES_DB: \${POSTGRES_DB}
+      POSTGRES_USER: \${POSTGRES_USER}
       POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
       POSTGRES_INITDB_ARGS: "-E UTF8 --locale=C --lc-collate=C --lc-ctype=C"
       POSTGRES_SHARED_BUFFERS: 512MB
@@ -60,11 +60,11 @@ services:
       POSTGRES_MAX_PARALLEL_MAINTENANCE_WORKERS: 2
       TZ: Asia/Shanghai
     volumes:
-      # PostgreSQL 18+ 使用 /var/lib/postgresql；挂载父目录也兼容 16/17。
+      # PostgreSQL 18+ 使用 /var/lib/postgresql 下的主版本数据目录。
       # IMPORTANT: bind mount，不可改为 named volume。updater 依赖文件级快照。
       - ./pgdata:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U myriad -d myriad"]
+      test: ["CMD-SHELL", "pg_isready -U \${POSTGRES_USER} -d \${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -90,7 +90,7 @@ services:
           cpus: '0.5'
           memory: 512M
     environment:
-      DATABASE_URL: postgres://myriad:\${POSTGRES_PASSWORD}@postgres:5432/myriad
+      DATABASE_URL: \${DATABASE_URL}
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: 1103
       JWT_SECRET: \${JWT_SECRET}
@@ -285,7 +285,10 @@ COSIGN_VERIFY={{COSIGN_VERIFY}}
 # -----------------------------------------------------------------------------
 # REQUIRED SECURITY SETTINGS
 # -----------------------------------------------------------------------------
+POSTGRES_DB={{POSTGRES_DB}}
+POSTGRES_USER={{POSTGRES_USER}}
 POSTGRES_PASSWORD={{POSTGRES_PASSWORD}}
+DATABASE_URL={{DATABASE_URL}}
 JWT_SECRET={{JWT_SECRET}}
 
 # -----------------------------------------------------------------------------
@@ -1013,6 +1016,8 @@ var state = {
   httpBindAddress: '127.0.0.1',
   httpPort: 8080,
   dbVersion: '18',
+  dbName: 'myriad',
+  dbUser: 'myriad',
   dbCpuLimit: '2.0',
   dbMemLimit: '2G',
   // 运行时由 Docker Hub 解析填充，不在源码中写死版本
@@ -1038,6 +1043,8 @@ function initPage() {
   var dbPasswordInput = document.getElementById('db-password');
   var jwtSecretInput = document.getElementById('jwt-secret');
   var updateTokenInput = document.getElementById('update-token');
+  var dbNameInput = document.getElementById('db-name');
+  var dbUserInput = document.getElementById('db-user');
 
   var genDbPasswordBtn = document.getElementById('gen-db-password');
   var genJwtSecretBtn = document.getElementById('gen-jwt-secret');
@@ -1142,6 +1149,8 @@ function initPage() {
       var dbPassword = dbPasswordInput.value.trim();
       var jwtSecret = jwtSecretInput.value.trim();
       var updateToken = updateTokenInput.value.trim();
+      var dbName = dbNameInput.value.trim();
+      var dbUser = dbUserInput.value.trim();
 
       if (!mainDomain) {
         showNotification('请输入主域名', 'error');
@@ -1161,10 +1170,27 @@ function initPage() {
         return;
       }
 
+      var postgresIdentifierPattern = /^[a-z][a-z0-9_]{0,62}$/;
+      if (!postgresIdentifierPattern.test(dbName)) {
+        showNotification('数据库名只能使用小写字母、数字和下划线，并以字母开头', 'error');
+        dbNameInput.focus();
+        return;
+      }
+      if (!postgresIdentifierPattern.test(dbUser)) {
+        showNotification('数据库用户名只能使用小写字母、数字和下划线，并以字母开头', 'error');
+        dbUserInput.focus();
+        return;
+      }
+
       // 密钥不足时当场补齐并继续，避免「生成后还要再点一次」
       if (!dbPassword || dbPassword.length < 32) {
         dbPassword = generatePassword();
         dbPasswordInput.value = dbPassword;
+      }
+      if (!/^[A-Za-z0-9_-]{32,}$/.test(dbPassword)) {
+        showNotification('数据库密码至少 32 位，只能使用字母、数字、下划线和连字符', 'error');
+        dbPasswordInput.focus();
+        return;
       }
       if (!jwtSecret || jwtSecret.length < 32) {
         jwtSecret = generateJwtSecret();
@@ -1180,6 +1206,8 @@ function initPage() {
       state.dbPassword = dbPassword;
       state.jwtSecret = jwtSecret;
       state.updateToken = updateToken;
+      state.dbName = dbName;
+      state.dbUser = dbUser;
 
       state.httpBindAddress = httpBindAddressSelect.value || '127.0.0.1';
       if (state.httpBindAddress !== '127.0.0.1' && state.httpBindAddress !== '0.0.0.0') {
@@ -1195,7 +1223,12 @@ function initPage() {
         return;
       }
 
-      state.dbVersion = dbVersionSelect.value || '18';
+      state.dbVersion = (dbVersionSelect.value || '18').trim();
+      if (!/^\d+$/.test(state.dbVersion) || Number(state.dbVersion) < 18) {
+        showNotification('PostgreSQL 版本必须是 18 或更高的正式主版本', 'error');
+        dbVersionSelect.focus();
+        return;
+      }
 
       // 若 tag 为空：等待进行中的拉取，或发起新拉取（不强制覆盖手改字段）
       var myriadTag = (myriadTagInput.value || '').trim();
@@ -1225,6 +1258,17 @@ function initPage() {
       state.backendMemLimit = backendMemLimitInput.value.trim() || '4G';
       state.frontendCpuLimit = frontendCpuLimitInput.value.trim() || '2.0';
       state.frontendMemLimit = frontendMemLimitInput.value.trim() || '2G';
+
+      var cpuValues = [state.dbCpuLimit, state.backendCpuLimit, state.frontendCpuLimit];
+      if (cpuValues.some(function(value) { return !/^\d+(?:\.\d+)?$/.test(value) || Number(value) <= 0; })) {
+        showNotification('CPU 数量必须是大于 0 的数字', 'error');
+        return;
+      }
+      var memoryValues = [state.dbMemLimit, state.backendMemLimit, state.frontendMemLimit];
+      if (memoryValues.some(function(value) { return !/^\d+(?:\.\d+)?[KMGTP]i?B?$/i.test(value); })) {
+        showNotification('内存格式无效，请使用 512M、2G 等格式', 'error');
+        return;
+      }
 
       if (!state.myriadTag || !state.proxyTag || !state.updaterTag) {
         showNotification('请填写完整的镜像 tag', 'error');
@@ -1376,9 +1420,15 @@ function applyPlaceholders(template, map) {
 
 function generateConfigs() {
   var corsOrigins = buildCorsOrigins(state.mainDomain, state.extraDomain);
+  var databaseUrl = 'postgres://' +
+    encodeURIComponent(state.dbUser) + ':' +
+    encodeURIComponent(state.dbPassword) +
+    '@postgres:5432/' + encodeURIComponent(state.dbName);
 
   var map = {
     DB_VERSION: state.dbVersion,
+    POSTGRES_DB: state.dbName,
+    POSTGRES_USER: state.dbUser,
     DB_CPU_LIMIT: state.dbCpuLimit,
     DB_MEM_LIMIT: state.dbMemLimit,
     BACKEND_CPU_LIMIT: state.backendCpuLimit,
@@ -1386,6 +1436,7 @@ function generateConfigs() {
     FRONTEND_CPU_LIMIT: state.frontendCpuLimit,
     FRONTEND_MEM_LIMIT: state.frontendMemLimit,
     POSTGRES_PASSWORD: state.dbPassword,
+    DATABASE_URL: databaseUrl,
     JWT_SECRET: state.jwtSecret,
     UPDATE_TOKEN: state.updateToken,
     MAIN_DOMAIN: state.mainDomain,

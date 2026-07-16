@@ -2,7 +2,7 @@
   "id": "com.myriad.ai-chat",
   "name": "AI 聊天助手",
   "version": "1.0.0",
-  "minSystemVersion": "0.2.0",
+  "minSystemVersion": "0.2.1",
   "description": "AI 驱动的智能对话助手",
   "main": "main.js",
   "author": {
@@ -16,6 +16,13 @@
     "ui:theme",
     "ai:chat"
   ],
+  "ai": {
+    "protocolVersion": 2,
+    "operations": ["chat"],
+    "modelTier": "standard",
+    "contextSources": [],
+    "outputFormats": ["text"]
+  },
   "iconSvg": "<svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M12 2C12 7 9 10 4 12c5 2 8 5 8 10 0-5 3-8 8-10-5-2-8-5-8-10z' fill='currentColor'/></svg>",
   "themeColor": "#00ACC1",
   "hasPage": true,

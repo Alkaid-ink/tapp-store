@@ -18,6 +18,7 @@
 - [媒体控制 API](#媒体控制-api)
 - [上下文 API](#上下文-api)
 - [用户角色 API](#用户角色-api)
+- [Federation Feed API](#federation-feed-api)
 - [组件注册 API](#组件注册-api)
 - [快捷键 API](#快捷键-api)
 - [事件总线 API](#事件总线-api)
@@ -578,12 +579,34 @@ const isLoggedIn = await Tapp.user.isLoggedIn();
 // 获取可用的权限等级
 const levels = await Tapp.user.getAllowedPermissionLevels();
 // admin -> ['public', 'basic', 'elevated', 'privileged']
-// user  -> ['public', 'basic']
-// guest -> ['public']
+// user / guest -> ['public', 'basic']，存在任一动态下放权限时还包含 'elevated'
 
 // 检查是否可以使用指定权限等级
 const canUse = await Tapp.user.canUsePermissionLevel("elevated");
 ```
+
+等级接口表示该角色在系统层面可以使用的权限等级，并不代表当前 Tapp 已获得等级内的
+每项权限。实际调用前仍应检查 `Tapp.permissions`，宿主与后端也会再次校验。
+
+---
+
+## Federation Feed API
+
+**权限**: `federation:read`
+
+```javascript
+const role = await Tapp.user.getRole();
+const feed = await Tapp.federation.getFeed();
+
+// 游客：feed.audience === "public"
+// 普通用户/管理员：feed.audience === "public+personal"
+// feed.items 中的 scope 为 "public" 或 "personal"
+```
+
+游客只能读取公开 Activity，不会取得 `federation:write`、`federation:message` 或
+`federation:files`。Tapp 应根据 `Tapp.user.getRole()` 隐藏关注、发布、私聊、Room 和
+文件传输入口。已登录用户需要同时展示公开内容与自己的 Timeline 时使用 `getFeed()`；
+`getTimeline()` 保留为原始个人 Timeline 接口。
 
 ---
 

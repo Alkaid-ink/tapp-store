@@ -70,6 +70,11 @@ const playlist = await Tapp.media.getPlaylist();
 Tapp.media.onStateChange((state) => {
   console.log("播放状态:", state);
 });
+
+// 监听轻量进度更新
+Tapp.media.onProgress((progress) => {
+  console.log(progress.current, progress.duration, progress.percentage);
+});
 ```
 
 ## 权限要求

@@ -269,6 +269,7 @@ var pageState = {
   eqFrame: null,           // 列表均衡器频谱 rAF 句柄
   autoScrollEnabled: true, // 自动滚动开关（点击歌词跳转时临时禁用）
   unsubscribe: null,
+  unsubscribeProgress: null,
   // 背景动画状态
   bgAnimationFrame: null,
   beatIntensity: 0,
@@ -2717,6 +2718,10 @@ async function initPage() {
     pageState.unsubscribe();
     pageState.unsubscribe = null;
   }
+  if (pageState.unsubscribeProgress) {
+    pageState.unsubscribeProgress();
+    pageState.unsubscribeProgress = null;
+  }
   pageState.unsubscribe = Tapp.media.onStateChange(function(state) {
     // 防崩溃壳：回调异常若不捕获，本次事件的 ensureEqLoop/ensureLyricWordLoop
     // 重启链会中断；异常只跳过该事件并记录
@@ -2724,6 +2729,17 @@ async function initPage() {
       handleStateChange(state);
     } catch (e) {
       logTickError('stateChange', e);
+    }
+  });
+  pageState.unsubscribeProgress = Tapp.media.onProgress(function(progress) {
+    if (!pageState.status) return;
+    try {
+      handleStateChange(Object.assign({}, pageState.status, {
+        position: progress.current,
+        progress: progress
+      }));
+    } catch (e) {
+      logTickError('progressChange', e);
     }
   });
 
@@ -4031,6 +4047,10 @@ function cleanup() {
   if (pageState.unsubscribe) {
     pageState.unsubscribe();
     pageState.unsubscribe = null;
+  }
+  if (pageState.unsubscribeProgress) {
+    pageState.unsubscribeProgress();
+    pageState.unsubscribeProgress = null;
   }
   // 清理逐字歌词 rAF
   if (pageState.lyricWordFrame) {

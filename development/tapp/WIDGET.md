@@ -3,6 +3,7 @@
 本文档基于 Myriad 系统内置小组件的实际实现，提供完整的风格规范和开发指南。
 
 > **✨ 样式推荐**：虽然小组件完全支持 Tailwind CSS，但我们**强烈建议使用语义化的原生 CSS**：
+>
 > - 更好的可维护性，避免冗长的 Tailwind 类名列表
 > - 更小的体积，无需 Tailwind 运行时编译
 > - 更容易实现复杂的 hover/focus/动画效果
@@ -18,22 +19,22 @@
 
 > ⚠️ **重要**：Widget 模式使用**简化版 SDK**，仅包含以下 API。需要完整功能请使用 Page 模式。
 
-| 分类         | Widget SDK                     | Full SDK (Page 模式) |
-| ------------ | ------------------------------ | -------------------- |
-| **存储**     | ✅ storage                     | ✅ 相同              |
-| **设置**     | ✅ settings                    | ✅ 相同              |
-| **UI**       | ✅ 基础 UI（主题、通知、语言） | ✅ 完整 UI           |
-| **DOM**      | ✅ 基础 DOM                    | ✅ 完整 DOM          |
-| **AI**       | ⚠️ 仅 ai.chat                  | ✅ 完整 AI           |
-| **平台数据** | ✅ 只读                        | ✅ 读写              |
-| **报告**     | ✅ 只读                        | ✅ 读写              |
-| **动画**     | ✅ 完整                        | ✅ 相同              |
-| **后台需求** | ✅ 完整                        | ✅ 相同              |
-| **上下文**   | ❌ 不可用                      | ✅ 可用              |
-| **HTTP**     | ❌ 不可用                      | ✅ 可用              |
-| **媒体控制** | ❌ 不可用                      | ✅ 可用              |
+| 分类               | Widget SDK                                     | Full SDK (Page/headless) |
+| ------------------ | ---------------------------------------------- | ------------------------ |
+| **存储/全局设置**  | ✅ 完整，含 `getAll`/`usage`                   | ✅ 相同                  |
+| **实例设置**       | ✅ 当前 Widget 实例 API                        | ❌ 仅 Widget 沙箱        |
+| **UI/用户/上下文** | ✅ 主题、通知、语言、角色和运行上下文          | ✅ 另含 fullscreen/title |
+| **DOM**            | ✅ 与 Full 共用安全 helper                     | ✅ 相同                  |
+| **AI**             | ✅ Manifest 声明的 AI Task                     | ✅ 相同                  |
+| **平台数据/报告**  | ✅ 只读                                        | ✅ 读写                  |
+| **媒体/语音/动画** | ✅ 按 Manifest 权限                            | ✅ 相同                  |
+| **事件/数据交换**  | ✅ Event、一次性授权 Data Exchange、Agent 交互 | ✅ 相同                  |
+| **后台需求/调度**  | ✅ 完整                                        | ✅ 相同                  |
+| **声明 API**       | ✅ `Tapp.api()` 与 `Tapp.api.list()`           | ✅ 相同                  |
+| **管理/联邦能力**  | ❌ Tapp/Brew 管理、组件、快捷键、Federation 等 | ✅ 按权限提供            |
 
-**设计原因**：Widget 运行在首页卡片中，需要轻量快速。复杂功能应在 Page 中完成，Widget 仅用于展示。
+Widget 不是纯静态展示层：共享 core 可在其中使用事件、调度和数据交换。但宿主不会给 Widget
+注册平台/报告写入、Tapp/Brew 管理、组件、快捷键和 Federation handler。
 
 ---
 
@@ -261,7 +262,7 @@ text-xs uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400
 `<span class="text-3xl font-black text-gray-800 dark:text-gray-100 leading-none"
        style="font-size: ${30 * fontScale}px;">
   ${value}
-</span>`// 带单位标签
+</span>` // 带单位标签
 `<div class="flex items-baseline gap-1">
   <span class="text-3xl font-black text-gray-800 dark:text-gray-100 leading-none"
         style="font-size: ${30 * fontScale}px;">1234</span>
@@ -286,7 +287,7 @@ text-xs uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400
 `<div class="font-bold text-gray-800 dark:text-gray-100 truncate"
       style="font-size: ${14 * fontScale}px;">
   ${name}
-</div>`// 次要信息（如艺术家）
+</div>` // 次要信息（如艺术家）
 `<div class="text-gray-600 dark:text-gray-400 truncate"
       style="font-size: ${12 * fontScale}px;">
   ${artist}
@@ -449,8 +450,8 @@ container.innerHTML = `
   <!-- 装饰光斑 -->
   <div class="absolute top-0 right-0 w-6 h-6 rounded-full blur-xl opacity-20"
        style="background: ${itemColor}; width: ${24 * scale}px; height: ${
-  24 * scale
-}px;"></div>
+         24 * scale
+       }px;"></div>
   
   <!-- 内容 -->
   <div class="relative z-10 flex flex-col items-center gap-0.5">
@@ -471,7 +472,7 @@ container.innerHTML = `
 // 加载状态（与系统一致）
 `<div class="h-full w-full flex items-center justify-center">
   <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-</div>`// 空状态（居中图标+文字）
+</div>` // 空状态（居中图标+文字）
 `<div class="relative h-full w-full rounded-xl overflow-hidden glass">
   ${renderGlow("#ef4444", "right", "md")}
   <div class="absolute inset-0 flex flex-col items-center justify-center p-3">
@@ -479,7 +480,7 @@ container.innerHTML = `
     <span class="text-gray-500 dark:text-gray-400"
           style="font-size: ${12 * fontScale}px;">暂无播放</span>
   </div>
-</div>`// 不可用状态
+</div>` // 不可用状态
 `<div class="h-full w-full flex items-center justify-center text-gray-400">
   <span>数据不可用</span>
 </div>`;
@@ -508,15 +509,15 @@ container.innerHTML = `
 `<button class="rounded-full bg-white/80 dark:bg-black/80 backdrop-blur-sm shadow-md 
                 flex items-center justify-center hover:scale-110 transition-transform"
          style="color: ${themeColor}; width: ${32 * scale}px; height: ${
-  32 * scale
-}px;">
+           32 * scale
+         }px;">
   ${playIcon}
-</button>`// 次要按钮
+</button>` // 次要按钮
 `<button class="px-3 py-1.5 text-xs font-medium 
                 bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 
                 text-gray-700 dark:text-gray-200 rounded-lg transition-colors">
   详情
-</button>`// 强调按钮（渐变背景）
+</button>` // 强调按钮（渐变背景）
 `<button class="px-3 py-1.5 text-xs font-medium text-white rounded-lg shadow-sm hover:shadow-md"
          style="background: linear-gradient(135deg, ${themeColor}, color-mix(in srgb, ${themeColor} 80%, black));">
   启动
@@ -614,7 +615,7 @@ window.parent.postMessage(
     widgetId: "my-widget",
     messageType: "refresh",
   },
-  "*"
+  "*",
 );
 ```
 
@@ -682,21 +683,21 @@ Tapp.widgets["stats"] = {
                 stats.played,
                 "已玩",
                 scale,
-                fontScale
+                fontScale,
               )}
               ${this.renderStatItem(
                 "📦",
                 stats.unplayed,
                 "未玩",
                 scale,
-                fontScale
+                fontScale,
               )}
               ${this.renderStatItem(
                 "⭐",
                 stats.favorite,
                 "收藏",
                 scale,
-                fontScale
+                fontScale,
               )}
             </div>
           </div>

@@ -56,6 +56,48 @@
         </div>
       </section>
 
+      <!-- 数据库 -->
+      <section class="form-section">
+        <h2 class="section-title">
+          <span class="section-icon">🗄️</span>
+          数据库
+        </h2>
+        <p class="section-desc">
+          设置 PostgreSQL 版本、数据库名和登录信息。新部署默认可直接使用。
+        </p>
+        <div class="form-row">
+          <div class="form-group form-group-half">
+            <label for="db-version">PostgreSQL 版本</label>
+            <input type="number" id="db-version" class="form-input" value="18" min="18" step="1">
+            <span class="form-hint">默认 18；以后可填写更新的正式主版本。</span>
+          </div>
+          <div class="form-group form-group-half">
+            <label for="db-name">数据库名</label>
+            <input type="text" id="db-name" class="form-input" value="myriad" autocomplete="off">
+            <span class="form-hint">小写字母、数字和下划线，以字母开头。</span>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group form-group-half">
+            <label for="db-user">数据库用户名</label>
+            <input type="text" id="db-user" class="form-input" value="myriad" autocomplete="off">
+            <span class="form-hint">小写字母、数字和下划线，以字母开头。</span>
+          </div>
+          <div class="form-group form-group-half">
+            <label for="db-password">数据库密码</label>
+            <div class="input-with-action">
+              <input type="text" id="db-password" class="form-input" placeholder="自动生成，也可自行填写" autocomplete="off">
+              <button type="button" id="gen-db-password" class="btn-generate" title="生成随机密码">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>
+                </svg>
+              </button>
+            </div>
+            <span class="form-hint">至少 32 位，可使用字母、数字、下划线和连字符。</span>
+          </div>
+        </div>
+      </section>
+
       <!-- 安全配置 -->
       <section class="form-section">
         <h2 class="section-title">
@@ -65,20 +107,6 @@
         <p class="section-desc">
           密钥会自动生成并写入 <code>.env</code>。请保存好，不要提交到 Git 或分享给别人。
         </p>
-        <div class="form-group">
-          <label for="db-password">数据库密码 (POSTGRES_PASSWORD)</label>
-          <div class="input-with-action">
-            <input type="text" id="db-password" class="form-input" placeholder="点击生成或自行填写（≥32 字符）" autocomplete="off">
-            <button type="button" id="gen-db-password" class="btn-generate" title="生成随机密码">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>
-              </svg>
-            </button>
-          </div>
-          <span class="form-hint">
-            数据库连接密码，至少 32 个字符。部署后请勿随意更改。
-          </span>
-        </div>
         <div class="form-group">
           <label for="jwt-secret">JWT 密钥 (JWT_SECRET)</label>
           <div class="input-with-action">
@@ -209,20 +237,6 @@
             </div>
           </div>
 
-          <h3 class="advanced-subtitle">数据库</h3>
-          <div class="form-row">
-            <div class="form-group form-group-half">
-              <label for="db-version">PostgreSQL 版本</label>
-              <select id="db-version" class="form-input form-select">
-                <option value="18" selected>PostgreSQL 18（新部署默认）</option>
-                <option value="17">PostgreSQL 17（已有环境兼容）</option>
-                <option value="16">PostgreSQL 16（最低兼容版本）</option>
-              </select>
-              <span class="form-hint">
-                新部署选 18。已有数据库更换主版本前需先迁移数据。
-              </span>
-            </div>
-          </div>
           <div class="section-warning">
             <span class="section-warning-icon">📌</span>
             <div class="section-warning-content">
