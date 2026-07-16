@@ -28,6 +28,7 @@ var i18n = {
     notesCount: '条笔记',
     emptyTitle: '暂无笔记',
     emptySubtitle: '开始记录你的想法吧！',
+    emptyCta: '写一条便签',
     searchEmptyTitle: '无匹配笔记',
     searchEmptySubtitle: '试试其他关键词',
     justNow: '刚刚',
@@ -40,7 +41,8 @@ var i18n = {
     allCleared: '已清空所有笔记',
     charLimitReached: '已达字数上限（500）',
     notesTrimmed: '已达上限，已删除最旧的笔记',
-    clickToEdit: '点击编辑',
+    clickToExpand: '点击展开',
+    longNoteHint: '更多',
     pin: '置顶',
     unpin: '取消置顶',
     pinned: '已置顶',
@@ -53,6 +55,9 @@ var i18n = {
     close: '关闭',
     edit: '编辑',
     color: '颜色',
+    more: '更多',
+    search: '搜索',
+    sort: '排序',
     export: '导出',
     import: '导入',
     exportSuccess: '笔记已导出',
@@ -83,6 +88,7 @@ var i18n = {
     notesCount: 'notes',
     emptyTitle: 'No notes yet',
     emptySubtitle: 'Start writing your thoughts!',
+    emptyCta: 'Write a note',
     searchEmptyTitle: 'No matching notes',
     searchEmptySubtitle: 'Try a different keyword',
     justNow: 'just now',
@@ -95,7 +101,8 @@ var i18n = {
     allCleared: 'All notes cleared',
     charLimitReached: 'Character limit reached (500)',
     notesTrimmed: 'Limit reached; oldest notes removed',
-    clickToEdit: 'Click to edit',
+    clickToExpand: 'Tap to expand',
+    longNoteHint: 'More',
     pin: 'Pin',
     unpin: 'Unpin',
     pinned: 'Pinned',
@@ -108,6 +115,9 @@ var i18n = {
     close: 'Close',
     edit: 'Edit',
     color: 'Color',
+    more: 'More',
+    search: 'Search',
+    sort: 'Sort',
     export: 'Export',
     import: 'Import',
     exportSuccess: 'Notes exported',
@@ -138,6 +148,7 @@ var i18n = {
     notesCount: '件のメモ',
     emptyTitle: 'メモがありません',
     emptySubtitle: '思いを書き始めましょう！',
+    emptyCta: 'メモを書く',
     searchEmptyTitle: '一致するメモがありません',
     searchEmptySubtitle: '別のキーワードを試してください',
     justNow: 'たった今',
@@ -150,7 +161,8 @@ var i18n = {
     allCleared: 'すべてのメモを削除しました',
     charLimitReached: '文字数上限に達しました（500）',
     notesTrimmed: '上限に達したため、古いメモを削除しました',
-    clickToEdit: 'クリックして編集',
+    clickToExpand: 'タップして展開',
+    longNoteHint: '続き',
     pin: '固定',
     unpin: '固定解除',
     pinned: '固定中',
@@ -163,6 +175,9 @@ var i18n = {
     close: '閉じる',
     edit: '編集',
     color: '色',
+    more: 'その他',
+    search: '検索',
+    sort: '並び替え',
     export: 'エクスポート',
     import: 'インポート',
     exportSuccess: 'メモをエクスポートしました',
@@ -773,6 +788,9 @@ var pageState = {
   editingId: null,
   expandingId: null,
   draftColor: 0,
+  paletteOpen: false,
+  menuOpen: false,
+  skipCardAnimation: false,
   syncing: false
 };
 
@@ -877,6 +895,29 @@ function updateCharCount(input, charCount) {
   } else {
     charCount.classList.remove('char-count-limit');
   }
+
+  // 仅在聚焦、接近上限、或已输入较多时显示字数
+  var focused = false;
+  try {
+    focused = document.activeElement === input;
+  } catch (e) {}
+  var show = focused || len > 400 || len >= MAX_NOTE_CHARS;
+  if (show) {
+    charCount.classList.add('char-count-visible');
+  } else {
+    charCount.classList.remove('char-count-visible');
+  }
+}
+
+function focusPageInput() {
+  var input = document.getElementById('page-input');
+  if (!input) return;
+  try {
+    input.focus();
+    input.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  } catch (e) {
+    try { input.focus(); } catch (e2) {}
+  }
 }
 
 function renderEmptyState(area, isSearch) {
@@ -900,64 +941,20 @@ function renderEmptyState(area, isSearch) {
   empty.appendChild(icon);
   empty.appendChild(title);
   empty.appendChild(subtitle);
+
+  if (!isSearch) {
+    var cta = document.createElement('button');
+    cta.type = 'button';
+    cta.className = 'empty-cta';
+    cta.textContent = t('emptyCta');
+    cta.addEventListener('click', function(e) {
+      e.preventDefault();
+      focusPageInput();
+    });
+    empty.appendChild(cta);
+  }
+
   area.appendChild(empty);
-}
-
-function createIconButton(className, title, label, onClick) {
-  var btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = className;
-  btn.title = title;
-  btn.setAttribute('aria-label', label || title);
-  btn.addEventListener('click', function(e) {
-    e.stopPropagation();
-    e.preventDefault();
-    if (typeof onClick === 'function') onClick(e);
-  });
-  return btn;
-}
-
-function buildStickyActions(note) {
-  var actions = document.createElement('div');
-  actions.className = 'sticky-actions';
-
-  var pinBtn = createIconButton(
-    'sticky-action-btn sticky-pin' + (note.pinned ? ' active' : ''),
-    note.pinned ? t('unpin') : t('pin'),
-    note.pinned ? t('unpin') : t('pin'),
-    function() { togglePinNote(note.id); }
-  );
-  pinBtn.textContent = note.pinned ? '📌' : '📍';
-
-  var copyBtn = createIconButton(
-    'sticky-action-btn sticky-copy',
-    t('copy'),
-    t('copy'),
-    function() { copyNoteText(note.text); }
-  );
-  copyBtn.textContent = '⧉';
-
-  var expandBtn = createIconButton(
-    'sticky-action-btn sticky-expand',
-    t('expand'),
-    t('expand'),
-    function() { openNoteExpand(note.id); }
-  );
-  expandBtn.textContent = '⤢';
-
-  var deleteBtn = createIconButton(
-    'sticky-action-btn sticky-delete',
-    t('delete'),
-    t('delete'),
-    function() { deletePageNote(note.id); }
-  );
-  deleteBtn.textContent = '×';
-
-  actions.appendChild(pinBtn);
-  actions.appendChild(copyBtn);
-  actions.appendChild(expandBtn);
-  actions.appendChild(deleteBtn);
-  return actions;
 }
 
 function buildStickyEditUI(sticky, note) {
@@ -1102,12 +1099,15 @@ function renderPageNotes() {
   area.innerHTML = '';
   updateStatusPill();
   updateCreateColorPalette();
+  updateOverflowMenuLabels();
 
   var notesToRender = getDisplayNotes();
+  var skipAnim = pageState.skipCardAnimation || !!pageState.searchQuery;
 
   if (notesToRender.length === 0) {
     renderEmptyState(area, !!pageState.searchQuery);
     renderExpandOverlay();
+    pageState.skipCardAnimation = false;
     return;
   }
 
@@ -1121,8 +1121,11 @@ function renderPageNotes() {
     var colorIndex = getNoteColorIndex(note);
     sticky.className = 'sticky-note color-' + colorIndex;
     if (note.pinned) sticky.classList.add('pinned');
+    if (skipAnim) sticky.classList.add('no-animate');
     sticky.setAttribute('data-note-id', String(note.id));
-    sticky.style.animationDelay = (index * 0.05) + 's';
+    if (!skipAnim) {
+      sticky.style.animationDelay = (index * 0.05) + 's';
+    }
 
     if (pageState.editingId != null && String(pageState.editingId) === String(note.id)) {
       grid.appendChild(sticky);
@@ -1138,12 +1141,14 @@ function renderPageNotes() {
       pinMark.className = 'sticky-pin-mark';
       pinMark.textContent = '📌';
       pinMark.title = t('pinned');
+      pinMark.setAttribute('aria-label', t('pinned'));
       sticky.appendChild(pinMark);
     }
 
     var text = document.createElement('div');
     text.className = 'sticky-text';
-    if (isNoteLong(note.text)) text.classList.add('sticky-text-long');
+    var longNote = isNoteLong(note.text);
+    if (longNote) text.classList.add('sticky-text-long');
     text.textContent = note.text;
     content.appendChild(text);
 
@@ -1160,20 +1165,30 @@ function renderPageNotes() {
       footer.appendChild(spacer);
     }
 
-    footer.appendChild(buildStickyActions(note));
+    if (longNote) {
+      var hint = document.createElement('span');
+      hint.className = 'sticky-long-hint';
+      hint.textContent = t('longNoteHint') + '…';
+      footer.appendChild(hint);
+    }
+
     content.appendChild(footer);
     sticky.appendChild(content);
 
-    sticky.style.cursor = 'pointer';
-    sticky.title = t('clickToEdit');
+    sticky.title = t('clickToExpand');
+    sticky.setAttribute('role', 'button');
+    sticky.setAttribute('tabindex', '0');
+    sticky.setAttribute('aria-label', t('expand'));
 
-    sticky.addEventListener('click', function(e) {
-      if (e.target && e.target.closest && e.target.closest('.sticky-action-btn, .sticky-actions, .sticky-pin-mark')) {
-        return;
+    sticky.addEventListener('click', function() {
+      openNoteExpand(note.id);
+    });
+
+    sticky.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openNoteExpand(note.id);
       }
-      pageState.editingId = note.id;
-      pageState.expandingId = null;
-      renderPageNotes();
     });
 
     grid.appendChild(sticky);
@@ -1181,6 +1196,7 @@ function renderPageNotes() {
 
   area.appendChild(grid);
   renderExpandOverlay();
+  pageState.skipCardAnimation = false;
 }
 
 function renderExpandOverlay() {
@@ -1246,6 +1262,7 @@ function renderExpandOverlay() {
   pinBtn.type = 'button';
   pinBtn.className = 'sticky-edit-btn';
   pinBtn.textContent = note.pinned ? t('unpin') : t('pin');
+  pinBtn.setAttribute('aria-label', note.pinned ? t('unpin') : t('pin'));
   pinBtn.addEventListener('click', function() {
     togglePinNote(note.id);
   });
@@ -1254,6 +1271,7 @@ function renderExpandOverlay() {
   copyBtn.type = 'button';
   copyBtn.className = 'sticky-edit-btn';
   copyBtn.textContent = t('copy');
+  copyBtn.setAttribute('aria-label', t('copy'));
   copyBtn.addEventListener('click', function() {
     copyNoteText(note.text);
   });
@@ -1262,15 +1280,27 @@ function renderExpandOverlay() {
   editBtn.type = 'button';
   editBtn.className = 'sticky-edit-btn sticky-edit-save';
   editBtn.textContent = t('edit');
+  editBtn.setAttribute('aria-label', t('edit'));
   editBtn.addEventListener('click', function() {
     pageState.expandingId = null;
     pageState.editingId = note.id;
     renderPageNotes();
   });
 
+  var deleteBtn = document.createElement('button');
+  deleteBtn.type = 'button';
+  deleteBtn.className = 'sticky-edit-btn sticky-edit-danger';
+  deleteBtn.textContent = t('delete');
+  deleteBtn.setAttribute('aria-label', t('delete'));
+  deleteBtn.addEventListener('click', function() {
+    pageState.expandingId = null;
+    deletePageNote(note.id);
+  });
+
   actions.appendChild(pinBtn);
   actions.appendChild(copyBtn);
   actions.appendChild(editBtn);
+  actions.appendChild(deleteBtn);
 
   card.appendChild(header);
   card.appendChild(body);
@@ -1369,12 +1399,10 @@ async function addPageNote() {
   if (pageState.settings.saveHistory === false) {
     input.value = '';
     input.style.height = 'auto';
-    if (charCount) {
-      charCount.textContent = '0 / ' + MAX_NOTE_CHARS;
-      charCount.classList.remove('char-count-limit');
-    }
+    updateCharCount(input, charCount);
     pageState.notes = [];
     pageState.filteredNotes = [];
+    setPaletteOpen(false);
     await saveNotes();
     renderPageNotes();
     return;
@@ -1403,10 +1431,8 @@ async function addPageNote() {
 
   input.value = '';
   input.style.height = 'auto';
-  if (charCount) {
-    charCount.textContent = '0 / ' + MAX_NOTE_CHARS;
-    charCount.classList.remove('char-count-limit');
-  }
+  updateCharCount(input, charCount);
+  setPaletteOpen(false);
 
   await saveNotes();
   refreshFilteredNotes();
@@ -1760,9 +1786,36 @@ function openImportDialog() {
 // UI helpers
 // ========================================
 
+function updateColorToggleSwatch() {
+  var swatch = document.getElementById('color-toggle-swatch');
+  var toggle = document.getElementById('color-toggle');
+  if (swatch) {
+    swatch.className = 'color-toggle-swatch color-' + (normalizeColorIndex(pageState.draftColor) != null ? pageState.draftColor : 0);
+  }
+  if (toggle) {
+    if (pageState.paletteOpen) {
+      toggle.classList.add('active');
+      toggle.setAttribute('aria-expanded', 'true');
+    } else {
+      toggle.classList.remove('active');
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+  }
+}
+
 function updateCreateColorPalette() {
   var host = document.getElementById('create-color-palette');
   if (!host) return;
+
+  updateColorToggleSwatch();
+
+  if (!pageState.paletteOpen) {
+    host.innerHTML = '';
+    host.hidden = true;
+    return;
+  }
+
+  host.hidden = false;
   host.innerHTML = '';
   var palette = buildColorPalette(pageState.draftColor, function(colorIndex) {
     pageState.draftColor = colorIndex;
@@ -1771,32 +1824,158 @@ function updateCreateColorPalette() {
   host.appendChild(palette);
 }
 
+function setPaletteOpen(open) {
+  pageState.paletteOpen = !!open;
+  updateCreateColorPalette();
+}
+
+function closeOverflowMenu() {
+  pageState.menuOpen = false;
+  var menu = document.getElementById('page-menu');
+  var toggle = document.getElementById('page-menu-toggle');
+  if (menu) menu.hidden = true;
+  if (toggle) {
+    toggle.classList.remove('active');
+    toggle.setAttribute('aria-expanded', 'false');
+  }
+}
+
+function openOverflowMenu() {
+  pageState.menuOpen = true;
+  var menu = document.getElementById('page-menu');
+  var toggle = document.getElementById('page-menu-toggle');
+  updateOverflowMenuLabels();
+  if (menu) menu.hidden = false;
+  if (toggle) {
+    toggle.classList.add('active');
+    toggle.setAttribute('aria-expanded', 'true');
+  }
+}
+
+function toggleOverflowMenu() {
+  if (pageState.menuOpen) {
+    closeOverflowMenu();
+  } else {
+    openOverflowMenu();
+  }
+}
+
+function updateOverflowMenuLabels() {
+  var sortLabel = document.getElementById('menu-sort-label');
+  var sortNewest = document.getElementById('menu-sort-newest');
+  var sortOldest = document.getElementById('menu-sort-oldest');
+  var sortUpdated = document.getElementById('menu-sort-updated');
+  var exportBtn = document.getElementById('menu-export');
+  var importBtn = document.getElementById('menu-import');
+  var clearBtn = document.getElementById('menu-clear');
+  var menuToggle = document.getElementById('page-menu-toggle');
+  var searchToggle = document.getElementById('search-toggle');
+  var colorToggle = document.getElementById('color-toggle');
+  var sendBtn = document.getElementById('page-send');
+
+  if (sortLabel) sortLabel.textContent = t('sort');
+  if (sortNewest) {
+    sortNewest.textContent = t('sortNewest');
+    sortNewest.classList.toggle('active', normalizeSortOrder(pageState.settings.sortOrder) === 'newest');
+    sortNewest.setAttribute('aria-checked', normalizeSortOrder(pageState.settings.sortOrder) === 'newest' ? 'true' : 'false');
+  }
+  if (sortOldest) {
+    sortOldest.textContent = t('sortOldest');
+    sortOldest.classList.toggle('active', normalizeSortOrder(pageState.settings.sortOrder) === 'oldest');
+    sortOldest.setAttribute('aria-checked', normalizeSortOrder(pageState.settings.sortOrder) === 'oldest' ? 'true' : 'false');
+  }
+  if (sortUpdated) {
+    sortUpdated.textContent = t('sortUpdated');
+    sortUpdated.classList.toggle('active', normalizeSortOrder(pageState.settings.sortOrder) === 'updated');
+    sortUpdated.setAttribute('aria-checked', normalizeSortOrder(pageState.settings.sortOrder) === 'updated' ? 'true' : 'false');
+  }
+  if (exportBtn) exportBtn.textContent = t('export');
+  if (importBtn) importBtn.textContent = t('import');
+  if (clearBtn) clearBtn.textContent = t('clearAll');
+  if (menuToggle) {
+    menuToggle.title = t('more');
+    menuToggle.setAttribute('aria-label', t('more'));
+  }
+  if (searchToggle) {
+    searchToggle.title = t('search');
+    searchToggle.setAttribute('aria-label', t('search'));
+  }
+  if (colorToggle) {
+    colorToggle.title = t('color');
+    colorToggle.setAttribute('aria-label', t('color'));
+  }
+  if (sendBtn) {
+    sendBtn.title = t('add');
+    sendBtn.setAttribute('aria-label', t('add'));
+  }
+}
+
+async function persistSortOrder(order) {
+  var next = normalizeSortOrder(order);
+  pageState.settings.sortOrder = next;
+
+  try {
+    if (typeof Tapp !== 'undefined' && Tapp.settings) {
+      if (typeof Tapp.settings.set === 'function') {
+        await Tapp.settings.set('sortOrder', next);
+      } else if (typeof Tapp.settings.setAll === 'function') {
+        await Tapp.settings.setAll({ sortOrder: next });
+      }
+    }
+  } catch (e) {
+    console.error('[Notes] 保存排序失败:', e);
+  }
+
+  pageState.skipCardAnimation = true;
+  refreshFilteredNotes();
+  renderPageNotes();
+  updateOverflowMenuLabels();
+}
+
+function menuOutsideClickHandler(e) {
+  if (!pageState.menuOpen) return;
+  var wrap = document.querySelector('.status-menu-wrap');
+  if (!wrap) return;
+  if (e.target && wrap.contains(e.target)) return;
+  closeOverflowMenu();
+}
+
+function menuEscHandler(e) {
+  if (e.key === 'Escape' && pageState.menuOpen) {
+    closeOverflowMenu();
+  }
+}
+
 function initPage() {
   var input = document.getElementById('page-input');
   var sendBtn = document.getElementById('page-send');
-  var clearBtn = document.getElementById('page-clear');
-  var exportBtn = document.getElementById('page-export');
-  var importBtn = document.getElementById('page-import');
   var charCount = document.getElementById('char-count');
   var searchInput = document.getElementById('search-input');
   var searchToggle = document.getElementById('search-toggle');
   var statusPill = document.getElementById('status-pill');
+  var menuToggle = document.getElementById('page-menu-toggle');
+  var menuExport = document.getElementById('menu-export');
+  var menuImport = document.getElementById('menu-import');
+  var menuClear = document.getElementById('menu-clear');
+  var menuSortNewest = document.getElementById('menu-sort-newest');
+  var menuSortOldest = document.getElementById('menu-sort-oldest');
+  var menuSortUpdated = document.getElementById('menu-sort-updated');
+  var colorToggle = document.getElementById('color-toggle');
 
   if (input) {
     input.placeholder = t('placeholder');
     input.setAttribute('maxlength', String(MAX_NOTE_CHARS));
   }
-  if (sendBtn) sendBtn.title = t('add');
-  if (clearBtn) clearBtn.title = t('clearAll');
-  if (exportBtn) exportBtn.title = t('export');
-  if (importBtn) importBtn.title = t('import');
   if (searchInput) searchInput.placeholder = t('searchPlaceholder');
   if (charCount && input) updateCharCount(input, charCount);
 
+  updateOverflowMenuLabels();
   updateCreateColorPalette();
+  closeOverflowMenu();
 
   if (searchToggle && statusPill && searchInput) {
     searchToggle.onclick = function() {
+      closeOverflowMenu();
       var isSearching = statusPill.classList.toggle('searching');
       searchToggle.classList.toggle('active', isSearching);
 
@@ -1807,6 +1986,7 @@ function initPage() {
       } else {
         searchInput.value = '';
         filterNotes('');
+        pageState.skipCardAnimation = true;
         renderPageNotes();
       }
     };
@@ -1817,8 +1997,73 @@ function initPage() {
         searchToggle.classList.remove('active');
         searchInput.value = '';
         filterNotes('');
+        pageState.skipCardAnimation = true;
         renderPageNotes();
       }
+    };
+  }
+
+  if (menuToggle) {
+    menuToggle.onclick = function(e) {
+      e.stopPropagation();
+      e.preventDefault();
+      toggleOverflowMenu();
+    };
+  }
+
+  if (menuSortNewest) {
+    menuSortNewest.onclick = function() {
+      persistSortOrder('newest');
+      closeOverflowMenu();
+    };
+  }
+  if (menuSortOldest) {
+    menuSortOldest.onclick = function() {
+      persistSortOrder('oldest');
+      closeOverflowMenu();
+    };
+  }
+  if (menuSortUpdated) {
+    menuSortUpdated.onclick = function() {
+      persistSortOrder('updated');
+      closeOverflowMenu();
+    };
+  }
+
+  if (menuExport) {
+    menuExport.onclick = function() {
+      closeOverflowMenu();
+      exportNotes();
+    };
+  }
+  if (menuImport) {
+    menuImport.onclick = function() {
+      closeOverflowMenu();
+      openImportDialog();
+    };
+  }
+  if (menuClear) {
+    menuClear.onclick = function() {
+      closeOverflowMenu();
+      clearAllNotes();
+    };
+  }
+
+  // 触摸友好：点击外部 / Escape 关闭溢出菜单
+  try {
+    document.removeEventListener('click', menuOutsideClickHandler, true);
+    document.removeEventListener('touchstart', menuOutsideClickHandler, true);
+    document.removeEventListener('keydown', menuEscHandler);
+  } catch (e) {}
+  document.addEventListener('click', menuOutsideClickHandler, true);
+  document.addEventListener('touchstart', menuOutsideClickHandler, true);
+  document.addEventListener('keydown', menuEscHandler);
+
+  if (colorToggle) {
+    colorToggle.onclick = function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      setPaletteOpen(!pageState.paletteOpen);
     };
   }
 
@@ -1832,6 +2077,14 @@ function initPage() {
       updateCharCount(input, charCount);
     };
 
+    input.onfocus = function() {
+      updateCharCount(input, charCount);
+    };
+
+    input.onblur = function() {
+      updateCharCount(input, charCount);
+    };
+
     input.onpaste = function() {
       setTimeout(function() {
         if (input.value.length > MAX_NOTE_CHARS) {
@@ -1841,6 +2094,8 @@ function initPage() {
             title: t('charLimitReached'),
             type: 'warning'
           });
+        } else {
+          updateCharCount(input, charCount);
         }
       }, 0);
     };
@@ -1857,24 +2112,13 @@ function initPage() {
     sendBtn.onclick = addPageNote;
   }
 
-  if (clearBtn) {
-    clearBtn.onclick = clearAllNotes;
-  }
-
-  if (exportBtn) {
-    exportBtn.onclick = exportNotes;
-  }
-
-  if (importBtn) {
-    importBtn.onclick = openImportDialog;
-  }
-
   if (searchInput) {
     var searchTimeout;
     searchInput.oninput = function() {
       clearTimeout(searchTimeout);
       searchTimeout = setTimeout(function() {
         filterNotes(searchInput.value.trim());
+        pageState.skipCardAnimation = true;
         renderPageNotes();
       }, 200);
     };
