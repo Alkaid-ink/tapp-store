@@ -66,6 +66,18 @@
       "type": "toggle",
       "description": "关闭后清空历史便签",
       "defaultValue": true
+    },
+    {
+      "key": "sortOrder",
+      "label": "排序方式",
+      "type": "select",
+      "description": "笔记列表排序（置顶始终优先）",
+      "defaultValue": "newest",
+      "options": [
+        { "value": "newest", "label": "最新创建" },
+        { "value": "oldest", "label": "最早创建" },
+        { "value": "updated", "label": "最近更新" }
+      ]
     }
   ]
 }
