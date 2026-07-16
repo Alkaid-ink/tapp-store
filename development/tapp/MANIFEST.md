@@ -401,6 +401,12 @@ const value = await Tapp.storage.get("_settings.refreshInterval");
 HTTP 声明使用 `endpoint`、`method`、`headers`、`body`、`inject`、`cacheTtl` 等字段；
 `access` 默认为 `protected` 并要求 `network:fetch`。内置声明使用 `type: "builtin"` 与
 `builtin: "geo" | "ai:chat" | "ai:generate"`，不能混入 HTTP 字段。
+AI 内置 API 还必须在 `manifest.ai` 中声明 V2 的相同 operation 和 `text` output；模型层级取自
+该声明，实际调用进入统一 AI Task registry 与持久配额账本。
+
+HTTP endpoint 会钉扎全部公网 DNS 地址并禁止自动重定向、URL credentials 与 Host/Connection
+等路由或 hop-by-hop 请求头；响应体流式上限为 2 MiB。Scheduler `fetch` 使用相同边界。
+Tapp 不提供 `secrets.*` 模板；Manifest 中的宿主 secret 引用会在安装时被拒绝。
 
 解析缓存包含安装 owner 与 `apis` 内容指纹，响应缓存还包含用户/角色、客户端上下文、完整
 API 定义与参数摘要。更新 API 声明后不会继续命中旧 endpoint 的缓存，也不会跨安装 owner
