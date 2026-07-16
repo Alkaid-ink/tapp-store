@@ -31,6 +31,20 @@
               <path d="M21 21l-4.35-4.35"/>
             </svg>
           </button>
+          <button id="page-export" class="status-action-btn" title="Export">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 3v12"/>
+              <path d="M7 10l5 5 5-5"/>
+              <path d="M5 19h14"/>
+            </svg>
+          </button>
+          <button id="page-import" class="status-action-btn" title="Import">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 21V9"/>
+              <path d="M7 14l5-5 5 5"/>
+              <path d="M5 5h14"/>
+            </svg>
+          </button>
           <button id="page-clear" class="status-action-btn" title="Clear All">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
@@ -49,6 +63,7 @@
         <div class="input-area">
           <textarea id="page-input" class="page-input" rows="1" placeholder="..."></textarea>
           <div class="input-footer">
+            <div id="create-color-palette" class="create-color-palette"></div>
             <span id="char-count" class="char-count">0 / 500</span>
           </div>
         </div>

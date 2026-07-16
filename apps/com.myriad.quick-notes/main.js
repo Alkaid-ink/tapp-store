@@ -6,6 +6,9 @@
 // ========================================
 
 var MAX_NOTE_CHARS = 500;
+var STICKY_COLOR_COUNT = 6;
+var EXPORT_VERSION = 1;
+var DEFAULT_SORT = 'newest';
 
 // ========================================
 // 国际化
@@ -25,6 +28,8 @@ var i18n = {
     notesCount: '条笔记',
     emptyTitle: '暂无笔记',
     emptySubtitle: '开始记录你的想法吧！',
+    searchEmptyTitle: '无匹配笔记',
+    searchEmptySubtitle: '试试其他关键词',
     justNow: '刚刚',
     minutesAgo: '分钟前',
     hoursAgo: '小时前',
@@ -35,7 +40,35 @@ var i18n = {
     allCleared: '已清空所有笔记',
     charLimitReached: '已达字数上限（500）',
     notesTrimmed: '已达上限，已删除最旧的笔记',
-    clickToEdit: '点击编辑'
+    clickToEdit: '点击编辑',
+    pin: '置顶',
+    unpin: '取消置顶',
+    pinned: '已置顶',
+    notePinned: '已置顶',
+    noteUnpinned: '已取消置顶',
+    copy: '复制',
+    noteCopied: '已复制到剪贴板',
+    copyFailed: '复制失败',
+    expand: '展开',
+    close: '关闭',
+    edit: '编辑',
+    color: '颜色',
+    export: '导出',
+    import: '导入',
+    exportSuccess: '笔记已导出',
+    exportFailed: '导出失败',
+    importSuccess: '导入成功',
+    importFailed: '导入失败',
+    importEmpty: '没有可导入的笔记',
+    importMergeConfirm: '合并导入到现有笔记？取消则选择替换。',
+    importReplaceConfirm: '确定用导入内容替换全部现有笔记吗？此操作不可撤销。',
+    importPasteTitle: '粘贴 JSON 导入',
+    importPasteHint: '粘贴导出的 JSON，或选择文件',
+    chooseFile: '选择文件',
+    pasteImport: '粘贴导入',
+    sortNewest: '最新',
+    sortOldest: '最早',
+    sortUpdated: '更新'
   },
   'en-US': {
     title: 'Notes',
@@ -50,6 +83,8 @@ var i18n = {
     notesCount: 'notes',
     emptyTitle: 'No notes yet',
     emptySubtitle: 'Start writing your thoughts!',
+    searchEmptyTitle: 'No matching notes',
+    searchEmptySubtitle: 'Try a different keyword',
     justNow: 'just now',
     minutesAgo: 'm ago',
     hoursAgo: 'h ago',
@@ -60,7 +95,35 @@ var i18n = {
     allCleared: 'All notes cleared',
     charLimitReached: 'Character limit reached (500)',
     notesTrimmed: 'Limit reached; oldest notes removed',
-    clickToEdit: 'Click to edit'
+    clickToEdit: 'Click to edit',
+    pin: 'Pin',
+    unpin: 'Unpin',
+    pinned: 'Pinned',
+    notePinned: 'Pinned',
+    noteUnpinned: 'Unpinned',
+    copy: 'Copy',
+    noteCopied: 'Copied to clipboard',
+    copyFailed: 'Copy failed',
+    expand: 'Expand',
+    close: 'Close',
+    edit: 'Edit',
+    color: 'Color',
+    export: 'Export',
+    import: 'Import',
+    exportSuccess: 'Notes exported',
+    exportFailed: 'Export failed',
+    importSuccess: 'Import successful',
+    importFailed: 'Import failed',
+    importEmpty: 'No notes to import',
+    importMergeConfirm: 'Merge into existing notes? Cancel to replace instead.',
+    importReplaceConfirm: 'Replace all existing notes with imported data? This cannot be undone.',
+    importPasteTitle: 'Paste JSON to import',
+    importPasteHint: 'Paste exported JSON, or pick a file',
+    chooseFile: 'Choose file',
+    pasteImport: 'Import paste',
+    sortNewest: 'Newest',
+    sortOldest: 'Oldest',
+    sortUpdated: 'Updated'
   },
   'ja-JP': {
     title: 'メモ',
@@ -75,6 +138,8 @@ var i18n = {
     notesCount: '件のメモ',
     emptyTitle: 'メモがありません',
     emptySubtitle: '思いを書き始めましょう！',
+    searchEmptyTitle: '一致するメモがありません',
+    searchEmptySubtitle: '別のキーワードを試してください',
     justNow: 'たった今',
     minutesAgo: '分前',
     hoursAgo: '時間前',
@@ -85,7 +150,35 @@ var i18n = {
     allCleared: 'すべてのメモを削除しました',
     charLimitReached: '文字数上限に達しました（500）',
     notesTrimmed: '上限に達したため、古いメモを削除しました',
-    clickToEdit: 'クリックして編集'
+    clickToEdit: 'クリックして編集',
+    pin: '固定',
+    unpin: '固定解除',
+    pinned: '固定中',
+    notePinned: '固定しました',
+    noteUnpinned: '固定を解除しました',
+    copy: 'コピー',
+    noteCopied: 'クリップボードにコピーしました',
+    copyFailed: 'コピーに失敗しました',
+    expand: '展開',
+    close: '閉じる',
+    edit: '編集',
+    color: '色',
+    export: 'エクスポート',
+    import: 'インポート',
+    exportSuccess: 'メモをエクスポートしました',
+    exportFailed: 'エクスポートに失敗しました',
+    importSuccess: 'インポート成功',
+    importFailed: 'インポートに失敗しました',
+    importEmpty: 'インポートできるメモがありません',
+    importMergeConfirm: '既存のメモにマージしますか？キャンセルで置き換えを選択します。',
+    importReplaceConfirm: '既存のメモをすべて置き換えますか？この操作は元に戻せません。',
+    importPasteTitle: 'JSON を貼り付けてインポート',
+    importPasteHint: 'エクスポートした JSON を貼り付けるか、ファイルを選択',
+    chooseFile: 'ファイル選択',
+    pasteImport: '貼り付けインポート',
+    sortNewest: '新しい順',
+    sortOldest: '古い順',
+    sortUpdated: '更新順'
   }
 };
 
@@ -118,7 +211,21 @@ function colorIndexFromId(id) {
     hash = ((hash << 5) - hash) + s.charCodeAt(i);
     hash = hash | 0;
   }
-  return Math.abs(hash) % 6;
+  return Math.abs(hash) % STICKY_COLOR_COUNT;
+}
+
+function normalizeColorIndex(color) {
+  if (color == null || color === '') return null;
+  var n = parseInt(color, 10);
+  if (isNaN(n) || n < 0 || n >= STICKY_COLOR_COUNT) return null;
+  return n;
+}
+
+function getNoteColorIndex(note) {
+  if (!note) return 0;
+  var c = normalizeColorIndex(note.color);
+  if (c != null) return c;
+  return colorIndexFromId(note.id);
 }
 
 function noteTimestamp(note) {
@@ -206,11 +313,30 @@ function applyPrimaryColor(color) {
   } catch (e) {}
 }
 
+function normalizeSortOrder(value) {
+  var v = String(value || DEFAULT_SORT);
+  if (v === 'oldest' || v === 'updated' || v === 'newest') return v;
+  return DEFAULT_SORT;
+}
+
 function normalizeNotes(raw) {
   if (!raw || !Array.isArray(raw)) return [];
-  return raw.filter(function(n) {
-    return n && typeof n === 'object' && n.text != null;
-  });
+  var out = [];
+  for (var i = 0; i < raw.length; i++) {
+    var n = raw[i];
+    if (!n || typeof n !== 'object' || n.text == null) continue;
+    var note = {
+      id: n.id != null ? n.id : generateNoteId(),
+      text: clampNoteText(String(n.text)),
+      createdAt: typeof n.createdAt === 'number' ? n.createdAt : Date.now(),
+      updatedAt: typeof n.updatedAt === 'number' ? n.updatedAt : (typeof n.createdAt === 'number' ? n.createdAt : Date.now()),
+      pinned: !!n.pinned
+    };
+    var color = normalizeColorIndex(n.color);
+    if (color != null) note.color = color;
+    out.push(note);
+  }
+  return out;
 }
 
 function trimToMaxNotes(notes, maxNotes) {
@@ -226,13 +352,155 @@ function trimToMaxNotes(notes, maxNotes) {
   };
 }
 
+function compareNotes(a, b, sortBy) {
+  var ap = a && a.pinned ? 1 : 0;
+  var bp = b && b.pinned ? 1 : 0;
+  if (ap !== bp) return bp - ap;
+
+  var order = normalizeSortOrder(sortBy);
+  if (order === 'oldest') {
+    return (a.createdAt || 0) - (b.createdAt || 0);
+  }
+  if (order === 'updated') {
+    return noteTimestamp(b) - noteTimestamp(a);
+  }
+  // newest
+  return (b.createdAt || 0) - (a.createdAt || 0);
+}
+
+function sortNotesList(notes, sortBy) {
+  var list = (notes || []).slice();
+  list.sort(function(a, b) {
+    return compareNotes(a, b, sortBy);
+  });
+  return list;
+}
+
+function applySortAndTrim(notes, settings) {
+  var sortBy = settings && settings.sortOrder ? settings.sortOrder : DEFAULT_SORT;
+  var sorted = sortNotesList(notes, sortBy);
+  return trimToMaxNotes(sorted, settings && settings.maxNotes);
+}
+
+function isNoteLong(text) {
+  var s = String(text == null ? '' : text);
+  return s.length > 120 || s.split('\n').length > 4;
+}
+
+function copyTextToClipboard(text) {
+  var value = String(text == null ? '' : text);
+
+  if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    return navigator.clipboard.writeText(value).then(function() {
+      return true;
+    }).catch(function() {
+      return fallbackCopyText(value);
+    });
+  }
+
+  return Promise.resolve(fallbackCopyText(value));
+}
+
+function fallbackCopyText(text) {
+  try {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', 'readonly');
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    ta.style.top = '0';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, ta.value.length);
+    var ok = false;
+    try {
+      ok = document.execCommand && document.execCommand('copy');
+    } catch (e) {
+      ok = false;
+    }
+    document.body.removeChild(ta);
+    return !!ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function downloadJsonFile(filename, content) {
+  var body = String(content == null ? '' : content);
+
+  try {
+    if (typeof Tapp !== 'undefined' && Tapp.file && typeof Tapp.file.download === 'function') {
+      await Tapp.file.download(body, filename, 'application/json');
+      return true;
+    }
+  } catch (e) {
+    console.error('[Notes] Tapp.file.download failed:', e);
+  }
+
+  try {
+    var blob = new Blob([body], { type: 'application/json;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function() {
+      try { URL.revokeObjectURL(url); } catch (e2) {}
+    }, 1000);
+    return true;
+  } catch (e) {
+    console.error('[Notes] blob download failed:', e);
+    return false;
+  }
+}
+
+function findNoteById(notes, noteId) {
+  for (var i = 0; i < notes.length; i++) {
+    if (String(notes[i].id) === String(noteId)) return notes[i];
+  }
+  return null;
+}
+
+function buildColorPalette(selectedColor, onSelect) {
+  var wrap = document.createElement('div');
+  wrap.className = 'color-palette';
+  wrap.setAttribute('role', 'group');
+  wrap.setAttribute('aria-label', t('color'));
+
+  for (var i = 0; i < STICKY_COLOR_COUNT; i++) {
+    (function(colorIndex) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'color-swatch color-' + colorIndex;
+      if (selectedColor === colorIndex) {
+        btn.classList.add('selected');
+      }
+      btn.setAttribute('aria-label', t('color') + ' ' + (colorIndex + 1));
+      btn.title = t('color') + ' ' + (colorIndex + 1);
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        e.preventDefault();
+        if (typeof onSelect === 'function') onSelect(colorIndex);
+      });
+      wrap.appendChild(btn);
+    })(i);
+  }
+
+  return wrap;
+}
+
 // ========================================
 // Widget 状态
 // ========================================
 
 var widgetState = {
   notes: [],
-  settings: { maxNotes: 100, showTimestamp: true, saveHistory: true },
+  settings: { maxNotes: 100, showTimestamp: true, saveHistory: true, sortOrder: DEFAULT_SORT },
   size: '2x2',
   syncing: false
 };
@@ -256,7 +524,6 @@ async function initWidget() {
 
   await loadWidgetData();
 
-  // 设置 UI 文本
   var titleEl = document.getElementById('widget-title');
   var inputEl = document.getElementById('widget-input');
   var countEl = document.getElementById('widget-count');
@@ -292,7 +559,6 @@ async function initWidget() {
     });
   }
 
-  // Page/Widget 同步：其他实例改 storage 时刷新
   if (Tapp.storage && typeof Tapp.storage.onChanged === 'function') {
     Tapp.storage.onChanged(function() {
       if (widgetState.syncing) return;
@@ -308,6 +574,7 @@ async function loadWidgetData() {
     var savedSettings = await Tapp.settings.getAll();
     if (savedSettings) {
       Object.assign(widgetState.settings, savedSettings);
+      widgetState.settings.sortOrder = normalizeSortOrder(widgetState.settings.sortOrder);
     }
 
     if (widgetState.settings.saveHistory === false) {
@@ -349,16 +616,26 @@ function renderWidgetNotes(size) {
     return;
   }
 
-  // 根据尺寸决定显示数量
   var maxDisplay = size === '4x4' ? 8 : (size === '4x2' ? 4 : 3);
-  var displayNotes = widgetState.notes.slice(0, maxDisplay);
+  var sorted = sortNotesList(widgetState.notes, widgetState.settings.sortOrder);
+  var displayNotes = sorted.slice(0, maxDisplay);
 
   displayNotes.forEach(function(note) {
     var item = document.createElement('div');
     item.className = 'note-item';
+    if (note.pinned) item.classList.add('pinned');
 
     var content = document.createElement('div');
     content.className = 'note-content';
+
+    if (note.pinned) {
+      var pinBadge = document.createElement('span');
+      pinBadge.className = 'note-pin-badge';
+      pinBadge.textContent = '📌';
+      pinBadge.title = t('pinned');
+      pinBadge.setAttribute('aria-label', t('pinned'));
+      content.appendChild(pinBadge);
+    }
 
     var text = document.createElement('div');
     text.className = 'note-text';
@@ -388,12 +665,11 @@ function renderWidgetNotes(size) {
     listEl.appendChild(item);
   });
 
-  // 显示更多提示
-  if (widgetState.notes.length > maxDisplay) {
+  if (sorted.length > maxDisplay) {
     var more = document.createElement('div');
     more.className = 'note-item';
     more.style.cssText = 'justify-content: center; color: var(--notes-text-muted); font-size: 11px; padding: 6px;';
-    more.textContent = '+' + (widgetState.notes.length - maxDisplay) + ' ' + t('notesCount');
+    more.textContent = '+' + (sorted.length - maxDisplay) + ' ' + t('notesCount');
     listEl.appendChild(more);
   }
 }
@@ -456,10 +732,11 @@ async function addWidgetNote(input, size) {
     id: generateNoteId(),
     text: text,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
+    pinned: false
   });
 
-  var trimResult = trimToMaxNotes(widgetState.notes, widgetState.settings.maxNotes);
+  var trimResult = applySortAndTrim(widgetState.notes, widgetState.settings);
   widgetState.notes = trimResult.notes;
 
   input.value = '';
@@ -492,13 +769,15 @@ var pageState = {
   notes: [],
   filteredNotes: [],
   searchQuery: '',
-  settings: { maxNotes: 100, showTimestamp: true, saveHistory: true },
+  settings: { maxNotes: 100, showTimestamp: true, saveHistory: true, sortOrder: DEFAULT_SORT },
   editingId: null,
+  expandingId: null,
+  draftColor: 0,
   syncing: false
 };
 
 // ========================================
-// Page 初始化
+// Page 数据
 // ========================================
 
 async function loadPageData() {
@@ -506,6 +785,7 @@ async function loadPageData() {
     var savedSettings = await Tapp.settings.getAll();
     if (savedSettings) {
       Object.assign(pageState.settings, savedSettings);
+      pageState.settings.sortOrder = normalizeSortOrder(pageState.settings.sortOrder);
     }
 
     if (pageState.settings.saveHistory === false) {
@@ -557,6 +837,19 @@ async function saveNotes() {
   } catch (e) {}
 }
 
+function refreshFilteredNotes() {
+  if (pageState.searchQuery) {
+    filterNotes(pageState.searchQuery);
+  } else {
+    pageState.filteredNotes = pageState.notes;
+  }
+}
+
+function getDisplayNotes() {
+  var source = pageState.searchQuery ? pageState.filteredNotes : pageState.notes;
+  return sortNotesList(source, pageState.settings.sortOrder);
+}
+
 function updateStatusPill() {
   var titleEl = document.getElementById('status-title');
   var subtitleEl = document.getElementById('status-subtitle');
@@ -586,7 +879,7 @@ function updateCharCount(input, charCount) {
   }
 }
 
-function renderEmptyState(area) {
+function renderEmptyState(area, isSearch) {
   area.classList.add('empty');
 
   var empty = document.createElement('div');
@@ -594,20 +887,77 @@ function renderEmptyState(area) {
 
   var icon = document.createElement('div');
   icon.className = 'empty-icon';
-  icon.textContent = '📝';
+  icon.textContent = isSearch ? '🔍' : '📝';
 
   var title = document.createElement('div');
   title.className = 'empty-title';
-  title.textContent = t('emptyTitle');
+  title.textContent = isSearch ? t('searchEmptyTitle') : t('emptyTitle');
 
   var subtitle = document.createElement('div');
   subtitle.className = 'empty-subtitle';
-  subtitle.textContent = t('emptySubtitle');
+  subtitle.textContent = isSearch ? t('searchEmptySubtitle') : t('emptySubtitle');
 
   empty.appendChild(icon);
   empty.appendChild(title);
   empty.appendChild(subtitle);
   area.appendChild(empty);
+}
+
+function createIconButton(className, title, label, onClick) {
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = className;
+  btn.title = title;
+  btn.setAttribute('aria-label', label || title);
+  btn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    e.preventDefault();
+    if (typeof onClick === 'function') onClick(e);
+  });
+  return btn;
+}
+
+function buildStickyActions(note) {
+  var actions = document.createElement('div');
+  actions.className = 'sticky-actions';
+
+  var pinBtn = createIconButton(
+    'sticky-action-btn sticky-pin' + (note.pinned ? ' active' : ''),
+    note.pinned ? t('unpin') : t('pin'),
+    note.pinned ? t('unpin') : t('pin'),
+    function() { togglePinNote(note.id); }
+  );
+  pinBtn.textContent = note.pinned ? '📌' : '📍';
+
+  var copyBtn = createIconButton(
+    'sticky-action-btn sticky-copy',
+    t('copy'),
+    t('copy'),
+    function() { copyNoteText(note.text); }
+  );
+  copyBtn.textContent = '⧉';
+
+  var expandBtn = createIconButton(
+    'sticky-action-btn sticky-expand',
+    t('expand'),
+    t('expand'),
+    function() { openNoteExpand(note.id); }
+  );
+  expandBtn.textContent = '⤢';
+
+  var deleteBtn = createIconButton(
+    'sticky-action-btn sticky-delete',
+    t('delete'),
+    t('delete'),
+    function() { deletePageNote(note.id); }
+  );
+  deleteBtn.textContent = '×';
+
+  actions.appendChild(pinBtn);
+  actions.appendChild(copyBtn);
+  actions.appendChild(expandBtn);
+  actions.appendChild(deleteBtn);
+  return actions;
 }
 
 function buildStickyEditUI(sticky, note) {
@@ -624,6 +974,19 @@ function buildStickyEditUI(sticky, note) {
   textarea.value = note.text;
   textarea.setAttribute('maxlength', String(MAX_NOTE_CHARS));
   textarea.setAttribute('rows', '5');
+
+  var editColor = getNoteColorIndex(note);
+
+  var palette = buildColorPalette(editColor, function(colorIndex) {
+    editColor = colorIndex;
+    sticky.className = 'sticky-note editing color-' + colorIndex;
+    sticky.classList.add('editing');
+    var swatches = palette.querySelectorAll('.color-swatch');
+    for (var i = 0; i < swatches.length; i++) {
+      if (i === colorIndex) swatches[i].classList.add('selected');
+      else swatches[i].classList.remove('selected');
+    }
+  });
 
   var footer = document.createElement('div');
   footer.className = 'sticky-footer sticky-edit-footer';
@@ -644,7 +1007,7 @@ function buildStickyEditUI(sticky, note) {
   saveBtn.textContent = t('save');
   saveBtn.addEventListener('click', function(e) {
     e.stopPropagation();
-    saveStickyEdit(note.id, textarea.value);
+    saveStickyEdit(note.id, textarea.value, editColor);
   });
 
   textarea.addEventListener('keydown', function(e) {
@@ -654,7 +1017,7 @@ function buildStickyEditUI(sticky, note) {
       renderPageNotes();
     } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
-      saveStickyEdit(note.id, textarea.value);
+      saveStickyEdit(note.id, textarea.value, editColor);
     }
   });
 
@@ -671,6 +1034,7 @@ function buildStickyEditUI(sticky, note) {
   footer.appendChild(cancelBtn);
   footer.appendChild(saveBtn);
   content.appendChild(textarea);
+  content.appendChild(palette);
   content.appendChild(footer);
   sticky.appendChild(content);
 
@@ -682,7 +1046,7 @@ function buildStickyEditUI(sticky, note) {
   }, 0);
 }
 
-async function saveStickyEdit(noteId, rawText) {
+async function saveStickyEdit(noteId, rawText, colorIndex) {
   var text = String(rawText == null ? '' : rawText).trim();
   if (!text) {
     pageState.editingId = null;
@@ -703,6 +1067,8 @@ async function saveStickyEdit(noteId, rawText) {
     if (String(pageState.notes[i].id) === String(noteId)) {
       pageState.notes[i].text = text;
       pageState.notes[i].updatedAt = Date.now();
+      var c = normalizeColorIndex(colorIndex);
+      if (c != null) pageState.notes[i].color = c;
       found = true;
       break;
     }
@@ -715,14 +1081,11 @@ async function saveStickyEdit(noteId, rawText) {
     return;
   }
 
+  var trimResult = applySortAndTrim(pageState.notes, pageState.settings);
+  pageState.notes = trimResult.notes;
+
   await saveNotes();
-
-  if (pageState.searchQuery) {
-    filterNotes(pageState.searchQuery);
-  } else {
-    pageState.filteredNotes = pageState.notes;
-  }
-
+  refreshFilteredNotes();
   renderPageNotes();
 
   await notify({
@@ -738,11 +1101,13 @@ function renderPageNotes() {
 
   area.innerHTML = '';
   updateStatusPill();
+  updateCreateColorPalette();
 
-  var notesToRender = pageState.searchQuery ? pageState.filteredNotes : pageState.notes;
+  var notesToRender = getDisplayNotes();
 
   if (notesToRender.length === 0) {
-    renderEmptyState(area);
+    renderEmptyState(area, !!pageState.searchQuery);
+    renderExpandOverlay();
     return;
   }
 
@@ -753,10 +1118,10 @@ function renderPageNotes() {
 
   notesToRender.forEach(function(note, index) {
     var sticky = document.createElement('div');
-    var colorIndex = colorIndexFromId(note.id);
+    var colorIndex = getNoteColorIndex(note);
     sticky.className = 'sticky-note color-' + colorIndex;
+    if (note.pinned) sticky.classList.add('pinned');
     sticky.setAttribute('data-note-id', String(note.id));
-
     sticky.style.animationDelay = (index * 0.05) + 's';
 
     if (pageState.editingId != null && String(pageState.editingId) === String(note.id)) {
@@ -768,8 +1133,17 @@ function renderPageNotes() {
     var content = document.createElement('div');
     content.className = 'sticky-content';
 
+    if (note.pinned) {
+      var pinMark = document.createElement('span');
+      pinMark.className = 'sticky-pin-mark';
+      pinMark.textContent = '📌';
+      pinMark.title = t('pinned');
+      sticky.appendChild(pinMark);
+    }
+
     var text = document.createElement('div');
     text.className = 'sticky-text';
+    if (isNoteLong(note.text)) text.classList.add('sticky-text-long');
     text.textContent = note.text;
     content.appendChild(text);
 
@@ -786,18 +1160,7 @@ function renderPageNotes() {
       footer.appendChild(spacer);
     }
 
-    var deleteBtn = document.createElement('button');
-    deleteBtn.className = 'sticky-delete';
-    deleteBtn.type = 'button';
-    deleteBtn.textContent = '×';
-    deleteBtn.title = t('delete');
-    deleteBtn.setAttribute('aria-label', t('delete'));
-    deleteBtn.addEventListener('click', function(e) {
-      e.stopPropagation();
-      deletePageNote(note.id);
-    });
-    footer.appendChild(deleteBtn);
-
+    footer.appendChild(buildStickyActions(note));
     content.appendChild(footer);
     sticky.appendChild(content);
 
@@ -805,8 +1168,11 @@ function renderPageNotes() {
     sticky.title = t('clickToEdit');
 
     sticky.addEventListener('click', function(e) {
-      if (e.target && e.target.closest && e.target.closest('.sticky-delete')) return;
+      if (e.target && e.target.closest && e.target.closest('.sticky-action-btn, .sticky-actions, .sticky-pin-mark')) {
+        return;
+      }
       pageState.editingId = note.id;
+      pageState.expandingId = null;
       renderPageNotes();
     });
 
@@ -814,6 +1180,171 @@ function renderPageNotes() {
   });
 
   area.appendChild(grid);
+  renderExpandOverlay();
+}
+
+function renderExpandOverlay() {
+  var existing = document.getElementById('note-expand-overlay');
+  if (existing) existing.parentNode.removeChild(existing);
+
+  if (pageState.expandingId == null) return;
+
+  var note = findNoteById(pageState.notes, pageState.expandingId);
+  if (!note) {
+    pageState.expandingId = null;
+    return;
+  }
+
+  var overlay = document.createElement('div');
+  overlay.id = 'note-expand-overlay';
+  overlay.className = 'note-expand-overlay';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+
+  var card = document.createElement('div');
+  card.className = 'note-expand-card color-' + getNoteColorIndex(note);
+
+  var header = document.createElement('div');
+  header.className = 'note-expand-header';
+
+  var headerLeft = document.createElement('div');
+  headerLeft.className = 'note-expand-meta';
+  if (note.pinned) {
+    var pin = document.createElement('span');
+    pin.className = 'note-expand-pin';
+    pin.textContent = '📌 ' + t('pinned');
+    headerLeft.appendChild(pin);
+  }
+  if (pageState.settings.showTimestamp) {
+    var time = document.createElement('span');
+    time.className = 'note-expand-time';
+    time.textContent = formatTime(noteTimestamp(note));
+    headerLeft.appendChild(time);
+  }
+
+  var closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'note-expand-close';
+  closeBtn.textContent = '×';
+  closeBtn.title = t('close');
+  closeBtn.setAttribute('aria-label', t('close'));
+  closeBtn.addEventListener('click', function() {
+    closeNoteExpand();
+  });
+
+  header.appendChild(headerLeft);
+  header.appendChild(closeBtn);
+
+  var body = document.createElement('div');
+  body.className = 'note-expand-body';
+  body.textContent = note.text;
+
+  var actions = document.createElement('div');
+  actions.className = 'note-expand-actions';
+
+  var pinBtn = document.createElement('button');
+  pinBtn.type = 'button';
+  pinBtn.className = 'sticky-edit-btn';
+  pinBtn.textContent = note.pinned ? t('unpin') : t('pin');
+  pinBtn.addEventListener('click', function() {
+    togglePinNote(note.id);
+  });
+
+  var copyBtn = document.createElement('button');
+  copyBtn.type = 'button';
+  copyBtn.className = 'sticky-edit-btn';
+  copyBtn.textContent = t('copy');
+  copyBtn.addEventListener('click', function() {
+    copyNoteText(note.text);
+  });
+
+  var editBtn = document.createElement('button');
+  editBtn.type = 'button';
+  editBtn.className = 'sticky-edit-btn sticky-edit-save';
+  editBtn.textContent = t('edit');
+  editBtn.addEventListener('click', function() {
+    pageState.expandingId = null;
+    pageState.editingId = note.id;
+    renderPageNotes();
+  });
+
+  actions.appendChild(pinBtn);
+  actions.appendChild(copyBtn);
+  actions.appendChild(editBtn);
+
+  card.appendChild(header);
+  card.appendChild(body);
+  card.appendChild(actions);
+  overlay.appendChild(card);
+
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) closeNoteExpand();
+  });
+
+  try {
+    document.removeEventListener('keydown', expandEscHandler);
+  } catch (e) {}
+  document.addEventListener('keydown', expandEscHandler);
+
+  var content = document.getElementById('tapp-content') || document.body;
+  content.appendChild(overlay);
+}
+
+function expandEscHandler(e) {
+  if (e.key === 'Escape' && pageState.expandingId != null) {
+    closeNoteExpand();
+  }
+}
+
+function openNoteExpand(noteId) {
+  pageState.editingId = null;
+  pageState.expandingId = noteId;
+  renderPageNotes();
+}
+
+function closeNoteExpand() {
+  pageState.expandingId = null;
+  try {
+    document.removeEventListener('keydown', expandEscHandler);
+  } catch (e) {}
+  var existing = document.getElementById('note-expand-overlay');
+  if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+  renderPageNotes();
+}
+
+async function copyNoteText(text) {
+  var ok = await copyTextToClipboard(text);
+  if (ok) {
+    await notify({
+      title: t('noteCopied'),
+      type: 'success'
+    });
+  } else {
+    await notify({
+      title: t('copyFailed'),
+      type: 'error'
+    });
+  }
+}
+
+async function togglePinNote(noteId) {
+  var note = findNoteById(pageState.notes, noteId);
+  if (!note) return;
+
+  note.pinned = !note.pinned;
+  // pin 状态变更不改 updatedAt，避免「最近更新」被置顶打乱
+
+  var trimResult = applySortAndTrim(pageState.notes, pageState.settings);
+  pageState.notes = trimResult.notes;
+
+  await saveNotes();
+  refreshFilteredNotes();
+  renderPageNotes();
+
+  await notify({
+    title: note.pinned ? t('notePinned') : t('noteUnpinned'),
+    type: 'success'
+  });
 }
 
 async function addPageNote() {
@@ -855,14 +1386,19 @@ async function addPageNote() {
   }
 
   var now = Date.now();
+  var color = normalizeColorIndex(pageState.draftColor);
+  if (color == null) color = 0;
+
   pageState.notes.unshift({
     id: generateNoteId(),
     text: text,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
+    pinned: false,
+    color: color
   });
 
-  var trimResult = trimToMaxNotes(pageState.notes, pageState.settings.maxNotes);
+  var trimResult = applySortAndTrim(pageState.notes, pageState.settings);
   pageState.notes = trimResult.notes;
 
   input.value = '';
@@ -873,13 +1409,7 @@ async function addPageNote() {
   }
 
   await saveNotes();
-
-  if (pageState.searchQuery) {
-    filterNotes(pageState.searchQuery);
-  } else {
-    pageState.filteredNotes = pageState.notes;
-  }
-
+  refreshFilteredNotes();
   renderPageNotes();
 
   await notify({
@@ -898,22 +1428,26 @@ async function addPageNote() {
 }
 
 async function deletePageNote(noteId) {
+  var removed = findNoteById(pageState.notes, noteId);
   pageState.notes = pageState.notes.filter(function(n) {
     return String(n.id) !== String(noteId);
   });
   if (String(pageState.editingId) === String(noteId)) {
     pageState.editingId = null;
   }
-
-  await saveNotes();
-
-  if (pageState.searchQuery) {
-    filterNotes(pageState.searchQuery);
-  } else {
-    pageState.filteredNotes = pageState.notes;
+  if (String(pageState.expandingId) === String(noteId)) {
+    pageState.expandingId = null;
   }
 
+  await saveNotes();
+  refreshFilteredNotes();
   renderPageNotes();
+
+  await notify({
+    title: t('noteDeleted'),
+    message: removed ? (String(removed.text).substring(0, 30) + (String(removed.text).length > 30 ? '...' : '')) : '',
+    type: 'success'
+  });
 }
 
 async function clearAllNotes() {
@@ -925,6 +1459,7 @@ async function clearAllNotes() {
     pageState.filteredNotes = [];
     pageState.searchQuery = '';
     pageState.editingId = null;
+    pageState.expandingId = null;
 
     var searchInput = document.getElementById('search-input');
     if (searchInput) searchInput.value = '';
@@ -959,10 +1494,289 @@ function filterNotes(query) {
   }
 }
 
+// ========================================
+// Export / Import
+// ========================================
+
+async function exportNotes() {
+  try {
+    if (pageState.settings.saveHistory === false) {
+      await notify({ title: t('exportFailed'), type: 'warning' });
+      return;
+    }
+
+    var payload = {
+      version: EXPORT_VERSION,
+      exportedAt: Date.now(),
+      notes: pageState.notes
+    };
+    var json = JSON.stringify(payload, null, 2);
+    var stamp = new Date().toISOString().slice(0, 10);
+    var ok = await downloadJsonFile('quick-notes-' + stamp + '.json', json);
+    if (ok) {
+      await notify({ title: t('exportSuccess'), type: 'success' });
+    } else {
+      await notify({ title: t('exportFailed'), type: 'error' });
+    }
+  } catch (e) {
+    console.error('[Notes] export failed:', e);
+    await notify({ title: t('exportFailed'), type: 'error' });
+  }
+}
+
+function parseImportPayload(raw) {
+  var data = raw;
+  if (typeof raw === 'string') {
+    data = JSON.parse(raw);
+  }
+  if (!data) throw new Error('empty');
+
+  var list = null;
+  if (Array.isArray(data)) {
+    list = data;
+  } else if (data.notes && Array.isArray(data.notes)) {
+    list = data.notes;
+  } else {
+    throw new Error('invalid');
+  }
+
+  return normalizeNotes(list);
+}
+
+function mergeImportedNotes(existing, incoming) {
+  var byId = {};
+  var result = [];
+  var i;
+
+  for (i = 0; i < existing.length; i++) {
+    byId[String(existing[i].id)] = existing[i];
+    result.push(existing[i]);
+  }
+
+  for (i = 0; i < incoming.length; i++) {
+    var note = incoming[i];
+    var key = String(note.id);
+    if (byId[key]) {
+      // 同 id：保留更新时间较新的
+      if (noteTimestamp(note) >= noteTimestamp(byId[key])) {
+        var idx = -1;
+        for (var j = 0; j < result.length; j++) {
+          if (String(result[j].id) === key) {
+            idx = j;
+            break;
+          }
+        }
+        if (idx >= 0) {
+          result[idx] = note;
+          byId[key] = note;
+        }
+      }
+    } else {
+      byId[key] = note;
+      result.push(note);
+    }
+  }
+
+  return result;
+}
+
+async function applyImportedNotes(incoming, mode) {
+  if (!incoming || !incoming.length) {
+    await notify({ title: t('importEmpty'), type: 'warning' });
+    return;
+  }
+
+  if (pageState.settings.saveHistory === false) {
+    await notify({ title: t('importFailed'), type: 'warning' });
+    return;
+  }
+
+  var next;
+  if (mode === 'replace') {
+    next = incoming.slice();
+  } else {
+    next = mergeImportedNotes(pageState.notes, incoming);
+  }
+
+  var trimResult = applySortAndTrim(next, pageState.settings);
+  pageState.notes = trimResult.notes;
+  pageState.editingId = null;
+  pageState.expandingId = null;
+
+  await saveNotes();
+  refreshFilteredNotes();
+  renderPageNotes();
+
+  await notify({
+    title: t('importSuccess'),
+    message: String(incoming.length),
+    type: 'success'
+  });
+
+  if (trimResult.trimmed > 0) {
+    await notify({
+      title: t('notesTrimmed'),
+      message: String(trimResult.trimmed),
+      type: 'warning'
+    });
+  }
+}
+
+async function importNotesFromText(rawText) {
+  try {
+    var incoming = parseImportPayload(rawText);
+    if (!incoming.length) {
+      await notify({ title: t('importEmpty'), type: 'warning' });
+      return;
+    }
+
+    var merge = true;
+    if (pageState.notes.length > 0) {
+      try {
+        // confirm=true → merge; false → ask replace
+        merge = await Tapp.ui.confirm(t('importMergeConfirm'));
+      } catch (e) {
+        merge = true;
+      }
+
+      if (!merge) {
+        var replaceOk = false;
+        try {
+          replaceOk = await Tapp.ui.confirm(t('importReplaceConfirm'));
+        } catch (e2) {
+          replaceOk = false;
+        }
+        if (!replaceOk) return;
+        await applyImportedNotes(incoming, 'replace');
+        return;
+      }
+    }
+
+    await applyImportedNotes(incoming, 'merge');
+  } catch (e) {
+    console.error('[Notes] import failed:', e);
+    await notify({ title: t('importFailed'), type: 'error' });
+  }
+}
+
+function openImportDialog() {
+  var existing = document.getElementById('note-import-overlay');
+  if (existing) existing.parentNode.removeChild(existing);
+
+  var overlay = document.createElement('div');
+  overlay.id = 'note-import-overlay';
+  overlay.className = 'note-import-overlay';
+
+  var card = document.createElement('div');
+  card.className = 'note-import-card';
+
+  var title = document.createElement('div');
+  title.className = 'note-import-title';
+  title.textContent = t('importPasteTitle');
+
+  var hint = document.createElement('div');
+  hint.className = 'note-import-hint';
+  hint.textContent = t('importPasteHint');
+
+  var textarea = document.createElement('textarea');
+  textarea.className = 'note-import-textarea';
+  textarea.setAttribute('rows', '8');
+  textarea.placeholder = '{"version":1,"notes":[...]}';
+
+  var fileRow = document.createElement('div');
+  fileRow.className = 'note-import-file-row';
+
+  var fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = 'application/json,.json,text/plain';
+  fileInput.className = 'note-import-file';
+  fileInput.addEventListener('change', function() {
+    var file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function() {
+      textarea.value = String(reader.result || '');
+    };
+    reader.onerror = function() {
+      notify({ title: t('importFailed'), type: 'error' });
+    };
+    reader.readAsText(file);
+  });
+
+  var fileBtn = document.createElement('button');
+  fileBtn.type = 'button';
+  fileBtn.className = 'sticky-edit-btn';
+  fileBtn.textContent = t('chooseFile');
+  fileBtn.addEventListener('click', function() {
+    fileInput.click();
+  });
+
+  fileRow.appendChild(fileBtn);
+  fileRow.appendChild(fileInput);
+
+  var actions = document.createElement('div');
+  actions.className = 'note-import-actions';
+
+  var cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'sticky-edit-btn sticky-edit-cancel';
+  cancelBtn.textContent = t('cancel');
+  cancelBtn.addEventListener('click', function() {
+    if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+  });
+
+  var importBtn = document.createElement('button');
+  importBtn.type = 'button';
+  importBtn.className = 'sticky-edit-btn sticky-edit-save';
+  importBtn.textContent = t('import');
+  importBtn.addEventListener('click', function() {
+    var text = textarea.value.trim();
+    if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    importNotesFromText(text);
+  });
+
+  actions.appendChild(cancelBtn);
+  actions.appendChild(importBtn);
+
+  card.appendChild(title);
+  card.appendChild(hint);
+  card.appendChild(textarea);
+  card.appendChild(fileRow);
+  card.appendChild(actions);
+  overlay.appendChild(card);
+
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay && overlay.parentNode) {
+      overlay.parentNode.removeChild(overlay);
+    }
+  });
+
+  var content = document.getElementById('tapp-content') || document.body;
+  content.appendChild(overlay);
+  setTimeout(function() { textarea.focus(); }, 0);
+}
+
+// ========================================
+// UI helpers
+// ========================================
+
+function updateCreateColorPalette() {
+  var host = document.getElementById('create-color-palette');
+  if (!host) return;
+  host.innerHTML = '';
+  var palette = buildColorPalette(pageState.draftColor, function(colorIndex) {
+    pageState.draftColor = colorIndex;
+    updateCreateColorPalette();
+  });
+  host.appendChild(palette);
+}
+
 function initPage() {
   var input = document.getElementById('page-input');
   var sendBtn = document.getElementById('page-send');
   var clearBtn = document.getElementById('page-clear');
+  var exportBtn = document.getElementById('page-export');
+  var importBtn = document.getElementById('page-import');
   var charCount = document.getElementById('char-count');
   var searchInput = document.getElementById('search-input');
   var searchToggle = document.getElementById('search-toggle');
@@ -974,10 +1788,13 @@ function initPage() {
   }
   if (sendBtn) sendBtn.title = t('add');
   if (clearBtn) clearBtn.title = t('clearAll');
+  if (exportBtn) exportBtn.title = t('export');
+  if (importBtn) importBtn.title = t('import');
   if (searchInput) searchInput.placeholder = t('searchPlaceholder');
   if (charCount && input) updateCharCount(input, charCount);
 
-  // 搜索切换按钮
+  updateCreateColorPalette();
+
   if (searchToggle && statusPill && searchInput) {
     searchToggle.onclick = function() {
       var isSearching = statusPill.classList.toggle('searching');
@@ -1013,10 +1830,6 @@ function initPage() {
       input.style.height = 'auto';
       input.style.height = Math.min(input.scrollHeight, 120) + 'px';
       updateCharCount(input, charCount);
-
-      if (input.value.length >= MAX_NOTE_CHARS) {
-        // 轻量反馈：计数变红即可；粘贴超长时额外提示
-      }
     };
 
     input.onpaste = function() {
@@ -1048,6 +1861,14 @@ function initPage() {
     clearBtn.onclick = clearAllNotes;
   }
 
+  if (exportBtn) {
+    exportBtn.onclick = exportNotes;
+  }
+
+  if (importBtn) {
+    importBtn.onclick = openImportDialog;
+  }
+
   if (searchInput) {
     var searchTimeout;
     searchInput.oninput = function() {
@@ -1068,13 +1889,9 @@ function bindPageStorageSync() {
   Tapp.storage.onChanged(function() {
     if (pageState.syncing) return;
     loadPageData().then(function() {
-      if (pageState.searchQuery) {
-        filterNotes(pageState.searchQuery);
-      } else {
-        pageState.filteredNotes = pageState.notes;
-      }
-      // 外部变更时退出编辑，避免脏写
+      refreshFilteredNotes();
       pageState.editingId = null;
+      pageState.expandingId = null;
       renderPageNotes();
     }).catch(function() {});
   });
