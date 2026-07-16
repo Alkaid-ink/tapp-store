@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "minSystemVersion": "0.2.1",
   "description": "填写部署和数据库设置，生成 Myriad 的 Compose、环境变量与 Nginx 配置",
+  "category": "developer",
   "main": "main.js",
   "author": {
     "name": "Myriad Team",

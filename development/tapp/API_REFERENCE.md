@@ -349,7 +349,7 @@ await Tapp.widget.register({
   defaultSize: "2x2",
   sizes: ["1x1", "2x2", "4x2"],
   refreshPolicy: { mode: "event", refreshOnVisible: true },
-  category: "tool",
+  category: "utility",
 });
 
 // 注销小组件

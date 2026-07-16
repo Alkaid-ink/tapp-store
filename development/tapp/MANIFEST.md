@@ -31,6 +31,7 @@ Manifest 是 Tapp 的核心配置文件，定义了应用的元数据、权限�
 | `widgetStyles`            | string   | ❌   | Widget 专用 CSS 文件路径（separated 模式）    |
 | `pageStyles`              | string   | ❌   | Page 专用 CSS 文件路径（separated 模式）      |
 | `pageTemplate`            | string   | ❌   | 页面 HTML 模板路径                            |
+| `category`                | string   | ✅   | 应用用途分类（稳定 ID）                       |
 
 Manifest 使用严格字段校验；未声明或已移除的字段会使安装失败。`minSystemVersion` 会在
 直接安装、商店安装与更新时和当前 Myriad 版本比较。所有权限直接声明在 `permissions`，
@@ -41,6 +42,11 @@ Manifest 使用严格字段校验；未声明或已移除的字段会使安装�
 必须声明 `network:fetch`，内置 AI API 必须声明对应的 `ai:*` 权限。`pageModules` 只接受
 不重复的 `.js` 文件名。
 
+`category` 必须是 `ai`、`data`、`developer`、`game`、`media`、
+`productivity`、`social` 或 `utility`。Page / Widget 是运行形态，demo / test
+是发布阶段，不应写入用途分类。商店索引与 Manifest 必须使用相同的分类 ID；
+本地化名称由 Myriad 宿主提供。
+
 ## 完整示例
 
 ```json
@@ -49,6 +55,7 @@ Manifest 使用严格字段校验；未声明或已移除的字段会使安装�
   "name": "我的应用",
   "version": "1.0.0",
   "description": "一个功能丰富的 Tapp 示例",
+  "category": "utility",
   "main": "index.js",
   "author": {
     "name": "开发者名称",
@@ -85,7 +92,7 @@ Manifest 使用严格字段校验；未声明或已移除的字段会使安装�
       "icon": "📊",
       "defaultSize": "2x2",
       "sizes": ["1x1", "1x2", "2x1", "2x2", "4x2", "4x4"],
-      "category": "tool",
+      "category": "utility",
       "refreshPolicy": { "mode": "event", "refreshOnVisible": true }
     }
   ],
@@ -119,7 +126,7 @@ Manifest 使用严格字段校验；未声明或已移除的字段会使安装�
       "icon": "🧊",
       "defaultSize": "2x2",
       "sizes": ["1x1", "1x2", "2x1", "2x2", "3x2", "4x2", "4x4"],
-      "category": "tool",
+      "category": "utility",
       "templates": {
         "2x2": "templates/widget-2x2.html",
         "4x2": "templates/widget-4x2.html"
@@ -140,18 +147,18 @@ Manifest 使用严格字段校验；未声明或已移除的字段会使安装�
 
 ### Widget 字段说明
 
-| 字段            | 类型     | 必填 | 说明                              |
-| --------------- | -------- | ---- | --------------------------------- |
-| `id`            | string   | ✅   | Widget 唯一标识符                 |
-| `name`          | string   | ✅   | Widget 显示名称                   |
-| `description`   | string   | ❌   | Widget 描述                       |
-| `icon`          | string   | ❌   | Widget 图标（emoji 或 URL）       |
-| `defaultSize`   | string   | ✅   | 默认尺寸（如 "2x2"）              |
-| `sizes`         | string[] | ✅   | 支持的尺寸列表                    |
-| `category`      | string   | ❌   | 分类（tool, data, media, custom） |
-| `templates`     | object   | ❌   | HTML 模板（按尺寸覆盖）           |
-| `settings`      | object[] | ❌   | 每个 Dashboard 实例独立的设置声明 |
-| `refreshPolicy` | object   | ❌   | 宿主管理的刷新策略                |
+| 字段            | 类型     | 必填 | 说明                                                           |
+| --------------- | -------- | ---- | -------------------------------------------------------------- |
+| `id`            | string   | ✅   | Widget 唯一标识符                                              |
+| `name`          | string   | ✅   | Widget 显示名称                                                |
+| `description`   | string   | ❌   | Widget 描述                                                    |
+| `icon`          | string   | ❌   | Widget 图标（emoji 或 URL）                                    |
+| `defaultSize`   | string   | ✅   | 默认尺寸（如 "2x2"）                                           |
+| `sizes`         | string[] | ✅   | 支持的尺寸列表                                                 |
+| `category`      | string   | ❌   | Widget 分类（stats, activity, visualization, utility, custom） |
+| `templates`     | object   | ❌   | HTML 模板（按尺寸覆盖）                                        |
+| `settings`      | object[] | ❌   | 每个 Dashboard 实例独立的设置声明                              |
+| `refreshPolicy` | object   | ❌   | 宿主管理的刷新策略                                             |
 
 顶层 `settings` 是整个 Tapp 共用的全局设置；`widgets[].settings` 是 Dashboard 实例设置。
 刷新默认事件驱动，当前 Widget 用 `Tapp.widget.invalidate()` 请求刷新；可选 interval 只在
