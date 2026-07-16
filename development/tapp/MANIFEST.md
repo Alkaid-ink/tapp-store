@@ -66,7 +66,7 @@ Manifest 使用严格字段校验；未声明或已移除的字段会使安装�
   "hasPage": true,
   "homepage": "https://example.com",
   "repository": "https://github.com/example/my-tapp",
-  "minSystemVersion": "0.2.0",
+  "minSystemVersion": "0.2.1",
   "apis": {
     "weather": {
       "type": "http",
@@ -474,6 +474,41 @@ const response = await Tapp.api("data", { region: "jp" });
 每个方向最多 32 条；`maxBytes` 为 1–524288，`maxRecords` 为 1–10000。响应必须匹配内联
 JSON schema。Grant 只保留在宿主和后端，完成、失败、拒绝、runtime 销毁或超时都会失效，
 不会进入 Tapp iframe。
+
+## AI、Event 与 Agent Interaction 声明
+
+```json
+{
+  "permissions": ["ai:generate", "event:publish", "event:subscribe"],
+  "ai": {
+    "protocolVersion": 2,
+    "operations": ["generate", "chat"],
+    "modelTier": "standard",
+    "contextSources": ["platform", "report", "profile", "custom"],
+    "outputFormats": ["text", "json"]
+  },
+  "events": {
+    "publish": ["tapp.com.example.my-tapp.status.changed"],
+    "subscribe": ["system.theme.changed"]
+  },
+  "agent": {
+    "protocolVersion": 2,
+    "interactions": [
+      {
+        "type": "report.compose",
+        "inputSchema": "schemas/report-input.json",
+        "resultSchema": "schemas/report-result.json"
+      }
+    ],
+    "intents": ["ui.open", "report.create", "dataExchange.request"]
+  }
+}
+```
+
+- AI operation 必须同时申请对应 `ai:*` 权限；模型供应商、模型名和生成参数不由 Manifest 指定；
+- publish topic 必须位于 `tapp.<当前 id>.*`，`system.*` 只能订阅并由宿主产生；
+- Agent schema 必须是安装包内 JSON 资源，禁止 `$ref`，输入和结果都由后端验证；
+- interaction type 可由应用命名；intent 只能使用上述宿主 allowlist，不能声明任意 DOM action。
 
 ## 权限列表
 

@@ -5,11 +5,13 @@
 ## 目录
 
 - [存储 API](#存储-api)
+- [跨 Tapp Data Exchange API](#跨-tapp-data-exchange-api)
 - [设置 API](#设置-api)
 - [UI API](#ui-api)
 - [动画 API](#动画-api)
 - [平台 API](#平台-api)
 - [AI API](#ai-api)
+- [Agent Interaction API](#agent-interaction-api)
 - [小组件 API](#小组件-api)
 - [报告 API](#报告-api)
 - [DOM 安全 API](#dom-安全-api)
@@ -50,8 +52,43 @@ await Tapp.storage.clear();
 
 // 获取存储使用情况
 const usage = await Tapp.storage.usage();
-// 返回: { used: 1024, quota: 5242880 } // 字节
+// 返回: { used: 1024, quota: 5242880 } // 服务端硬配额，单位字节
 ```
+
+单值最大 1 MiB，总量最大 5 MiB；总量检查与写入位于同一数据库事务，跨副本并发不能越过
+配额。需要一次读取全部数据时使用 `Tapp.storage.getAll()`，不要自行 `keys()` 后逐项 `get()`。
+
+---
+
+## 跨 Tapp Data Exchange API
+
+提供方在 `core` 注册 Manifest 中声明的 export；离开页面后仍需提供时，应同时声明对应的
+`backgroundRequirements`：
+
+```javascript
+const removeProvider = await Tapp.dataExchange.provide(
+  "playlist.current",
+  async (params, context) => {
+    console.log("本次用途", context.purpose);
+    return getCurrentPlaylist(params);
+  },
+);
+```
+
+调用方必须声明匹配 import：
+
+```javascript
+const playlist = await Tapp.dataExchange.request({
+  targetTappId: "com.example.player",
+  exportId: "playlist.current",
+  params: { fields: ["title", "artist"] },
+  purpose: "把当前播放列表加入周报",
+});
+```
+
+每次调用都显示一张宿主一次性授权弹窗，明确双方 Tapp、export、参数范围、用途、返回上限和
+倒计时；默认选择拒绝，不提供长期授权。Runtime Grant 与一次性 token 不进入 iframe。调用方
+销毁、提供方离线、超时、schema 或大小不匹配都会拒绝且不返回部分结果。
 
 ---
 
@@ -252,54 +289,51 @@ await Tapp.platform.addItems([
 
 **权限**: `ai:generate`, `ai:analyze`, `ai:chat`, `ai:image`
 
+AI 只提供服务端治理的 Task API；旧的 `generate/analyze/chat/image/getQuota/canGenerate`
+入口已删除。Manifest 必须声明 operation、model tier、context source 和 output format。
+
 ```javascript
-// AI 生成
-const response = await Tapp.ai.generate({
-  prompt: "请帮我写一段介绍",
-  context: { theme: "gaming" },
-  options: { maxTokens: 500 },
-});
-// 返回: { success: true, result: '...', usage: {...} }
-
-// AI 分析
-const analysis = await Tapp.ai.analyze({
-  data: [{ title: "Game 1" }, { title: "Game 2" }],
-  type: "summarize", // summarize | categorize | sentiment | custom
-  instruction: "自定义指令", // type 为 custom 时必填
+let task = await Tapp.ai.tasks.create({
+  version: 2,
+  operation: "generate",
+  input: { prompt: "生成一段摘要" },
+  context: [{ type: "report", reportId: 42 }],
+  output: { format: "json", schema: { type: "object" } },
+  delivery: "stream",
+  idempotencyKey: "summary-42-v1",
 });
 
-// AI 对话
-const chat = await Tapp.ai.chat(
-  [{ role: "user", content: "你好" }], // messages
-  { includePlatformStats: true }, // context (可选)
-  { maxTokens: 1000 }, // options (可选)
-);
-// 返回: {
-//   message: { role: 'assistant', content: 'AI 回复内容' },
-//   usage: { promptTokens: 50, completionTokens: 100, totalTokens: 150 },
-//   sessionId: null  // 会话 ID（可选）
-// }
-// 注意：SDK 会自动解包，直接返回上述对象，不包含外层 success 字段
-
-// AI 图片生成
-const image = await Tapp.ai.image({
-  prompt: "一只可爱的猫咪，动漫风格",
-  width: 512,
-  height: 768,
-  model: "flux-anime", // flux | flux-anime | flux-realism | flux-3d
-  enhance: true,
-  seed: 12345,
+const stop = await Tapp.ai.tasks.subscribe(task.taskId, ({ event, data }) => {
+  if (event === "delta") renderDelta(data.text);
+  if (event === "result") renderResult(data.result);
 });
-// 返回: { success: true, provider: 'pollinations', url: '...' }
 
-// 获取 AI 配额
-const quota = await Tapp.ai.getQuota();
-// 返回: { dailyCalls: 10, dailyTokens: 5000, lastReset: "..." }
-
-// 检查是否可以生成
-const canGen = await Tapp.ai.canGenerate();
-// 返回: { allowed: true, remaining: 5 }
+task = await Tapp.ai.tasks.get(task.taskId);
+await Tapp.ai.tasks.cancel(task.taskId);
+const usage = await Tapp.ai.tasks.usage();
+stop();
 ```
+
+任务绑定 subject、安装 owner 与 Tapp，最多并发 4 个，执行上限 125 秒，终态保留 15 分钟。
+并发/保留数与幂等键在跨副本事务中原子判定；相同请求不会重复执行或计费。跨 Tapp 上下文
+必须先走 Data Exchange，JSON 输出由后端按 inline schema 验证。
+
+---
+
+## Agent Interaction API
+
+```javascript
+const off = Tapp.agent.onInteraction("report.compose", async (interaction) => {
+  await interaction.accept();
+  const report = await buildReport(interaction.input);
+  await interaction.submitResult({ data: report, summary: "报告已生成" });
+});
+```
+
+只有接受 interaction 的 runtime 能提交结果。输入和结果按 Manifest schema 校验，5 分钟截止；
+到期由共享 CAS worker 转为 `expired` 并恢复原 Agent Executor，而不是直接删除后留下等待任务。
+`requestIntent()` 只支持 `ui.open`、`report.create`、`dataExchange.request` 宿主 adapter；跨
+Tapp 数据仍由 Data Exchange 显示唯一的一次性授权弹窗。
 
 ---
 
@@ -677,25 +711,24 @@ const shortcuts = await Tapp.shortcut.list();
 **权限**: `event:subscribe`, `event:publish`
 
 ```javascript
-// 订阅事件
-await Tapp.event.subscribe(["user:login", "platform:sync"]);
-
-// 监听事件
-const unsubscribe = Tapp.event.on("user:login", (payload) => {
-  console.log("用户登录:", payload.username);
-});
-
-// 发布事件（需要 event:publish）
-await Tapp.event.publish(
-  "my-event",
-  { message: "Hello!" },
-  "broadcast", // broadcast | self | tappId
+// 订阅范围来自 Manifest events.subscribe，运行期只注册回调。
+const unsubscribe = Tapp.event.on(
+  "tapp.com.example.player.track.changed",
+  (event) => console.log(event.payload),
 );
 
-// 取消订阅
-await Tapp.event.unsubscribe(["user:login"]);
+await Tapp.event.publish({
+  topic: "tapp.com.example.my-tapp.status.changed",
+  scope: "owner",
+  payload: { status: "changed", revision: 3 },
+  dedupeKey: "status-revision-3",
+});
 unsubscribe();
 ```
+
+Event Broker 只提供在线 at-most-once 交付：`instance` 发给当前 runtime，`owner` 发给同一
+subject 下 Manifest 明确订阅的在线 Tapp。它没有 ACK、重试和离线积压；owner payload 只能是
+8 KiB 内的浅层状态元数据，跨 Tapp 正文必须使用 Data Exchange。`system.*` 仅由宿主发布。
 
 ---
 
@@ -712,7 +745,7 @@ await Tapp.background.release("sync");
 
 // 获取当前所有后台需求
 const requirements = await Tapp.background.list();
-// 返回: ['widget', 'sync']
+// 返回: ['scheduler', 'sync']
 
 // 检查是否有特定后台需求
 const hasSync = await Tapp.background.has("sync");
