@@ -1,7 +1,7 @@
 {
   "id": "com.myriad.config-generator",
   "name": "Myriad 安装配置生成",
-  "version": "1.1.0",
+  "version": "1.0.0",
   "minSystemVersion": "0.2.1",
   "description": "生成 hardened 生产 Compose（docker-guard + updater-gateway）、.env 与 Nginx",
   "category": "developer",

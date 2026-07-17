@@ -1,7 +1,7 @@
 {
   "$schema": "https://myriad.app/schemas/tapp-store-v1.json",
   "name": "Myriad Official Tapp Store",
-  "version": "1.8.5",
+  "version": "1.8.4",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
   "updated_at": "2026-07-17T07:06:00Z",
@@ -100,7 +100,7 @@
     {
       "id": "com.myriad.config-generator",
       "name": "Myriad 安装配置生成",
-      "version": "1.1.0",
+      "version": "1.0.0",
       "description": "生成 hardened 生产 Compose（docker-guard + updater-gateway）、.env 与 Nginx",
       "long_description": "输入域名、数据库与资源设置，生成与官方生产拓扑一致的 docker-compose（三网络、docker-guard、updater-gateway）、含 UPDATE_TOKEN / UPDATER_GATEWAY_SECRET 的 .env、外层 Nginx 与部署说明，可直接用于 1Panel。",
       "author": {

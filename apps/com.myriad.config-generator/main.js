@@ -1,4 +1,4 @@
-// Myriad Config Generator v1.1.0
+// Myriad Config Generator v1.0.0
 // 生成 hardened 生产部署配置（docker-guard + updater-gateway + 三网络）
 // 对齐 Myriad docker-compose.yml / .env.production.example / docs/updater-spec.md
 // 镜像 tag 在运行时从 Docker Hub 解析最新 versioned 标签（禁止 :latest）
@@ -10,7 +10,7 @@
 // 与官方 docker-compose.yml 对齐：proxy 唯一宿主端口、pgdata bind mount、
 // docker-guard（唯一持有 docker.sock）、updater-gateway、三网络隔离、
 // backend 不持有 UPDATE_TOKEN，镜像 tag 由 .env 中 MYRIAD_TAG/PROXY_TAG/UPDATER_TAG 驱动。
-var DOCKER_COMPOSE_TEMPLATE = `# Myriad Docker Compose (v1.1 — hardened: proxy + docker-guard + updater-gateway)
+var DOCKER_COMPOSE_TEMPLATE = `# Myriad Docker Compose (hardened: proxy + docker-guard + updater-gateway)
 # 由 Myriad 安装配置生成器生成
 #
 # 架构:
