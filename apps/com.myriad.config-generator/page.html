@@ -1,4 +1,4 @@
-<!-- Myriad Config Generator Page v1.0.0 -->
+<!-- Myriad Config Generator Page v1.1.0 -->
 
 <!-- 背景层 -->
 <div id="tapp-background">
@@ -35,8 +35,8 @@
       </span>
       <div class="section-info-content">
         <span class="section-info-title">用途</span>
-        为新的自托管 Myriad 生成启动配置、密钥、Nginx 配置和部署步骤。<br>
-        1Panel：YAML 粘到“编排”，生成的 .env 全文粘到“环境变量”。
+        为新的自托管 Myriad 生成 hardened 生产配置（proxy + docker-guard + updater-gateway、三网络隔离）、密钥、Nginx 与部署步骤。<br>
+        backend 不持有 UPDATE_TOKEN，经 updater-gateway 更新。1Panel：YAML 粘到“编排”，.env 全文粘到“环境变量”。
       </div>
     </div>
 
@@ -160,7 +160,21 @@
             </button>
           </div>
           <span class="form-hint">
-            backend 调用 updater 时使用。不要发到聊天或截图中。
+            注入 updater / updater-gateway / docker-guard。backend 进程不持有。不要发到聊天或截图中。
+          </span>
+        </div>
+        <div class="form-group">
+          <label for="updater-gateway-secret">网关共享密钥 (UPDATER_GATEWAY_SECRET)</label>
+          <div class="input-with-action">
+            <input type="text" id="updater-gateway-secret" class="form-input" placeholder="点击生成或自行填写（≥32 字符）" autocomplete="off">
+            <button type="button" id="gen-updater-gateway-secret" class="btn-generate" title="生成 UPDATER_GATEWAY_SECRET">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>
+              </svg>
+            </button>
+          </div>
+          <span class="form-hint">
+            backend ↔ updater-gateway 共享密钥。泄露仍可能经 gateway 驱动更新，请与 UPDATE_TOKEN 同等保管。
           </span>
         </div>
       </section>
@@ -255,7 +269,7 @@
                 <option value="off">off — 不验证（仅兼容无签名旧 release）</option>
               </select>
               <span class="form-hint">
-                strict 最安全；只有旧版本没有签名时才降级。
+                strict 最安全；off 时 .env 会注明双钥匙（UPDATER_ALLOW_INSECURE_COSIGN / COSIGN_INSECURE_OK）。
               </span>
             </div>
           </div>
@@ -290,7 +304,7 @@
             </span>
             <div class="section-warning-content">
               <span class="section-warning-title">内网端口（固定，不要映射到公网）</span>
-              frontend <code>1102</code> · backend <code>1103</code> · updater <code>1101</code> · postgres <code>5432</code>
+              frontend <code>1102</code> · backend <code>1103</code> · updater <code>1101</code> · updater-gateway <code>1104</code> · docker-guard <code>2375</code> · postgres <code>5432</code>
             </div>
           </div>
 
