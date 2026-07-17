@@ -1463,8 +1463,8 @@ function generateConfigs() {
     '@postgres:5432/' + encodeURIComponent(state.dbName);
 
   var cosignInsecureHint = state.cosignVerify === 'off'
-    ? '# COSIGN_VERIFY=off 时需双钥匙确认（二选一取消注释）：\n# UPDATER_ALLOW_INSECURE_COSIGN=true\n# COSIGN_INSECURE_OK=true'
-    : '# COSIGN_VERIFY=off 时的双钥匙确认（默认不要设置；二选一即可）：\n# UPDATER_ALLOW_INSECURE_COSIGN=true\n# COSIGN_INSECURE_OK=true';
+    ? '# off 需二选一：UPDATER_ALLOW_INSECURE_COSIGN=true 或 COSIGN_INSECURE_OK=true\nUPDATER_ALLOW_INSECURE_COSIGN=true'
+    : '# off 时取消注释其一：\n# UPDATER_ALLOW_INSECURE_COSIGN=true\n# COSIGN_INSECURE_OK=true';
 
   var map = {
     DB_VERSION: state.dbVersion,
