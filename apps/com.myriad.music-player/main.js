@@ -287,7 +287,8 @@ var pageState = {
   currentLyricIndex: -1,
   // 逐字歌词（yrc）：与 lyrics 行一一对应，含每行 words
   verbatimLyrics: [],
-  lyricsSongId: null,      // 已加载逐字歌词对应的歌曲 id
+  lyricsSongId: null,      // 已成功加载并展示的歌词所属歌曲 id
+  lyricsRequestGen: 0,     // 歌词请求代数：快速切歌时丢弃过期 getLyrics 回包
   // 歌词翻译（随 getLyrics 各行 translation 字段带回；Phase 1 仅网易中文源）
   hasTranslation: false,   // 当前歌曲是否有翻译数据
   transLang: '',           // 翻译语言（'zh' | ''）
@@ -1656,21 +1657,34 @@ function ensureLyricWordLoop() {
 // 为指定曲目加载逐字歌词（切歌时调用）
 function loadLyricsForTrack(track) {
   if (!track || !track.id) return;
-  if (pageState.lyricsSongId === track.id) return; // 已加载
+  // 已成功加载本曲且仍有内容：跳过
+  if (pageState.lyricsSongId === track.id && pageState.lyrics && pageState.lyrics.length > 0) {
+    return;
+  }
   // 防御旧版 SDK（前端 bundle 未更新时 getLyrics 不存在）：优雅回退逐行
   if (!Tapp.media || typeof Tapp.media.getLyrics !== 'function') {
     console.warn('[music-player] Tapp.media.getLyrics 不可用（前端 SDK 需重新构建/刷新），回退逐行歌词');
     return;
   }
-  pageState.lyricsSongId = track.id;
+
+  // 用代数丢弃过期请求；不要在请求发出前就把 lyricsSongId 标成新曲——
+  // 否则 handleStateChange 会误以为「本曲歌词已就绪」而不清空上一首的展示。
+  var requestGen = ++pageState.lyricsRequestGen;
+  var trackId = track.id;
+
   Tapp.media.getLyrics({ songId: track.id, source: track.source }).then(function(res) {
     try { console.debug('[music-player] getLyrics', track.id, 'verbatim=', res && res.verbatim ? res.verbatim.length : 0, 'lines=', res && res.lines ? res.lines.length : 0); } catch (e) {}
+    // 过期请求 / 当前曲已不是目标曲：丢弃
+    if (requestGen !== pageState.lyricsRequestGen) return;
+    var currentId = pageState.status && pageState.status.currentTrack
+      ? pageState.status.currentTrack.id
+      : null;
+    if (currentId != null && String(currentId) !== String(trackId)) return;
+
     if (!res) {
-      // 无效回包：撤销标记，下一次状态事件自动重试（否则该曲逐字永久失效）
-      if (pageState.lyricsSongId === track.id) pageState.lyricsSongId = null;
+      // 无效回包：允许后续状态事件重试
       return;
     }
-    if (pageState.lyricsSongId !== track.id) return; // 期间已切歌，丢弃
 
     var verbatim = (res.verbatim && res.verbatim.length) ? res.verbatim : [];
     if (verbatim.length > 0) {
@@ -1682,6 +1696,9 @@ function loadLyricsForTrack(track) {
       pageState.verbatimLyrics = [];
       if (res.lines && res.lines.length) pageState.lyrics = res.lines;
     }
+
+    // 成功应用后再标记归属，避免「标记已是新曲、内容仍是旧曲」
+    pageState.lyricsSongId = trackId;
 
     // 翻译可用性（各行 translation 已由桥接层按时间对齐嵌入）
     pageState.hasTranslation = !!res.hasTranslation;
@@ -1700,11 +1717,11 @@ function loadLyricsForTrack(track) {
       ensureLyricWordLoop();
     }
   }).catch(function() {
-    // 逐字失败：保持逐行兜底，并撤销标记允许重试
+    if (requestGen !== pageState.lyricsRequestGen) return;
+    // 逐字失败：保持逐行兜底，允许重试
     pageState.verbatimLyrics = [];
     pageState.hasTranslation = false;
     syncLyricTransUI();
-    if (pageState.lyricsSongId === track.id) pageState.lyricsSongId = null;
   });
 }
 
@@ -2583,19 +2600,29 @@ function updatePlayerUI(status) {
     applyLyricReadableColors();
   }
   
-  // 封面
+  // 封面（带 track 归属：快速切歌时丢弃过期 onload / onerror）
   var coverEl = $('album-cover');
   var coverPlaceholder = $('cover-placeholder');
+  var coverTrackKey = track ? String(track.id) : '';
   if (coverEl && coverPlaceholder) {
     if (coverUrl) {
-      coverEl.src = coverUrl;
+      coverEl.setAttribute('data-track-id', coverTrackKey);
+      // 仅在 URL 变化时重载，避免同曲状态事件反复触发闪烁
+      if (coverEl.getAttribute('data-src') !== coverUrl) {
+        coverEl.setAttribute('data-src', coverUrl);
+        coverEl.src = coverUrl;
+      }
       coverEl.style.display = 'block';
       coverPlaceholder.style.display = 'none';
       coverEl.onerror = function() {
+        if (coverEl.getAttribute('data-track-id') !== coverTrackKey) return;
         coverEl.style.display = 'none';
         coverPlaceholder.style.display = 'flex';
       };
     } else {
+      coverEl.removeAttribute('data-track-id');
+      coverEl.removeAttribute('data-src');
+      coverEl.removeAttribute('src');
       coverEl.style.display = 'none';
       coverPlaceholder.style.display = 'flex';
     }
@@ -2915,6 +2942,36 @@ async function initPage() {
     var significantChange = hasSignificantChange(state);
 
     normalizeMediaState(state);
+
+    var prevTrackId = lastStateSnapshot.trackId;
+    var nextTrackId = state.currentTrack ? state.currentTrack.id : null;
+    var trackChanged = String(prevTrackId || '') !== String(nextTrackId || '');
+
+    // 切歌：立刻作废进行中的歌词请求，并清空上一首展示，避免「标题 B / 歌词 A」
+    if (trackChanged) {
+      significantChange = true;
+      pageState.lyricsRequestGen++;
+      pageState.verbatimLyrics = [];
+      pageState.lastKaraokeLine = -1;
+      pageState.hasTranslation = false;
+      // 仅当已展示歌词不属于新曲时清空（自载成功且 id 匹配则保留）
+      if (pageState.lyricsSongId == null ||
+          String(pageState.lyricsSongId) !== String(nextTrackId || '')) {
+        pageState.lyricsSongId = null;
+        // 宿主若已带来新曲歌词则用它，否则清空等待 getLyrics
+        if (state.lyrics && state.lyrics.length > 0) {
+          pageState.lyrics = state.lyrics;
+          pageState.currentLyricIndex =
+            typeof state.currentLyricIndex === 'number' ? state.currentLyricIndex : -1;
+        } else {
+          pageState.lyrics = [];
+          pageState.currentLyricIndex = -1;
+        }
+        renderLyrics(pageState.lyrics, pageState.currentLyricIndex);
+        syncLyricTransUI();
+      }
+    }
+
     pageState.status = state;
     
     // 只在关键变化时更新完整UI
@@ -2934,14 +2991,20 @@ async function initPage() {
     // 列表均衡器频谱循环（播放中启动，自动随暂停停止）
     ensureEqLoop();
 
-    // 切歌：加载新曲的逐字歌词 + 节拍网格（内部均按 id 去重）
+    // 切歌 / 缺词：加载新曲的逐字歌词 + 节拍网格
     if (state.currentTrack && state.currentTrack.id !== pageState.lyricsSongId) {
-      pageState.verbatimLyrics = [];
       loadLyricsForTrack(state.currentTrack);
     }
     if (state.currentTrack) loadBeatGridForTrack(state.currentTrack);
 
-    if (pageState.verbatimLyrics.length > 0) {
+    // 歌词内容必须与当前曲一致才推进高亮；否则只等加载完成
+    var lyricsBelongToCurrent = !!(
+      state.currentTrack &&
+      pageState.lyricsSongId != null &&
+      String(pageState.lyricsSongId) === String(state.currentTrack.id)
+    );
+
+    if (lyricsBelongToCurrent && pageState.verbatimLyrics.length > 0) {
       // 逐字模式：行渲染沿用 pageState.lyrics，仅在行切换时重渲染，字级填充走 rAF
       var vIdx = updateLyricIndex(position, pageState.lyrics);
       if (vIdx !== pageState.currentLyricIndex) {
@@ -2950,9 +3013,11 @@ async function initPage() {
       }
       updateWordHighlight(getLyricPosition());
       ensureLyricWordLoop();
-    } else {
-      // 逐行模式（兜底）- 歌词数据在 state.lyrics 中
-      var lyrics = state.lyrics || [];
+    } else if (lyricsBelongToCurrent || (state.lyrics && state.lyrics.length > 0)) {
+      // 逐行模式（兜底）- 优先自载歌词，否则用 state.lyrics
+      var lyrics = lyricsBelongToCurrent
+        ? pageState.lyrics
+        : (state.lyrics || []);
       var currentLyricIdx = updateLyricIndex(position, lyrics);
 
       if (lyrics.length > 0) {
@@ -2960,16 +3025,22 @@ async function initPage() {
         if (!pageState.lyrics || pageState.lyrics.length !== lyrics.length ||
             (pageState.lyrics[0] && lyrics[0] && pageState.lyrics[0].text !== lyrics[0].text)) {
           pageState.lyrics = lyrics;
+          if (!lyricsBelongToCurrent && state.currentTrack) {
+            // 宿主下发的逐行歌词：标记归属，避免被当作「旧曲残留」
+            pageState.lyricsSongId = state.currentTrack.id;
+          }
           renderLyrics(lyrics, currentLyricIdx);
         } else if (currentLyricIdx !== pageState.currentLyricIndex) {
           // 只更新当前歌词高亮
           pageState.currentLyricIndex = currentLyricIdx;
           renderLyrics(lyrics, currentLyricIdx);
         }
-      } else if (pageState.lyrics && pageState.lyrics.length > 0 &&
-                 !(state.currentTrack && state.currentTrack.id === pageState.lyricsSongId)) {
-        // 歌词清空了。但本曲歌词若是 tapp 自己加载的（lyricsSongId 匹配）则不清：
-        // 状态事件缺 lyrics 字段（部分派发）不代表歌词消失，自载数据是权威
+      }
+    } else if (pageState.lyrics && pageState.lyrics.length > 0 && !lyricsBelongToCurrent) {
+      // 无归属歌词且宿主也未下发：保持切歌时已清空的状态，避免旧词残留
+      if (trackChanged) {
+        // 已在上面清空
+      } else if (!(state.currentTrack && state.currentTrack.id === pageState.lyricsSongId)) {
         pageState.lyrics = [];
         pageState.currentLyricIndex = -1;
         renderLyrics([], -1);
