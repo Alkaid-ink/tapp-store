@@ -731,6 +731,7 @@ async function initWidget() {
 
   renderWidgetNotes(size);
 
+  // Composer only on 4x4 (#widget-input / #widget-add); 4x2 is view-only
   var addBtn = document.getElementById('widget-add');
   var input = document.getElementById('widget-input');
 
@@ -816,8 +817,8 @@ function renderWidgetNotes(size) {
     return;
   }
 
-  // 4x2: glanceable strip (~3–4); 4x4: mini board (~6)
-  var maxDisplay = size === '4x4' ? 6 : 4;
+  // 4x2 view-only strip + 4x4 board: up to 6 items (2-col)
+  var maxDisplay = 6;
   var isBoard = size === '4x4';
   var sorted = sortNotesList(widgetState.notes, widgetState.settings.sortOrder);
   var displayNotes = sorted.slice(0, maxDisplay);
