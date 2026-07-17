@@ -3,7 +3,7 @@
   "name": "Myriad 安装配置生成",
   "version": "1.0.0",
   "minSystemVersion": "0.2.1",
-  "description": "生成 hardened 生产 Compose（docker-guard + updater-gateway）、.env 与 Nginx",
+  "description": "生成 Compose、.env 与 Nginx 部署配置",
   "category": "developer",
   "main": "main.js",
   "author": {

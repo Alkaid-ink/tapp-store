@@ -101,8 +101,8 @@
       "id": "com.myriad.config-generator",
       "name": "Myriad 安装配置生成",
       "version": "1.0.0",
-      "description": "生成 hardened 生产 Compose（docker-guard + updater-gateway）、.env 与 Nginx",
-      "long_description": "输入域名、数据库与资源设置，生成与官方生产拓扑一致的 docker-compose（三网络、docker-guard、updater-gateway）、含 UPDATE_TOKEN / UPDATER_GATEWAY_SECRET 的 .env、外层 Nginx 与部署说明，可直接用于 1Panel。",
+      "description": "生成 Compose、.env 与 Nginx 部署配置",
+      "long_description": "填写域名与数据库参数，生成官方生产拓扑的 docker-compose、.env、Nginx 与部署说明（含 1Panel）。",
       "author": {
         "name": "Myriad Team",
         "url": "https://github.com/Myriad-You"

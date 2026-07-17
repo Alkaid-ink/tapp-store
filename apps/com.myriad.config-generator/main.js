@@ -1,11 +1,4 @@
-// Myriad Config Generator v1.0.0
-// 生成 hardened 生产部署配置（docker-guard + updater-gateway + 三网络）
-// 对齐 Myriad docker-compose.yml / .env.production.example / docs/updater-spec.md
-// 镜像 tag 在运行时从 Docker Hub 解析最新 versioned 标签（禁止 :latest）
-
-// ========================================
-// 配置模板（带占位符）
-// ========================================
+// Myriad Config Generator — 生产 compose / .env / Nginx
 
 var DOCKER_COMPOSE_TEMPLATE = `# Myriad
 # nets: myriad-net | myriad-admin-net | myriad-docker-guard-net(internal)
