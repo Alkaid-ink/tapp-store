@@ -293,7 +293,7 @@ var pageState = {
   hasTranslation: false,   // 当前歌曲是否有翻译数据
   transLang: '',           // 翻译语言（'zh' | ''）
   transOn: false,          // 翻译显示开关（持久化于 Tapp.storage）
-  visualFxOn: true,        // 动态视觉效果开关（持久化于 Tapp.storage，默认开）
+  visualFxOn: false,       // 动态视觉效果强制关闭（不再从 storage 恢复；开关 UI 已隐藏）
   lyricWordFrame: null,    // 逐字高亮 rAF 句柄
   lastKaraokeLine: -1,     // 上一次做逐字填充的行索引
   eqFrame: null,           // 视觉/EQ 循环 rAF 句柄
@@ -591,21 +591,16 @@ function dimAurora() {
 }
 
 function setVisualFxOn(on) {
-  var next = !!on;
+  // 产品策略：强制关闭 Aurora / 节奏涟漪 / 背景漂移；忽略传入 true
+  var next = false;
   var prev = pageState.visualFxOn;
   pageState.visualFxOn = next;
   syncVisualFxUI();
   if (prev === next) return;
-  if (!next) {
-    // 播放中途关闭：停背景漂移、清涟漪、熄 Aurora
-    stopBackgroundAnimation();
-    clearRhythmRipples();
-    dimAurora();
-  } else if (pageState.status && pageState.status.isPlaying && shouldAnimate()) {
-    // 播放中途打开：重同步拍点索引（关 FX 时未逐帧 gridTick）+ 重启背景漂移
-    resyncBeatGridIdx();
-    startBackgroundAnimation();
-  }
+  // 关闭时：停背景漂移、清涟漪、熄 Aurora
+  stopBackgroundAnimation();
+  clearRhythmRipples();
+  dimAurora();
   syncFxCompositing();
   // 调度模式随 FX 切换（60fps ↔ 低帧率维护），立即取消旧句柄并重入
   if (pageState.status && pageState.status.isPlaying) restartEqLoop();
@@ -3267,16 +3262,7 @@ function bindControls() {
     });
   }
 
-  // 动态视觉效果开关（常显，与翻译按钮同组）
-  var visualFxBtn = document.getElementById('visual-fx-btn');
-  if (visualFxBtn) {
-    addClickHandler(visualFxBtn, function() {
-      setVisualFxOn(!pageState.visualFxOn);
-      if (Tapp.storage && Tapp.storage.set) {
-        Tapp.storage.set('visualFxOn', pageState.visualFxOn).catch(function() {});
-      }
-    });
-  }
+  // 动态视觉效果开关已强制关闭并隐藏；保留 DOM 路径但不绑定切换
   
   // 窗口大小变化时重置状态 - 使用节流（统一处理所有 resize 逻辑）
   var resizeTimeout = null;
@@ -4413,19 +4399,15 @@ function cleanup() {
         // 应用初始主题（深色/浅色模式）
         applyTheme(results[1]);
         
+        // 动效强制关闭（不从 storage 恢复 true）；须在 initPage 前挂上 visual-fx-off
+        setVisualFxOn(false);
+
         await initPage();
 
-        // 同步动效按钮文案/高亮（默认开；storage 再覆盖）
-        syncVisualFxUI();
-
-        // 恢复翻译 / 动效开关偏好（持久化；storage 权限已在 manifest 声明）
+        // 恢复翻译开关偏好（持久化；storage 权限已在 manifest 声明）
         if (Tapp.storage && Tapp.storage.get) {
           Tapp.storage.get('lyricTransOn').then(function(v) {
             if (v === true || v === 'true') setLyricTransOn(true);
-          }).catch(function() {});
-          Tapp.storage.get('visualFxOn').then(function(v) {
-            // 默认 true；仅显式 false 时关闭
-            if (v === false || v === 'false') setVisualFxOn(false);
           }).catch(function() {});
         }
 
