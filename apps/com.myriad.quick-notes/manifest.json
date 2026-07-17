@@ -3,7 +3,7 @@
   "name": "便携便签",
   "version": "1.0.0",
   "minSystemVersion": "0.2.1",
-  "description": "简单高效的笔记工具，快速记录想法和灵感",
+  "description": "快速记录想法，支持搜索与主页小组件",
   "category": "productivity",
   "main": "main.js",
   "author": {
@@ -28,7 +28,7 @@
     {
       "id": "notes",
       "name": "便签",
-      "description": "快速查看和添加笔记",
+      "description": "主页速览便签，并支持直接速记",
       "icon": "note",
       "defaultSize": "4x2",
       "sizes": ["4x2", "4x4"],
