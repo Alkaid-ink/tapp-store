@@ -340,7 +340,6 @@ var DEFAULT_NGINX_TEMPLATE = `server {
     access_log /www/sites/{{MAIN_DOMAIN}}/log/access.log main;
     error_log /www/sites/{{MAIN_DOMAIN}}/log/error.log;
 
-    # 全部走 Myriad proxy
     location / {
         proxy_pass http://127.0.0.1:{{HTTP_PORT}};
 
@@ -825,7 +824,6 @@ async function refreshLatestTags(inputs, channelSelect, opts) {
 function buildNginxProxyLocation(httpPort, indent) {
   var childIndent = indent + '    ';
   return [
-    indent + '# → Myriad proxy',
     indent + 'location / {',
     childIndent + 'proxy_pass http://127.0.0.1:' + httpPort + ';',
     '',
