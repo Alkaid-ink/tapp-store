@@ -215,6 +215,177 @@ function t(key) {
 // 工具函数
 // ========================================
 
+var SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** Stroke/fill icon path defs (24×24). Keys used by createSvgIcon. */
+var SVG_ICON_DEFS = {
+  note: {
+    paths: [
+      'M8 2v3M16 2v3M3 9h18',
+      'M21 8.5V17c0 3-1.5 5-5 5H8c-3.5 0-5-2-5-5V8.5c0-3 1.5-5 5-5h8c3.5 0 5 2 5 5z',
+      'M8 14h4M8 18h8'
+    ]
+  },
+  search: {
+    circles: [{ cx: 11, cy: 11, r: 8 }],
+    paths: ['M21 21l-4.35-4.35']
+  },
+  pin: {
+    // Pushpin — readable at 10–12px badge sizes
+    strokeWidth: '2',
+    paths: [
+      'M12 17v5',
+      'M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z'
+    ]
+  },
+  pinOff: {
+    strokeWidth: '2',
+    paths: [
+      'M12 17v5',
+      'M15 9.34V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H7.89',
+      'M2 2l20 20',
+      'M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h11'
+    ]
+  },
+  copy: {
+    paths: [
+      'M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2',
+      'M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z'
+    ]
+  },
+  expand: {
+    paths: [
+      'M15 3h6v6',
+      'M9 21H3v-6',
+      'M21 3l-7 7',
+      'M3 21l7-7'
+    ]
+  },
+  edit: {
+    paths: [
+      'M12 20h9',
+      'M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z'
+    ]
+  },
+  delete: {
+    paths: [
+      'M3 6h18',
+      'M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2',
+      'M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6',
+      'M10 11v6M14 11v6'
+    ]
+  },
+  close: {
+    paths: ['M18 6L6 18M6 6l12 12']
+  },
+  more: {
+    fill: true,
+    circles: [
+      { cx: 5, cy: 12, r: 1.8 },
+      { cx: 12, cy: 12, r: 1.8 },
+      { cx: 19, cy: 12, r: 1.8 }
+    ]
+  },
+  export: {
+    paths: [
+      'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4',
+      'M17 8l-5-5-5 5',
+      'M12 3v12'
+    ]
+  },
+  import: {
+    paths: [
+      'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4',
+      'M7 10l5 5 5-5',
+      'M12 15V3'
+    ]
+  },
+  clear: {
+    paths: [
+      'M3 6h18',
+      'M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2',
+      'M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6'
+    ]
+  },
+  color: {
+    paths: [
+      'M12 3a9 9 0 1 0 0 18c.8 0 1.4-.6 1.4-1.3 0-.4-.15-.7-.35-1-.2-.3-.35-.65-.35-1.05A1.5 1.5 0 0 1 14.2 16H16a5 5 0 0 0 0-10h-.5'
+    ],
+    circles: [
+      { cx: 7.5, cy: 11.5, r: 1.2, fill: true },
+      { cx: 10.5, cy: 8, r: 1.2, fill: true },
+      { cx: 14.5, cy: 8, r: 1.2, fill: true }
+    ]
+  },
+  add: {
+    paths: ['M12 5v14M5 12h14']
+  },
+  plus: {
+    paths: ['M12 5v14M5 12h14']
+  },
+  check: {
+    paths: ['M20 6L9 17l-5-5']
+  }
+};
+
+/**
+ * Create a decorative SVG icon element (aria-hidden).
+ * @param {string} name - key in SVG_ICON_DEFS
+ * @param {number} [size=16]
+ * @returns {SVGElement}
+ */
+function createSvgIcon(name, size) {
+  size = size == null ? 16 : size;
+  var def = SVG_ICON_DEFS[name] || SVG_ICON_DEFS.note;
+  var svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('width', String(size));
+  svg.setAttribute('height', String(size));
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+  svg.setAttribute('class', 'svg-icon svg-icon-' + name);
+
+  if (def.fill) {
+    svg.setAttribute('fill', 'currentColor');
+  } else {
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', def.strokeWidth || '1.75');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+  }
+
+  var i;
+  var paths = def.paths || [];
+  for (i = 0; i < paths.length; i++) {
+    var path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', paths[i]);
+    if (def.fill) path.setAttribute('fill', 'currentColor');
+    svg.appendChild(path);
+  }
+
+  var circles = def.circles || [];
+  for (i = 0; i < circles.length; i++) {
+    var c = circles[i];
+    var circle = document.createElementNS(SVG_NS, 'circle');
+    circle.setAttribute('cx', String(c.cx));
+    circle.setAttribute('cy', String(c.cy));
+    circle.setAttribute('r', String(c.r));
+    if (def.fill || c.fill) {
+      circle.setAttribute('fill', 'currentColor');
+      if (!def.fill) circle.setAttribute('stroke', 'none');
+    }
+    svg.appendChild(circle);
+  }
+
+  return svg;
+}
+
+/** Alias for createSvgIcon */
+function svgIcon(name, size) {
+  return createSvgIcon(name, size);
+}
+
 function generateNoteId() {
   return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 }
@@ -621,7 +792,7 @@ function renderWidgetNotes(size) {
     empty.className = 'notes-empty';
     var emptyIcon = document.createElement('span');
     emptyIcon.className = 'empty-icon';
-    emptyIcon.textContent = '📝';
+    emptyIcon.appendChild(createSvgIcon('note', 28));
     var emptyText = document.createElement('span');
     emptyText.className = 'empty-text';
     emptyText.textContent = t('emptyTitle');
@@ -646,9 +817,9 @@ function renderWidgetNotes(size) {
     if (note.pinned) {
       var pinBadge = document.createElement('span');
       pinBadge.className = 'note-pin-badge';
-      pinBadge.textContent = '📌';
       pinBadge.title = t('pinned');
       pinBadge.setAttribute('aria-label', t('pinned'));
+      pinBadge.appendChild(createSvgIcon('pin', 10));
       content.appendChild(pinBadge);
     }
 
@@ -667,9 +838,9 @@ function renderWidgetNotes(size) {
     var deleteBtn = document.createElement('button');
     deleteBtn.className = 'note-delete';
     deleteBtn.type = 'button';
-    deleteBtn.textContent = '×';
     deleteBtn.title = t('delete');
     deleteBtn.setAttribute('aria-label', t('delete'));
+    deleteBtn.appendChild(createSvgIcon('close', 14));
     deleteBtn.addEventListener('click', function(e) {
       e.stopPropagation();
       deleteWidgetNote(note.id, size);
@@ -928,7 +1099,7 @@ function renderEmptyState(area, isSearch) {
 
   var icon = document.createElement('div');
   icon.className = 'empty-icon';
-  icon.textContent = isSearch ? '🔍' : '📝';
+  icon.appendChild(createSvgIcon(isSearch ? 'search' : 'note', 40));
 
   var title = document.createElement('div');
   title.className = 'empty-title';
@@ -1139,9 +1310,9 @@ function renderPageNotes() {
     if (note.pinned) {
       var pinMark = document.createElement('span');
       pinMark.className = 'sticky-pin-mark';
-      pinMark.textContent = '📌';
       pinMark.title = t('pinned');
       pinMark.setAttribute('aria-label', t('pinned'));
+      pinMark.appendChild(createSvgIcon('pin', 12));
       sticky.appendChild(pinMark);
     }
 
@@ -1228,7 +1399,10 @@ function renderExpandOverlay() {
   if (note.pinned) {
     var pin = document.createElement('span');
     pin.className = 'note-expand-pin';
-    pin.textContent = '📌 ' + t('pinned');
+    pin.appendChild(createSvgIcon('pin', 12));
+    var pinLabel = document.createElement('span');
+    pinLabel.textContent = t('pinned');
+    pin.appendChild(pinLabel);
     headerLeft.appendChild(pin);
   }
   if (pageState.settings.showTimestamp) {
@@ -1241,9 +1415,9 @@ function renderExpandOverlay() {
   var closeBtn = document.createElement('button');
   closeBtn.type = 'button';
   closeBtn.className = 'note-expand-close';
-  closeBtn.textContent = '×';
   closeBtn.title = t('close');
   closeBtn.setAttribute('aria-label', t('close'));
+  closeBtn.appendChild(createSvgIcon('close', 16));
   closeBtn.addEventListener('click', function() {
     closeNoteExpand();
   });

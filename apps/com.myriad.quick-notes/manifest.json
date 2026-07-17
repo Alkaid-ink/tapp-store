@@ -29,7 +29,7 @@
       "id": "notes",
       "name": "便签",
       "description": "快速查看和添加笔记",
-      "icon": "📝",
+      "icon": "note",
       "defaultSize": "2x2",
       "sizes": ["2x2", "4x2", "4x4"],
       "refreshPolicy": {
