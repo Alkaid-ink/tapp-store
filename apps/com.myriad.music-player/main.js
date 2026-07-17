@@ -257,10 +257,10 @@ function shouldAnimate() {
   return pageState.animConfig.shouldAnimate && pageState.animConfig.level !== 'none';
 }
 
-// 动态视觉效果是否启用：用户开关 ∧ 系统 shouldAnimate
-// 列表 EQ（updateListEq）不经此门控；歌词/UI 微动画亦不受影响
+// 动态视觉效果是否启用：用户开关 ∧ 系统 shouldAnimate ∧ 非移动端
+// 移动端强制关闭 Aurora / 涟漪 / 背景漂移；列表 EQ / 歌词微动画不经此门控
 function visualFxEnabled() {
-  return pageState.visualFxOn && shouldAnimate();
+  return pageState.visualFxOn && shouldAnimate() && !checkIsMobile();
 }
 
 // 系统动画级别为 light：降级重视觉（涟漪/背景漂移关闭，Aurora 简化）
@@ -269,9 +269,9 @@ function isAnimLight() {
   return pageState.animConfig.level === 'light';
 }
 
-// 播放中 + FX 开时挂 will-change 合成层；暂停/关 FX 时卸下以释放层
+// 播放中 + FX 有效启用时挂 will-change 合成层；暂停/关 FX/移动端时卸下
 function syncFxCompositing() {
-  var on = !!(pageState.visualFxOn && shouldAnimate() &&
+  var on = !!(visualFxEnabled() &&
     pageState.status && pageState.status.isPlaying);
   document.documentElement.classList.toggle('fx-compositing', on);
 }
@@ -293,7 +293,7 @@ var pageState = {
   hasTranslation: false,   // 当前歌曲是否有翻译数据
   transLang: '',           // 翻译语言（'zh' | ''）
   transOn: false,          // 翻译显示开关（持久化于 Tapp.storage）
-  visualFxOn: true,        // 动态视觉效果开关（持久化于 Tapp.storage，默认开）
+  visualFxOn: true,        // 动态视觉效果开关（持久化于 Tapp.storage，默认开；移动端运行时强制 off）
   lyricWordFrame: null,    // 逐字高亮 rAF 句柄
   lastKaraokeLine: -1,     // 上一次做逐字填充的行索引
   eqFrame: null,           // 视觉/EQ 循环 rAF 句柄
@@ -559,12 +559,15 @@ function setLyricTransOn(on) {
 function syncVisualFxUI() {
   var btn = $('visual-fx-btn');
   if (btn) {
+    // 按钮态反映用户偏好（桌面可点）；移动端按钮由 CSS 隐藏
     btn.classList.toggle('active', pageState.visualFxOn);
     btn.title = t('visualFx');
     btn.setAttribute('aria-label', t('visualFx'));
     btn.setAttribute('aria-pressed', pageState.visualFxOn ? 'true' : 'false');
   }
-  document.documentElement.classList.toggle('visual-fx-off', !pageState.visualFxOn);
+  // 移动端始终挂 visual-fx-off；桌面按用户偏好
+  var effectiveOn = pageState.visualFxOn && !checkIsMobile();
+  document.documentElement.classList.toggle('visual-fx-off', !effectiveOn);
 }
 
 // 清除进行中的节奏涟漪动画
@@ -596,18 +599,45 @@ function setVisualFxOn(on) {
   pageState.visualFxOn = next;
   syncVisualFxUI();
   if (prev === next) return;
-  if (!next) {
-    // 播放中途关闭：停背景漂移、清涟漪、熄 Aurora
+  // 移动端仅更新偏好与 UI 类；运行时 FX 始终关
+  if (checkIsMobile() || !next) {
     stopBackgroundAnimation();
     clearRhythmRipples();
     dimAurora();
   } else if (pageState.status && pageState.status.isPlaying && shouldAnimate()) {
-    // 播放中途打开：重同步拍点索引（关 FX 时未逐帧 gridTick）+ 重启背景漂移
+    // 桌面打开：重同步拍点 + 重启背景漂移
     resyncBeatGridIdx();
     startBackgroundAnimation();
   }
   syncFxCompositing();
   // 调度模式随 FX 切换（60fps ↔ 低帧率维护），立即取消旧句柄并重入
+  if (pageState.status && pageState.status.isPlaying) restartEqLoop();
+}
+
+// 视口跨移动/桌面边界时：移动强制收敛 FX；桌面按偏好恢复
+var lastVisualFxMobile = null;
+function applyVisualFxViewportPolicy() {
+  var mobile = checkIsMobile();
+  if (lastVisualFxMobile === mobile) {
+    syncVisualFxUI();
+    return;
+  }
+  lastVisualFxMobile = mobile;
+  syncVisualFxUI();
+  if (mobile) {
+    stopBackgroundAnimation();
+    clearRhythmRipples();
+    dimAurora();
+    syncFxCompositing();
+    if (pageState.status && pageState.status.isPlaying) restartEqLoop();
+    return;
+  }
+  // 切回桌面：按用户偏好恢复
+  if (pageState.visualFxOn && pageState.status && pageState.status.isPlaying && shouldAnimate()) {
+    resyncBeatGridIdx();
+    startBackgroundAnimation();
+  }
+  syncFxCompositing();
   if (pageState.status && pageState.status.isPlaying) restartEqLoop();
 }
 
@@ -3267,17 +3297,18 @@ function bindControls() {
     });
   }
 
-  // 动态视觉效果开关（常显，与翻译按钮同组）
+  // 动态视觉效果开关（桌面可点；移动端 CSS 隐藏且 visualFxEnabled 强制 off）
   var visualFxBtn = document.getElementById('visual-fx-btn');
   if (visualFxBtn) {
     addClickHandler(visualFxBtn, function() {
+      if (checkIsMobile()) return;
       setVisualFxOn(!pageState.visualFxOn);
       if (Tapp.storage && Tapp.storage.set) {
         Tapp.storage.set('visualFxOn', pageState.visualFxOn).catch(function() {});
       }
     });
   }
-  
+
   // 窗口大小变化时重置状态 - 使用节流（统一处理所有 resize 逻辑）
   var resizeTimeout = null;
   window.addEventListener('resize', function() {
@@ -3291,6 +3322,8 @@ function bindControls() {
       refreshPlaylistView();
       // 歌词波浪引擎布局随尺寸重测（否则旧布局被 measured 锁死）
       relayoutLyricsIfNeeded();
+      // 移动↔桌面：强制/恢复背景特效策略
+      applyVisualFxViewportPolicy();
       // 全局移动端缓存会在 checkIsMobile 调用时自动更新
       if (!isMobile() && playerRight) {
         playerRight.classList.remove('mobile-visible');
@@ -4415,17 +4448,20 @@ function cleanup() {
         
         await initPage();
 
-        // 同步动效按钮文案/高亮（默认开；storage 再覆盖）
+        // 同步动效按钮文案/高亮；移动端再强制 visual-fx-off
         syncVisualFxUI();
+        applyVisualFxViewportPolicy();
 
         // 恢复翻译 / 动效开关偏好（持久化；storage 权限已在 manifest 声明）
+        // 桌面可读 storage；移动端偏好仍保存，但运行时 FX 强制关
         if (Tapp.storage && Tapp.storage.get) {
           Tapp.storage.get('lyricTransOn').then(function(v) {
             if (v === true || v === 'true') setLyricTransOn(true);
           }).catch(function() {});
           Tapp.storage.get('visualFxOn').then(function(v) {
-            // 默认 true；仅显式 false 时关闭
+            // 默认 true；仅显式 false 时关闭（移动端仍只更新偏好，不启 FX）
             if (v === false || v === 'false') setVisualFxOn(false);
+            else applyVisualFxViewportPolicy();
           }).catch(function() {});
         }
 

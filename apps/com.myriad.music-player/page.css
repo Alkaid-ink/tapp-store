@@ -4,7 +4,7 @@
    CSS 变量 - 动态主题色（从封面颜色同步）
    ======================================== */
 :root {
-  /* 歌词基准字号：手机 26px → 平板随宽度 → 桌面 40px（全部消费方共用此变量） */
+  /* 歌词基准字号：桌面 26→40px；移动端在 max-width:768 内覆盖加大 */
   --lyric-fs: clamp(26px, 5vw, 40px);
   /* 动态音乐颜色 - 由 JS 从播放器的封面颜色同步 */
   --music-primary: #fc3c44;
@@ -1888,6 +1888,16 @@ html, body {
    响应式设计 - 移动端优先
    ======================================== */
 @media (max-width: 768px) {
+  /* 仅移动端：歌词字号明显加大（桌面仍用 :root 原 clamp） */
+  :root {
+    --lyric-fs: clamp(34px, 5.5vw, 44px);
+  }
+
+  /* 仅移动端：隐藏动效开关（桌面保留可点） */
+  #visual-fx-btn {
+    display: none !important;
+  }
+
   #tapp-content {
     grid-template-rows: 1fr auto;
     gap: 6px;
@@ -2013,7 +2023,7 @@ html, body {
   .lyric-interlude {
     left: 12px;
     right: 12px;
-    height: calc(1.35 * var(--lyric-fs, 26px) + 16px);
+    height: calc(1.35 * var(--lyric-fs, 34px) + 16px);
     padding: 8px 6px;
   }
   
