@@ -15,7 +15,13 @@
     <!-- 浮动状态胶囊（含搜索） -->
     <header class="status-header">
       <div id="status-pill" class="status-pill">
-        <div class="status-avatar">📝</div>
+        <div class="status-avatar" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 2v3M16 2v3M3 9h18"/>
+            <path d="M21 8.5V17c0 3-1.5 5-5 5H8c-3.5 0-5-2-5-5V8.5c0-3 1.5-5 5-5h8c3.5 0 5 2 5 5z"/>
+            <path d="M8 14h4M8 18h8"/>
+          </svg>
+        </div>
         <div class="status-info">
           <span id="status-title" class="status-title"></span>
           <span id="status-subtitle" class="status-subtitle"></span>
@@ -26,7 +32,7 @@
         </div>
         <div class="status-actions">
           <button id="search-toggle" class="status-action-btn" type="button" title="Search" aria-label="Search">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="11" cy="11" r="8"/>
               <path d="M21 21l-4.35-4.35"/>
             </svg>
@@ -73,7 +79,7 @@
           </div>
         </div>
         <button id="page-send" class="page-send-btn" type="button" title="Add" aria-label="Add">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M12 5v14M5 12h14"/>
           </svg>
         </button>

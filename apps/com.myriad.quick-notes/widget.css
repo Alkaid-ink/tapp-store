@@ -206,7 +206,17 @@
 }
 
 .pill-icon {
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--notes-primary);
+  flex-shrink: 0;
+}
+
+.pill-icon svg {
+  width: 14px;
+  height: 14px;
+  display: block;
 }
 
 .pill-text {
@@ -316,9 +326,18 @@
   position: absolute;
   top: -2px;
   right: 0;
-  font-size: 10px;
   line-height: 1;
   opacity: 0.9;
+  color: var(--notes-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.note-pin-badge svg {
+  width: 10px;
+  height: 10px;
+  display: block;
 }
 
 .note-text {
@@ -352,10 +371,16 @@
   border-radius: 50%;
   cursor: pointer;
   color: var(--notes-text-muted);
-  font-size: 16px;
   opacity: 0;
   transition: var(--notes-transition);
   flex-shrink: 0;
+  padding: 0;
+}
+
+.note-delete svg {
+  width: 14px;
+  height: 14px;
+  display: block;
 }
 
 /* 支持 hover 的设备：悬停时显示删除 */
@@ -406,8 +431,23 @@
 }
 
 .empty-icon {
-  font-size: 32px;
-  opacity: 0.6;
+  opacity: 0.55;
+  color: var(--notes-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.empty-icon svg {
+  width: 28px;
+  height: 28px;
+  display: block;
+}
+
+.svg-icon {
+  display: block;
+  flex-shrink: 0;
+  pointer-events: none;
 }
 
 .empty-text {
@@ -470,8 +510,14 @@
     0 4px 12px rgba(var(--notes-primary-rgb), 0.35),
     0 1px 3px rgba(0, 0, 0, 0.1);
   color: white;
-  font-size: 20px;
-  font-weight: 300;
+  padding: 0;
+}
+
+.widget-input-row button svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+  stroke: white;
 }
 
 .widget-input-row button:hover {
