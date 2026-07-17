@@ -85,7 +85,6 @@
         "page_template": "apps/com.myriad.quick-notes/page.html",
         "widget_templates": {
           "notes": {
-            "2x2": "apps/com.myriad.quick-notes/widget-2x2.html",
             "4x2": "apps/com.myriad.quick-notes/widget-4x2.html",
             "4x4": "apps/com.myriad.quick-notes/widget-4x4.html"
           }
