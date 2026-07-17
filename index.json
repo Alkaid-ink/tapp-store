@@ -112,7 +112,7 @@
       "repository": "https://github.com/Myriad-You/tapp-store",
       "category": "developer",
       "tags": ["配置", "部署", "Docker", "Nginx", "Updater", "工具", "开发者"],
-      "permissions": ["storage", "ui:notification", "ui:theme", "ui:confirm"],
+      "permissions": ["storage", "ui:notification", "ui:theme", "ui:confirm", "network:fetch"],
       "icon_svg": "<svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/><polyline points='14,2 14,8 20,8' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/><path d='M12 18v-6M9 15l3 3 3-3' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>",
       "theme_color": "#6366F1",
       "screenshots": [],
@@ -129,7 +129,7 @@
       "featured": true,
       "verified": true,
       "created_at": "2025-12-14T00:00:00Z",
-      "updated_at": "2026-07-17T07:06:00Z"
+      "updated_at": "2026-07-17T07:39:50Z"
     }
   ]
 }
