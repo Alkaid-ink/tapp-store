@@ -73,7 +73,8 @@ var i18n = {
     pasteImport: '粘贴导入',
     sortNewest: '最新',
     sortOldest: '最早',
-    sortUpdated: '更新'
+    sortUpdated: '更新',
+    moreOverflow: '更多'
   },
   'en-US': {
     title: 'Notes',
@@ -133,7 +134,8 @@ var i18n = {
     pasteImport: 'Import paste',
     sortNewest: 'Newest',
     sortOldest: 'Oldest',
-    sortUpdated: 'Updated'
+    sortUpdated: 'Updated',
+    moreOverflow: 'more'
   },
   'ja-JP': {
     title: 'メモ',
@@ -193,7 +195,8 @@ var i18n = {
     pasteImport: '貼り付けインポート',
     sortNewest: '新しい順',
     sortOldest: '古い順',
-    sortUpdated: '更新順'
+    sortUpdated: '更新順',
+    moreOverflow: '件以上'
   }
 };
 
@@ -687,7 +690,7 @@ function buildColorPalette(selectedColor, onSelect) {
 var widgetState = {
   notes: [],
   settings: { maxNotes: 100, showTimestamp: true, saveHistory: true, sortOrder: DEFAULT_SORT },
-  size: '2x2',
+  size: '4x2',
   syncing: false
 };
 
@@ -695,9 +698,14 @@ var widgetState = {
 // Widget 初始化 - 通用
 // ========================================
 
+function normalizeWidgetSize(size) {
+  if (size === '4x4' || size === '4x2') return size;
+  return '4x2';
+}
+
 async function initWidget() {
   var props = window._TAPP_WIDGET_PROPS || {};
-  var size = props.size || '2x2';
+  var size = normalizeWidgetSize(props.size);
   widgetState.size = size;
   currentLocale = normalizeLocale(props.locale);
 
@@ -725,6 +733,11 @@ async function initWidget() {
 
   var addBtn = document.getElementById('widget-add');
   var input = document.getElementById('widget-input');
+
+  if (addBtn) {
+    addBtn.title = t('add');
+    addBtn.setAttribute('aria-label', t('add'));
+  }
 
   if (addBtn && input) {
     addBtn.addEventListener('click', function() {
@@ -783,6 +796,7 @@ function renderWidgetNotes(size) {
 
   if (!listEl) return;
 
+  size = normalizeWidgetSize(size || widgetState.size);
   listEl.innerHTML = '';
 
   if (countEl) countEl.textContent = widgetState.notes.length;
@@ -792,7 +806,7 @@ function renderWidgetNotes(size) {
     empty.className = 'notes-empty';
     var emptyIcon = document.createElement('span');
     emptyIcon.className = 'empty-icon';
-    emptyIcon.appendChild(createSvgIcon('note', 28));
+    emptyIcon.appendChild(createSvgIcon('note', size === '4x4' ? 28 : 24));
     var emptyText = document.createElement('span');
     emptyText.className = 'empty-text';
     emptyText.textContent = t('emptyTitle');
@@ -802,37 +816,41 @@ function renderWidgetNotes(size) {
     return;
   }
 
-  var maxDisplay = size === '4x4' ? 8 : (size === '4x2' ? 4 : 3);
+  // 4x2: glanceable strip (~3–4); 4x4: mini board (~6)
+  var maxDisplay = size === '4x4' ? 6 : 4;
+  var isBoard = size === '4x4';
   var sorted = sortNotesList(widgetState.notes, widgetState.settings.sortOrder);
   var displayNotes = sorted.slice(0, maxDisplay);
 
   displayNotes.forEach(function(note) {
     var item = document.createElement('div');
-    item.className = 'note-item';
+    if (isBoard) {
+      item.className = 'mini-sticky color-' + getNoteColorIndex(note);
+    } else {
+      item.className = 'note-row';
+    }
     if (note.pinned) item.classList.add('pinned');
-
-    var content = document.createElement('div');
-    content.className = 'note-content';
 
     if (note.pinned) {
       var pinBadge = document.createElement('span');
       pinBadge.className = 'note-pin-badge';
       pinBadge.title = t('pinned');
       pinBadge.setAttribute('aria-label', t('pinned'));
-      pinBadge.appendChild(createSvgIcon('pin', 10));
-      content.appendChild(pinBadge);
+      pinBadge.appendChild(createSvgIcon('pin', isBoard ? 11 : 10));
+      item.appendChild(pinBadge);
     }
 
     var text = document.createElement('div');
     text.className = 'note-text';
     text.textContent = note.text;
-    content.appendChild(text);
+    item.appendChild(text);
 
-    if (widgetState.settings.showTimestamp) {
+    // Timestamp only on 4x4 board (space for glance + board density)
+    if (isBoard && widgetState.settings.showTimestamp) {
       var time = document.createElement('div');
       time.className = 'note-time';
       time.textContent = formatTime(noteTimestamp(note));
-      content.appendChild(time);
+      item.appendChild(time);
     }
 
     var deleteBtn = document.createElement('button');
@@ -840,22 +858,21 @@ function renderWidgetNotes(size) {
     deleteBtn.type = 'button';
     deleteBtn.title = t('delete');
     deleteBtn.setAttribute('aria-label', t('delete'));
-    deleteBtn.appendChild(createSvgIcon('close', 14));
+    deleteBtn.appendChild(createSvgIcon('close', 12));
     deleteBtn.addEventListener('click', function(e) {
       e.stopPropagation();
       deleteWidgetNote(note.id, size);
     });
 
-    item.appendChild(content);
     item.appendChild(deleteBtn);
     listEl.appendChild(item);
   });
 
   if (sorted.length > maxDisplay) {
+    var overflow = sorted.length - maxDisplay;
     var more = document.createElement('div');
-    more.className = 'note-item';
-    more.style.cssText = 'justify-content: center; color: var(--notes-text-muted); font-size: 11px; padding: 6px;';
-    more.textContent = '+' + (sorted.length - maxDisplay) + ' ' + t('notesCount');
+    more.className = 'notes-more';
+    more.textContent = '+' + overflow + ' ' + t('moreOverflow');
     listEl.appendChild(more);
   }
 }

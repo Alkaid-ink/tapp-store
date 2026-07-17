@@ -30,15 +30,14 @@
       "name": "便签",
       "description": "快速查看和添加笔记",
       "icon": "note",
-      "defaultSize": "2x2",
-      "sizes": ["2x2", "4x2", "4x4"],
+      "defaultSize": "4x2",
+      "sizes": ["4x2", "4x4"],
       "refreshPolicy": {
         "mode": "event",
         "refreshOnVisible": true
       },
       "category": "utility",
       "templates": {
-        "2x2": "widget-2x2.html",
         "4x2": "widget-4x2.html",
         "4x4": "widget-4x4.html"
       }
