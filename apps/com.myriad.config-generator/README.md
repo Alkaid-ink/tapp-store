@@ -1,6 +1,6 @@
-# Myriad 安装配置生成器
+# Myriad 安装配置生成
 
-生成自托管 Myriad 所需的配置文件。
+填写部署参数，生成 Compose、环境变量与 Nginx 配置。
 
 ## 功能
 
