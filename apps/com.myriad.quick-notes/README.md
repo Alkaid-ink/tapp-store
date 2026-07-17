@@ -38,21 +38,20 @@ com.myriad.quick-notes/
 
 ## 权限说明
 
-| 权限              | 用途                  |
-| ----------------- | --------------------- |
-| `storage`         | 保存笔记内容          |
-| `widget:register` | 注册 Dashboard 小组件 |
-| `ui:notification` | 操作成功提示          |
-| `ui:theme`        | 适配深色/浅色主题     |
+| 权限              | 用途                         |
+| ----------------- | ---------------------------- |
+| `storage`         | 保存当前用户的笔记与排序偏好 |
+| `ui:notification` | 操作成功提示                 |
+| `ui:theme`        | 适配深色/浅色主题            |
 
-## 设置选项
+## 安装级默认设置
 
-| 设置项          | 类型   | 默认值 | 说明         |
-| --------------- | ------ | ------ | ------------ |
-| `maxNotes`      | number | 100    | 最大笔记数量 |
-| `showTimestamp` | toggle | true   | 显示创建时间 |
-| `saveHistory`   | toggle | true   | 保存历史记录 |
-| `sortOrder`     | select | newest | 排序方式     |
+| 设置项          | 类型   | 默认值 | 说明                                       |
+| --------------- | ------ | ------ | ------------------------------------------ |
+| `maxNotes`      | number | 100    | 最大笔记数量                               |
+| `showTimestamp` | toggle | true   | 显示创建时间                               |
+| `saveHistory`   | toggle | true   | 保存历史记录                               |
+| `sortOrder`     | select | newest | 默认排序方式；用户选择保存到私有 storage   |
 
 ## 更新日志
 

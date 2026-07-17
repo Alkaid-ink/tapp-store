@@ -68,7 +68,6 @@
       "tags": ["笔记", "便签", "搜索", "小组件", "多语言"],
       "permissions": [
         "storage",
-        "widget:register",
         "ui:notification",
         "ui:theme",
         "ui:confirm"

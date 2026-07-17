@@ -508,6 +508,29 @@ function normalizeSortOrder(value) {
   return DEFAULT_SORT;
 }
 
+var USER_PREFERENCES_KEY = 'preferences';
+
+async function applyUserPreferences(settings) {
+  try {
+    var preferences = await Tapp.storage.get(USER_PREFERENCES_KEY);
+    if (preferences && typeof preferences === 'object' && preferences.sortOrder != null) {
+      settings.sortOrder = normalizeSortOrder(preferences.sortOrder);
+    }
+  } catch (e) {}
+}
+
+async function saveUserSortOrder(sortOrder) {
+  var preferences = {};
+  try {
+    var stored = await Tapp.storage.get(USER_PREFERENCES_KEY);
+    if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
+      preferences = stored;
+    }
+  } catch (e) {}
+  preferences.sortOrder = normalizeSortOrder(sortOrder);
+  await Tapp.storage.set(USER_PREFERENCES_KEY, preferences);
+}
+
 function normalizeNotes(raw) {
   if (!raw || !Array.isArray(raw)) return [];
   var out = [];
@@ -776,6 +799,7 @@ async function loadWidgetData() {
       Object.assign(widgetState.settings, savedSettings);
       widgetState.settings.sortOrder = normalizeSortOrder(widgetState.settings.sortOrder);
     }
+    await applyUserPreferences(widgetState.settings);
 
     if (widgetState.settings.saveHistory === false) {
       widgetState.notes = [];
@@ -994,6 +1018,7 @@ async function loadPageData() {
       Object.assign(pageState.settings, savedSettings);
       pageState.settings.sortOrder = normalizeSortOrder(pageState.settings.sortOrder);
     }
+    await applyUserPreferences(pageState.settings);
 
     if (pageState.settings.saveHistory === false) {
       pageState.notes = [];
@@ -2107,12 +2132,8 @@ async function persistSortOrder(order) {
   pageState.settings.sortOrder = next;
 
   try {
-    if (typeof Tapp !== 'undefined' && Tapp.settings) {
-      if (typeof Tapp.settings.set === 'function') {
-        await Tapp.settings.set('sortOrder', next);
-      } else if (typeof Tapp.settings.setAll === 'function') {
-        await Tapp.settings.setAll({ sortOrder: next });
-      }
+    if (typeof Tapp !== 'undefined' && Tapp.storage) {
+      await saveUserSortOrder(next);
     }
   } catch (e) {
     console.error('[Notes] 保存排序失败:', e);

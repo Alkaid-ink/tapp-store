@@ -56,7 +56,9 @@ const usage = await Tapp.storage.usage();
 ```
 
 单值最大 1 MiB，总量最大 5 MiB；总量检查与写入位于同一数据库事务，跨副本并发不能越过
-配额。需要一次读取全部数据时使用 `Tapp.storage.getAll()`，不要自行 `keys()` 后逐项 `get()`。
+配额。公开 Tapp 仍按当前登录用户的 `user_id + tapp_id` 隔离存储，不会读取安装 owner 的
+私有数据。需要一次读取全部数据时使用 `Tapp.storage.getAll()`，不要自行 `keys()` 后逐项
+`get()`。`_settings.`、`_component:`、`_shortcut:`、`_report:` 是宿主保留前缀。
 
 ---
 
@@ -94,7 +96,7 @@ const playlist = await Tapp.dataExchange.request({
 
 ## 设置 API
 
-**权限**: `storage`（使用 `_settings.` 前缀存储）
+**权限**: `storage`
 
 ```javascript
 // 获取设置项
@@ -107,6 +109,9 @@ await Tapp.settings.set("refreshInterval", 60);
 const allSettings = await Tapp.settings.getAll();
 // 返回: { refreshInterval: 60, showDetails: true, ... }
 ```
+
+设置是 Manifest 声明的安装级配置。安装 owner 或管理员可修改；运行该安装的其他已登录用户
+只读。用户自己的偏好应使用 `Tapp.storage` 保存，不能通过 `_settings.` 前缀直接访问安装设置。
 
 ---
 

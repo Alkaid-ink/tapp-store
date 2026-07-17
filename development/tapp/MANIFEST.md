@@ -19,7 +19,7 @@ Manifest 是 Tapp 的核心配置文件，定义了应用的元数据、权限�
 | `widgets`                 | object[] | ❌   | 小组件定义                                    |
 | `hasPage`                 | boolean  | ❌   | 是否有页面模块（可在页面模式运行）            |
 | `backgroundRequirements`  | string[] | ❌   | 启动后需常驻的 headless core 能力             |
-| `settings`                | object[] | ❌   | 用户可配置的设置项                            |
+| `settings`                | object[] | ❌   | 安装级全局设置声明                            |
 | `apis`                    | object   | ❌   | 命名 API 声明（代理+权限校验）                |
 | `dataExchange`            | object   | ❌   | 跨 Tapp 具名 import/export 契约               |
 | `ai` / `events` / `agent` | object   | ❌   | V2 运行能力声明                               |
@@ -160,7 +160,8 @@ Manifest 使用严格字段校验；未声明或已移除的字段会使安装�
 | `settings`      | object[] | ❌   | 每个 Dashboard 实例独立的设置声明                              |
 | `refreshPolicy` | object   | ❌   | 宿主管理的刷新策略                                             |
 
-顶层 `settings` 是整个 Tapp 共用的全局设置；`widgets[].settings` 是 Dashboard 实例设置。
+顶层 `settings` 是整个安装共用的全局设置，由安装 owner 或管理员修改，其他已登录运行者只读；
+`widgets[].settings` 是 Dashboard 实例设置。用户个人偏好应写入 `Tapp.storage`。
 刷新默认事件驱动，当前 Widget 用 `Tapp.widget.invalidate()` 请求刷新；可选 interval 只在
 页面和 Widget 可见时运行，后台周期任务应使用 scheduler/headless core。
 
@@ -376,10 +377,10 @@ Tapp.lifecycle.onReady(async function () {
 // 使用 Tapp.settings API
 const refreshInterval = await Tapp.settings.get("refreshInterval");
 const allSettings = await Tapp.settings.getAll();
-
-// 或使用 Tapp.storage（设置以 _settings. 前缀存储）
-const value = await Tapp.storage.get("_settings.refreshInterval");
 ```
+
+Manifest 设置属于安装级配置：安装 owner 或管理员可修改，运行该安装的已登录用户可以读取。
+`Tapp.storage` 是当前用户的私有空间，不能使用 `_settings.` 等宿主保留前缀访问安装级设置。
 
 ---
 

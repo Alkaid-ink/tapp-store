@@ -115,6 +115,11 @@ document.cookie; // 不可访问（credentialless）
 | `document.cookie`          | 不可用                         |
 | `window.open`              | `Tapp.ui.openUrl()`            |
 
+`Tapp.storage` 按当前登录用户与 Tapp ID 隔离。即使运行的是公共 Tapp，每个用户仍只读写自己的
+存储，不会共享安装 owner 的数据。`_settings.`、`_component:`、`_shortcut:`、`_report:` 为
+宿主保留前缀；安装级 Manifest 设置只能通过 `Tapp.settings` 读取，且只有安装 owner 或管理员
+可以修改。访客没有服务端持久 storage。
+
 ---
 
 ## DOM 安全

@@ -82,73 +82,24 @@ Content-Type: application/json
 
 ## Tapp 存储
 
-### 获取存储值
+这些路由要求登录身份、匹配当前 Tapp 和 subject 的 Runtime Grant，以及 `storage` 权限。
+公共 Tapp 仍按当前登录用户的 `user_id + tapp_id` 隔离，不会读取安装 owner 的私有存储。
 
-```http
-GET /api/tapp/{tappId}/storage/{key}
-```
+| 方法   | 路径                                          | 说明                       |
+| ------ | --------------------------------------------- | -------------------------- |
+| GET    | `/api/tapps/{tappId}/storage`                 | 列出当前用户的 key         |
+| DELETE | `/api/tapps/{tappId}/storage`                 | 清空当前用户的存储         |
+| GET    | `/api/tapps/{tappId}/storage/entries`         | 一次返回全部键值           |
+| GET    | `/api/tapps/{tappId}/storage/usage`           | 返回 used 与 quota 字节数  |
+| GET    | `/api/tapps/{tappId}/storage/{key}`           | 读取值                     |
+| POST   | `/api/tapps/{tappId}/storage/{key}`           | 写入 JSON 值               |
+| DELETE | `/api/tapps/{tappId}/storage/{key}`           | 删除值                     |
+| GET    | `/api/tapps/{tappId}/settings`                | 读取全部已保存的安装设置   |
+| GET    | `/api/tapps/{tappId}/settings/{key}`          | 读取 Manifest 声明的设置   |
+| POST   | `/api/tapps/{tappId}/settings/{key}`          | owner 或管理员修改安装设置 |
 
-**响应**：
-
-```json
-{
-  "success": true,
-  "data": {
-    "key": "myKey",
-    "value": { "foo": "bar" },
-    "updated_at": "2024-01-15T10:30:00Z"
-  }
-}
-```
-
-### 设置存储值
-
-```http
-PUT /api/tapp/{tappId}/storage/{key}
-Content-Type: application/json
-
-{
-  "value": { "foo": "bar" }
-}
-```
-
-### 删除存储值
-
-```http
-DELETE /api/tapp/{tappId}/storage/{key}
-```
-
-### 获取所有存储
-
-```http
-GET /api/tapp/{tappId}/storage
-```
-
-### 清空存储
-
-```http
-DELETE /api/tapp/{tappId}/storage
-```
-
-### 存储统计
-
-```http
-GET /api/tapp/{tappId}/storage/stats
-```
-
-**响应**：
-
-```json
-{
-  "success": true,
-  "data": {
-    "count": 42,
-    "size_bytes": 1024000,
-    "quota_bytes": 5242880,
-    "usage_percent": 19.5
-  }
-}
-```
+通用 storage 拒绝 `_settings.`、`_component:`、`_shortcut:`、`_report:` 等宿主保留前缀。
+安装设置只能通过 settings 路由读取；普通已登录运行者只读，访客没有服务端持久 storage。
 
 ---
 
