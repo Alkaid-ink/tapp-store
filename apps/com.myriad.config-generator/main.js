@@ -7,30 +7,11 @@
 // 配置模板（带占位符）
 // ========================================
 
-// 与官方 docker-compose.yml 对齐：proxy 唯一宿主端口、pgdata bind mount、
-// docker-guard（唯一持有 docker.sock）、updater-gateway、三网络隔离、
-// backend 不持有 UPDATE_TOKEN，镜像 tag 由 .env 中 MYRIAD_TAG/PROXY_TAG/UPDATER_TAG 驱动。
-var DOCKER_COMPOSE_TEMPLATE = `# Myriad Docker Compose (hardened: proxy + docker-guard + updater-gateway)
-# 由 Myriad 安装配置生成器生成
-#
-# 架构:
-#   myriad-net:        proxy, frontend, backend, postgres
-#   myriad-admin-net:  backend, updater, updater-gateway, proxy (rescue)
-#   myriad-docker-guard-net (internal): updater, docker-guard
-#
-#   proxy (\${HTTP_BIND_ADDRESS:-127.0.0.1}:\${HTTP_PORT:-8080}) ──┬──► frontend:1102
-#                              └──► backend:1103 ──► postgres
-#                                     │
-#                                     └──► updater-gateway:1104 ──► updater ──► docker-guard ──► docker.sock
-#
-# 升级: 管理后台 → 关于 → 更新管理
-# 文档: docs/updater-spec.md / docs/UPDATER_QUICKSTART.md
-#
-# 首次启动:
-#   1. 将本文件与 .env 放在同一目录
-#   2. mkdir -p pgdata state state/snapshots state/cache backups
-#   3. docker compose up -d
-#   或使用仓库 scripts/docker/deploy.sh up（会 chown backend named volumes）
+// 官方生产拓扑；tag 由 .env 驱动
+var DOCKER_COMPOSE_TEMPLATE = `# Myriad compose（安装配置生成器）
+# 网: myriad-net | myriad-admin-net | myriad-docker-guard-net(internal)
+# 入口: proxy  alone；更新: backend → gateway → updater → docker-guard → sock
+# 启动: mkdir -p pgdata state backups && docker compose up -d
 
 services:
   postgres:
@@ -66,8 +47,7 @@ services:
       POSTGRES_MAX_PARALLEL_MAINTENANCE_WORKERS: 2
       TZ: Asia/Shanghai
     volumes:
-      # PostgreSQL 18+ 使用 /var/lib/postgresql 下的主版本数据目录。
-      # IMPORTANT: bind mount，不可改为 named volume。updater 依赖文件级快照。
+      # bind mount（updater 快照依赖）；勿改 named volume
       - ./pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \${POSTGRES_USER} -d \${POSTGRES_DB}"]
@@ -100,7 +80,6 @@ services:
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: 1103
       JWT_SECRET: \${JWT_SECRET}
-      # bundled proxy 会覆盖客户端伪造的转发头，backend 可据此读取真实来源 IP
       TRUST_PROXY_HEADERS: "true"
       CORS_ORIGINS: \${CORS_ORIGINS:-http://localhost}
       CSP_CONNECT_SRC: \${CSP_CONNECT_SRC:-'self' https:}
@@ -110,11 +89,9 @@ services:
       RUST_LOG: \${RUST_LOG:-info}
       TZ: Asia/Shanghai
       MYRIAD_VERSION: \${MYRIAD_TAG}
-      # Server-side updater proxy: backend → updater-gateway（注入 X-Update-Token）。
-      # backend 不持有 UPDATE_TOKEN，只持有 UPDATER_GATEWAY_SECRET。
+      # 更新走 gateway；backend 不持 UPDATE_TOKEN
       MYRIAD_UPDATER_URL: http://updater-gateway:1104
       UPDATER_GATEWAY_SECRET: \${UPDATER_GATEWAY_SECRET}
-    # 不暴露宿主端口；仅 proxy 对外
     depends_on:
       postgres: { condition: service_healthy }
     healthcheck:
@@ -131,8 +108,7 @@ services:
     security_opt: [no-new-privileges:true]
     read_only: false
     tmpfs: [/tmp]
-    # 以 Dockerfile USER myriad (uid 1000) 运行；勿强制 user 0:0。
-    # named volumes 需可写：deploy.sh / deploy.ps1 会 chown，或手动 chown 1000:1000。
+    # 非 root (uid 1000)；volume 可写用 deploy.sh 或 chown 1000:1000
     logging:
       driver: "json-file"
       options: { max-size: "10m", max-file: "3" }
@@ -179,17 +155,14 @@ services:
       PROXY_STATE_FILE: /state/maintenance.json
       PROXY_BACKEND_UPSTREAM: http://backend:1103
       PROXY_FRONTEND_UPSTREAM: http://frontend:1102
-      # Rescue 路径在 admin-net 上解析 updater（PROXY_ALLOW_DIRECT_UPDATER=true 时）。
       PROXY_UPDATER_UPSTREAM: http://updater:1101
-      # 外层 Nginx/Caddy/CDN 可信上游 IP/CIDR（逗号分隔）
       PROXY_TRUSTED_UPSTREAMS: \${PROXY_TRUSTED_UPSTREAMS:-}
-      # 默认关闭 /_updater/* 直连；推荐 /api/admin/updater/*
+      # 默认关直连；救援才开 true
       PROXY_ALLOW_DIRECT_UPDATER: \${PROXY_ALLOW_DIRECT_UPDATER:-false}
       MYRIAD_VERSION: \${PROXY_TAG}
       TZ: Asia/Shanghai
     volumes:
       - ./state:/state:ro
-    # 业务网 + admin-net（rescue 仍可解析 updater）
     networks: [myriad-net, myriad-admin-net]
     restart: unless-stopped
     security_opt: [no-new-privileges:true]
@@ -200,7 +173,7 @@ services:
       options: { max-size: "10m", max-file: "3" }
 
   docker-guard:
-    # 唯一挂载宿主 docker.sock 的服务。校验 Docker API 后再转发到守护进程。
+    # 唯一持有 docker.sock
     image: \${UPDATER_IMAGE:-docker.io/somekawahitomi/myriad-updater}:\${UPDATER_TAG}
     container_name: myriad-docker-guard
     entrypoint: ["/usr/bin/tini", "--", "/usr/local/bin/myriad-docker-guard"]
@@ -244,13 +217,11 @@ services:
       CHECK_INTERVAL_SECS: \${CHECK_INTERVAL_SECS:-3600}
       UPDATER_STATE_DIR: /host/compose/state
       UPDATER_ENV_FILE: /host/compose/.env
-      # 走 compose 根 bind 内的路径，避免独立 pgdata 挂载点 rename EBUSY
       UPDATER_PGDATA: /host/compose/pgdata
       UPDATER_COMPOSE_DIR: /host/compose
       DOCKER_HOST: tcp://docker-guard:2375
       DOCKER_GUARD_SELF_UPDATE_URL: http://docker-guard:2375/_myriad/self-update
-      # cosign: strict（默认）| soft | off
-      # off 时需同时设 UPDATER_ALLOW_INSECURE_COSIGN=true 或 COSIGN_INSECURE_OK=true
+      # cosign: strict | soft | off（off 需双钥匙，见 .env）
       COSIGN_VERIFY: \${COSIGN_VERIFY:-strict}
       UPDATER_ALLOW_INSECURE_COSIGN: \${UPDATER_ALLOW_INSECURE_COSIGN:-}
       COSIGN_INSECURE_OK: \${COSIGN_INSECURE_OK:-}
@@ -259,22 +230,18 @@ services:
       MYRIAD_VERSION: \${UPDATER_TAG}
       TZ: Asia/Shanghai
     volumes:
-      # 单一部署根 bind；state / snapshots / pgdata / .env 均在 /host/compose 下
       - ./:/host/compose
-    # admin-net 连 gateway/backend/proxy；guard-net 连 docker-guard。不进 myriad-net。
     networks: [myriad-admin-net, myriad-docker-guard-net]
     depends_on:
       docker-guard: { condition: service_healthy }
     restart: unless-stopped
     security_opt: [no-new-privileges:true]
-    # 故意不设 read_only：需要写 state / 快照 / .env
     logging:
       driver: "json-file"
       options: { max-size: "10m", max-file: "3" }
 
   updater-gateway:
-    # 与 updater 同镜像；薄代理为 backend 注入 UPDATE_TOKEN。
-    # 仅 admin-net：无 compose bind、无 docker.sock。
+    # 同镜像；为 backend 注入 UPDATE_TOKEN（无 sock）
     image: \${UPDATER_IMAGE:-docker.io/somekawahitomi/myriad-updater}:\${UPDATER_TAG}
     container_name: myriad-updater-gateway
     entrypoint: ["/usr/bin/tini", "--", "/usr/local/bin/myriad-updater-gateway"]
@@ -307,7 +274,6 @@ networks:
       config:
         - subnet: 172.28.0.0/16
   myriad-admin-net:
-    # 非 internal：backend 双归属业务网 + 管理网；DNS 解析 updater-gateway
     name: \${MYRIAD_ADMIN_NETWORK:-myriad-admin-net}
     driver: bridge
   myriad-docker-guard-net:
@@ -316,116 +282,56 @@ networks:
     internal: true
 `;
 
-// .env 生产模板（密钥与域名由生成器填入）
-var ENV_TEMPLATE = `# =============================================================================
-# Myriad Production Environment Configuration
-# 由 Myriad 安装配置生成器生成 — 请妥善保管，勿提交到 Git
-# =============================================================================
+// .env（密钥由生成器填入；勿提交 Git）
+var ENV_TEMPLATE = `# Myriad .env — 生成器输出，chmod 600，勿提交
 
-# -----------------------------------------------------------------------------
-# UPDATER REQUIRED
-# -----------------------------------------------------------------------------
-# 镜像 versioned tag（生成时解析自 Docker Hub 最新可用版本）。禁止 :latest。
-# 之后由 updater 在升级时改写。
+# 镜像 tag（禁止 :latest；升级时由 updater 改写）
 MYRIAD_TAG={{MYRIAD_TAG}}
 PROXY_TAG={{PROXY_TAG}}
 UPDATER_TAG={{UPDATER_TAG}}
-
-# 业务镜像仓库（不含 tag）。commit 更新与 last-good 回滚固定依赖这两项。
 BACKEND_IMAGE=docker.io/somekawahitomi/myriad-backend
 FRONTEND_IMAGE=docker.io/somekawahitomi/myriad-frontend
-# PROXY_IMAGE=docker.io/somekawahitomi/myriad-proxy
-# UPDATER_IMAGE=docker.io/somekawahitomi/myriad-updater
-
 COMPOSE_PROJECT_NAME=myriad
-
-# 可选：同机多套部署时再改网络名
+# 同机多套时改网络名：
 # MYRIAD_DOCKER_NETWORK=myriad-net
 # MYRIAD_ADMIN_NETWORK=myriad-admin-net
 # MYRIAD_DOCKER_GUARD_NETWORK=myriad-docker-guard-net
 
-# Updater API 鉴权 token（≥32 字符）
-# 注入：updater + updater-gateway + docker-guard（自更新）。backend 进程不持有。
+# updater / gateway / guard 持有；backend 不持有
 UPDATE_TOKEN={{UPDATE_TOKEN}}
-
-# Backend ↔ updater-gateway 共享密钥（≥32 字符）
-# 注入：backend + updater-gateway。frontend 不持有。
-# 泄露 ≈ 可经 admin-net 上的 gateway 驱动更新（仍优于把 UPDATE_TOKEN 放进 backend）。
+# backend ↔ gateway；frontend 不持有
 UPDATER_GATEWAY_SECRET={{UPDATER_GATEWAY_SECRET}}
 
-# stable | preview（当前 updater 仅接受这两个值）
 CHANNEL={{CHANNEL}}
-
-# release（GitHub Release）| commit（CI dev-<sha>）；首次部署默认 release
 UPDATE_MODE=release
-
-# 可选：提升 GitHub API rate limit / 私有仓库
 # GITHUB_TOKEN=
-
-# 可选：镜像 mirror 前缀
 # REGISTRY_MIRROR=
-
 MYRIAD_GITHUB_REPO=Myriad-You/Myriad
 CHECK_INTERVAL_SECS=3600
 
-# proxy 宿主监听地址和端口（1Panel / 外层 Nginx 推荐仅本机）
 HTTP_BIND_ADDRESS={{HTTP_BIND_ADDRESS}}
 HTTP_PORT={{HTTP_PORT}}
-
-# 可选：外层 Nginx/Caddy/CDN 代理的 IP 或 CIDR（逗号分隔）
-# 只有列出的直接上游才允许通过 X-Forwarded-For / X-Real-IP 传递真实客户端 IP
-# PROXY_TRUSTED_UPSTREAMS=192.0.2.10/32
-
-# 是否启用 /_updater/* 直连救援通道（默认 false，推荐走 admin API）
+# PROXY_TRUSTED_UPSTREAMS=外层反代 IP/CIDR
 PROXY_ALLOW_DIRECT_UPDATER=false
 
-# cosign 签名验证: off | soft | strict
-#   off    - 不验证（需同时设置下方双钥匙之一，见注释）
-#   soft   - 验证失败仅打 warning，不阻止升级
-#   strict - 验证失败直接拒绝升级（默认，推荐生产）
+# cosign: strict | soft | off（off 需双钥匙）
 COSIGN_VERIFY={{COSIGN_VERIFY}}
 {{COSIGN_INSECURE_HINT}}
 
-# -----------------------------------------------------------------------------
-# REQUIRED SECURITY SETTINGS
-# -----------------------------------------------------------------------------
 POSTGRES_DB={{POSTGRES_DB}}
 POSTGRES_USER={{POSTGRES_USER}}
 POSTGRES_PASSWORD={{POSTGRES_PASSWORD}}
 DATABASE_URL={{DATABASE_URL}}
 JWT_SECRET={{JWT_SECRET}}
 
-# -----------------------------------------------------------------------------
-# CORS / PUBLIC URL
-# -----------------------------------------------------------------------------
-# 生产环境必须配置真实域名，禁止 * 或留空
 CORS_ORIGINS={{CORS_ORIGINS}}
-
-# 对外公开访问地址（联邦 / OAuth 依赖）
 BASE_URL=https://{{MAIN_DOMAIN}}
 FRONTEND_URL=https://{{MAIN_DOMAIN}}
-
-# 前端 API URL（留空则使用相对路径，推荐）
 PUBLIC_API_URL=
-
-# 日志级别
 # RUST_LOG=info
-
-# =============================================================================
-# 安全检查清单
-# =============================================================================
-# ✅ POSTGRES_PASSWORD / JWT_SECRET / UPDATE_TOKEN / UPDATER_GATEWAY_SECRET 已生成
-# ✅ backend 环境无 UPDATE_TOKEN（仅 UPDATER_GATEWAY_SECRET）
-# ✅ CORS_ORIGINS 为实际 HTTPS 域名
-# ✅ pgdata 为 ./pgdata bind mount（updater 快照依赖）
-# ✅ 仅 proxy 映射宿主端口；勿暴露 guard:2375 / gateway:1104 / updater:1101
-# ✅ 外层 HTTPS 入口代理到 HTTP_PORT，不要直连 backend:1103
-# ✅ .env 权限建议 chmod 600，勿提交 Git
-# =============================================================================
 `;
 
-// 默认外层 Nginx：全部流量反代到 Myriad proxy 的 HTTP_PORT
-// （不要再拆 frontend/backend 端口）
+// 外层 Nginx → 仅反代到 Myriad proxy
 var DEFAULT_NGINX_TEMPLATE = `server {
     listen 80;
     server_name {{MAIN_DOMAIN}};
@@ -434,10 +340,7 @@ var DEFAULT_NGINX_TEMPLATE = `server {
     access_log /www/sites/{{MAIN_DOMAIN}}/log/access.log main;
     error_log /www/sites/{{MAIN_DOMAIN}}/log/error.log;
 
-    # ----------------------------------------------------------------------
-    # 全部流量交给 Myriad proxy（唯一宿主入口）
-    # proxy 内部再路由 frontend / backend / 维护页 / updater 救援
-    # ----------------------------------------------------------------------
+    # 全部走 Myriad proxy
     location / {
         proxy_pass http://127.0.0.1:{{HTTP_PORT}};
 
@@ -446,7 +349,6 @@ var DEFAULT_NGINX_TEMPLATE = `server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
 
-        # WebSocket / 长连接（联邦等）
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -459,7 +361,6 @@ var DEFAULT_NGINX_TEMPLATE = `server {
         client_max_body_size 50M;
     }
 
-    # 可选：直接探测 proxy 自身健康
     location = /healthz {
         proxy_pass http://127.0.0.1:{{HTTP_PORT}}/healthz;
         access_log off;
@@ -513,82 +414,50 @@ var DEFAULT_EXTRA_NGINX_TEMPLATE = `server {
 // 部署说明（生成结果中的文本卡片）
 var DEPLOY_NOTES_TEMPLATE = `# Myriad 部署说明
 
-将 \`docker-compose.yml\` 和 \`.env\` 放在同一目录。\`.env\` 含 UPDATE_TOKEN / UPDATER_GATEWAY_SECRET 等密钥，**不要公开或提交到 Git**（建议 \`chmod 600 .env\`）。
+同目录放 \`docker-compose.yml\` + \`.env\`。密钥勿提交：\`chmod 600 .env\`。
 
-## 拓扑（hardened）
+## 拓扑
 
-| 网络 | 成员 | 说明 |
-|------|------|------|
-| myriad-net | proxy, frontend, backend, postgres | 业务平面 |
-| myriad-admin-net | backend, updater, updater-gateway, proxy | 管理平面（更新 / 救援） |
-| myriad-docker-guard-net (internal) | updater, docker-guard | 唯一可触达 docker.sock 的路径 |
+| 网络 | 成员 |
+|------|------|
+| myriad-net | proxy, frontend, backend, postgres |
+| myriad-admin-net | backend, updater, updater-gateway, proxy |
+| myriad-docker-guard-net (internal) | updater, docker-guard |
 
-数据流：浏览器 → 外层 HTTPS → proxy → frontend/backend；管理更新：backend → updater-gateway → updater → docker-guard → docker.sock。
-
-**不要**把 docker-guard:2375、updater-gateway:1104、updater:1101、backend:1103、frontend:1102、postgres:5432 映射到公网。仅 proxy 的 \`HTTP_PORT\` 应对宿主开放（1Panel 推荐绑定 127.0.0.1）。
+仅 proxy 映射宿主端口（推荐 127.0.0.1）。勿暴露 guard / gateway / updater / backend / DB。
 
 ## 1Panel
 
-1. 在“容器 → 编排”中新建编排。
-2. 将 \`docker-compose.yml\` 全文粘到编排编辑器。
-3. 将 \`.env\` 全文粘到“环境变量”框，然后创建编排。
+1. 编排里粘贴 \`docker-compose.yml\`
+2. 环境变量粘贴 \`.env\` 全文
+3. 创建并启动
 
 ## 启动
 
 \`\`\`bash
-cd /path/to/myriad-deploy
-mkdir -p pgdata state state/snapshots state/cache backups
+mkdir -p pgdata state backups
 chmod 600 .env
-docker compose pull
-docker compose up -d
+docker compose pull && docker compose up -d
 docker compose ps
-docker compose logs -f --tail=100
 \`\`\`
 
-### 可选：官方 deploy 脚本
-
-若你从 Myriad 源码仓库部署，可用 \`scripts/docker/deploy.sh up\`（或 Windows 的 \`deploy.ps1\`）。脚本会补齐目录，并 chown backend 的 named volumes（uid 1000），避免非 root backend 写 \`/app/cache\` / \`/app/data\` 失败。
-
-### backend 非 root 与 volume
-
-backend 以 Dockerfile 用户 \`myriad\` (uid 1000) 运行，**不要**再写 \`user: "0:0"\`。若未用 deploy 脚本，首次启动前可：
-
-\`\`\`bash
-# 在 compose 项目目录，确保 named volume 可写（路径因 Docker 驱动而异；
-# 更简单：先 up 再 exec 调整，或直接用 deploy.sh）
-docker compose up -d
-\`\`\`
-
-若 backend 日志出现 permission denied 写 cache/data，用 deploy 脚本重建 volume 权限，或在宿主对对应 volume 执行 \`chown -R 1000:1000\`。
-
-## 健康检查 / doctor
-
-\`\`\`bash
-docker compose ps
-docker compose exec backend wget -qO- http://localhost:1103/health
-# 若镜像内含 doctor：
-docker compose exec updater myriad-doctor
-# 或仓库脚本（源码树内）：
-# scripts/docker/doctor.sh
-\`\`\`
+源码树可用 \`scripts/docker/deploy.sh up\`（会 chown backend volume 为 uid 1000）。
 
 ## HTTPS
 
-- 将 https://{{MAIN_DOMAIN}} 反代到 \`127.0.0.1:{{HTTP_PORT}}\`。
-- proxy 当前监听 \`{{HTTP_BIND_ADDRESS}}:{{HTTP_PORT}}\`；选择 \`127.0.0.1\` 时只能从本机访问。
-- 可选在 \`.env\` 设置 \`PROXY_TRUSTED_UPSTREAMS\` 为外层反代 IP/CIDR。
+反代 https://{{MAIN_DOMAIN}} → \`{{HTTP_BIND_ADDRESS}}:{{HTTP_PORT}}\`。
 
-## 首次使用和更新
+## 使用与更新
 
-1. 打开 https://{{MAIN_DOMAIN}} 并完成管理员初始化。
-2. 以后在“设置 → 关于 → 更新管理”中升级（走 backend admin session → updater-gateway，浏览器看不到 UPDATE_TOKEN）。
+1. 打开站点完成管理员初始化
+2. 之后：设置 → 关于 → 更新管理（admin → gateway，浏览器无 token）
 
-当前更新通道：\`{{CHANNEL}}\`。cosign 策略：\`{{COSIGN_VERIFY}}\`。
+通道 \`{{CHANNEL}}\` · cosign \`{{COSIGN_VERIFY}}\`
 
-## 数据库
+## 数据
 
-- 数据保存在 \`./pgdata\`（bind mount；updater 快照依赖文件级路径）。
-- 更换 PostgreSQL 主版本前需先执行 \`pg_upgrade\` 或 dump/restore。
+- DB：\`./pgdata\`（bind mount，快照依赖）
+- 换 PG 主版本前先 dump/restore 或 pg_upgrade
 
 ## 救援
 
@@ -597,17 +466,17 @@ docker exec myriad-updater myriad-rescue status
 docker exec myriad-updater myriad-rescue exit-maintenance --force
 \`\`\`
 
-backend 宕机时，可临时设 \`PROXY_ALLOW_DIRECT_UPDATER=true\` 走 proxy 的 \`/_updater/*\`（默认关闭）。
+backend 宕机时临时 \`PROXY_ALLOW_DIRECT_UPDATER=true\`（默认 false）。
 
-## 当前版本
+## 版本
 
-| 变量 | 当前值 | 说明 |
-|------|--------|------|
-| MYRIAD_TAG | {{MYRIAD_TAG}} | backend + frontend |
-| PROXY_TAG | {{PROXY_TAG}} | proxy |
-| UPDATER_TAG | {{UPDATER_TAG}} | updater / docker-guard / updater-gateway |
+| 变量 | 值 |
+|------|-----|
+| MYRIAD_TAG | {{MYRIAD_TAG}} |
+| PROXY_TAG | {{PROXY_TAG}} |
+| UPDATER_TAG | {{UPDATER_TAG}} |
 
-不要使用 \`:latest\`，否则无法可靠回滚。
+禁止 \`:latest\`。
 `;
 
 // ========================================
@@ -956,7 +825,7 @@ async function refreshLatestTags(inputs, channelSelect, opts) {
 function buildNginxProxyLocation(httpPort, indent) {
   var childIndent = indent + '    ';
   return [
-    indent + '# Myriad 唯一入口：交给 proxy 再路由前端、后端和更新服务',
+    indent + '# → Myriad proxy',
     indent + 'location / {',
     childIndent + 'proxy_pass http://127.0.0.1:' + httpPort + ';',
     '',
