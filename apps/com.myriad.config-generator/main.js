@@ -55,6 +55,21 @@ services:
       driver: "json-file"
       options: { max-size: "10m", max-file: "3" }
 
+  backend-volume-init:
+    image: \${BACKEND_IMAGE:-docker.io/somekawahitomi/myriad-backend}:\${MYRIAD_TAG}
+    container_name: myriad-backend-volume-init
+    user: "0:0"
+    environment:
+      MYRIAD_VOLUME_INIT_ONLY: "true"
+    volumes:
+      - backend_cache:/app/cache
+      - backend_data:/app/data
+    network_mode: none
+    restart: "no"
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: [/tmp]
+
   backend:
     image: \${BACKEND_IMAGE:-docker.io/somekawahitomi/myriad-backend}:\${MYRIAD_TAG}
     container_name: myriad-backend
@@ -70,6 +85,8 @@ services:
       DATABASE_URL: \${DATABASE_URL}
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: 1103
+      DATA_DIR: /app/data
+      CACHE_DIR: /app/cache
       JWT_SECRET: \${JWT_SECRET}
       TRUST_PROXY_HEADERS: "true"
       CORS_ORIGINS: \${CORS_ORIGINS:-http://localhost}
@@ -84,6 +101,7 @@ services:
       UPDATER_GATEWAY_SECRET: \${UPDATER_GATEWAY_SECRET}
     depends_on:
       postgres: { condition: service_healthy }
+      backend-volume-init: { condition: service_completed_successfully }
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:1103/health"]
       interval: 30s
@@ -98,7 +116,7 @@ services:
     security_opt: [no-new-privileges:true]
     read_only: false
     tmpfs: [/tmp]
-    # uid 1000；volume 写权限见 deploy.sh / chown 1000:1000
+    # uid 1000；backend-volume-init 会先修复 volume 写权限
     logging:
       driver: "json-file"
       options: { max-size: "10m", max-file: "3" }
@@ -403,7 +421,7 @@ var DEPLOY_NOTES_TEMPLATE = `# Myriad 部署
 | myriad-admin-net | backend, updater, updater-gateway, proxy |
 | myriad-docker-guard-net (internal) | updater, docker-guard |
 
-仅 proxy 开宿主端口。
+\`backend-volume-init\` 使用 \`network_mode: none\`；仅 proxy 开宿主端口。
 
 ## 1Panel
 
@@ -417,7 +435,9 @@ chmod 600 .env
 docker compose pull && docker compose up -d
 \`\`\`
 
-可选：\`scripts/docker/deploy.sh up\`（backend volume chown 1000）。
+\`backend-volume-init\` 会在 backend 启动前修复持久卷权限；无需手工 chown。
+
+可选：\`scripts/docker/deploy.sh up\`（含环境初始化与部署检查）。
 
 ## HTTPS
 

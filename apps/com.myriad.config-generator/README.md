@@ -6,7 +6,7 @@
 
 | 文件 | 内容 |
 |------|------|
-| `docker-compose.yml` | proxy / frontend / backend / postgres / docker-guard / updater / updater-gateway |
+| `docker-compose.yml` | proxy / frontend / backend / backend-volume-init / postgres / docker-guard / updater / updater-gateway |
 | `.env` | 密钥与 tag（勿提交） |
 | `<domain>.conf` | 外层反代到 proxy |
 | `DEPLOY.md` | 启动与救援 |
@@ -19,8 +19,10 @@
 | `myriad-admin-net` | backend, updater, updater-gateway, proxy |
 | `myriad-docker-guard-net` (internal) | updater, docker-guard |
 
+- backend-volume-init 使用 `network_mode: none`
 - 仅 docker-guard 挂 sock
 - backend 只持 `UPDATER_GATEWAY_SECRET`，经 gateway 更新
+- backend-volume-init 会在 backend 启动前修复持久卷权限
 - 禁止 `:latest`
 
 ## 用法
