@@ -21,7 +21,6 @@
   /* 歌词可读色 - JS 按当前深/浅模式从封面色派生，原色对比度足够时保持原样 */
   --lyric-active-primary: var(--music-primary);
   --lyric-active-secondary: var(--music-secondary);
-  --lyric-passed: var(--music-primary);
   --lyric-unfilled: color-mix(in srgb, var(--text-primary) 34%, transparent);
   --lyric-glow: var(--accent-glow);
   
@@ -657,6 +656,8 @@ html, body {
 }
 
 .lyric-line.passed {
+  /* 已播放行与当前行已唱部分共用同一颜色，只靠透明度/模糊度表达距离 */
+  color: var(--lyric-active-primary);
   opacity: 0.3;
   filter: blur(6px);
 }
@@ -853,9 +854,9 @@ html, body {
   white-space: pre;
 }
 
-/* 已唱过的行：整体点亮为主色 */
+/* 已唱过的行：与当前行已唱部分共用同一主色 */
 #lyrics-container.karaoke .lyric-line.passed .lyric-word {
-  background-image: linear-gradient(90deg, var(--lyric-passed), var(--lyric-passed));
+  background-image: linear-gradient(90deg, var(--lyric-active-primary), var(--lyric-active-primary));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;

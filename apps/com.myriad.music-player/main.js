@@ -802,9 +802,60 @@ function bindLyricManualScroll(container) {
 // duration 把本句提前踢入「停顿点」；空窗仍须 > INTERLUDE_MIN_GAP 才插呼吸点
 var MIN_LINE_HOLD = 2.2;
 var INTERLUDE_MIN_GAP = 6;
+// 行时长比最后一个字更晚时，通常表示尾音延长；但部分脏 KRC
+// 会把整曲时长误填进单行 duration。无下一句/整曲边界时才用此兜底上限。
+var MAX_VERBATIM_TAIL = 12;
 
-// 仅用于间奏 gap 插入：估算本句「唱完」时刻。不改卡拉 OK 填色时间轴。
-// 优先字级 end → 行级 duration → 相对 nextStart 的兜底；再套 min-hold / 钳位。
+// 将逐字 end 与行级 duration 分别校验后合并。
+// 不让一个离谱的行 duration 拖住歌词，也不让过早结束的最后一字吞掉尾音。
+function getVerbatimTimelineEnd(v, lineStart, nextStart) {
+  if (!v) return NaN;
+
+  var wordEnd = NaN;
+  if (v.words && v.words.length > 0) {
+    var maxEnd = -Infinity;
+    for (var w = 0; w < v.words.length; w++) {
+      var word = v.words[w];
+      if (!word) continue;
+      var ws = (typeof word.start === 'number' && isFinite(word.start))
+        ? word.start
+        : (typeof word.time === 'number' && isFinite(word.time) ? word.time : NaN);
+      if (!isFinite(ws)) continue;
+      var wd = (typeof word.duration === 'number' && isFinite(word.duration) && word.duration > 0)
+        ? word.duration
+        : 0;
+      var we = ws + wd;
+      if (we > maxEnd) maxEnd = we;
+    }
+    if (isFinite(maxEnd) && maxEnd > -Infinity) wordEnd = maxEnd;
+  }
+
+  var headerEnd = NaN;
+  if (typeof v.duration === 'number' && isFinite(v.duration) && v.duration > 0) {
+    var vTime = (typeof v.time === 'number' && isFinite(v.time)) ? v.time : lineStart;
+    headerEnd = vTime + v.duration;
+  }
+
+  function isPlausible(end) {
+    if (!isFinite(end) || end < lineStart - 0.5) return false;
+    return !isFinite(nextStart) || end <= nextStart + 1;
+  }
+
+  if (!isPlausible(wordEnd)) wordEnd = NaN;
+  if (!isPlausible(headerEnd)) headerEnd = NaN;
+  if (!isFinite(nextStart) && isFinite(headerEnd) && isFinite(wordEnd) &&
+      headerEnd - wordEnd > MAX_VERBATIM_TAIL) {
+    headerEnd = NaN;
+  }
+
+  if (isFinite(wordEnd) && isFinite(headerEnd)) return Math.max(wordEnd, headerEnd);
+  if (isFinite(wordEnd)) return wordEnd;
+  if (isFinite(headerEnd)) return headerEnd;
+  return NaN;
+}
+
+// 用于间奏 gap 插入：估算本句「唱完」时刻。卡拉 OK 尾音也共用同一校验结果。
+// 合并可信的字级 end / 行级 duration，无有效时长时才相对 nextStart 兜底。
 function computeLineEnd(i, lyrics, verbatim) {
   var line = lyrics[i];
   var next = lyrics[i + 1];
@@ -821,35 +872,10 @@ function computeLineEnd(i, lyrics, verbatim) {
   // 两句间隔本身短于 min-hold：永不插入间奏
   if (nextStart - lineStart < MIN_LINE_HOLD) return null;
 
-  var rawEnd = NaN;
   var v = verbatim && verbatim[i];
+  var rawEnd = getVerbatimTimelineEnd(v, lineStart, nextStart);
 
-  // 1) 字级 end：max(word.start|time + duration)
-  if (v && v.words && v.words.length > 0) {
-    var maxEnd = -Infinity;
-    for (var w = 0; w < v.words.length; w++) {
-      var word = v.words[w];
-      if (!word) continue;
-      var ws = (typeof word.start === 'number' && isFinite(word.start))
-        ? word.start
-        : (typeof word.time === 'number' && isFinite(word.time) ? word.time : NaN);
-      if (!isFinite(ws)) continue;
-      var wd = (typeof word.duration === 'number' && isFinite(word.duration) && word.duration > 0)
-        ? word.duration
-        : 0;
-      var we = ws + wd;
-      if (we > maxEnd) maxEnd = we;
-    }
-    if (isFinite(maxEnd) && maxEnd > -Infinity) rawEnd = maxEnd;
-  }
-
-  // 2) 行级 duration（存在且正）
-  if (!isFinite(rawEnd) && v && typeof v.duration === 'number' && isFinite(v.duration) && v.duration > 0) {
-    var vTime = (typeof v.time === 'number' && isFinite(v.time)) ? v.time : lineStart;
-    rawEnd = vTime + v.duration;
-  }
-
-  // 3) 无逐字 / 无 duration：相对 nextStart 估算（旧 time+3 会无视 next 与 min-hold）
+  // 无逐字 / 无可信 duration：相对 nextStart 估算（旧 time+3 会无视 next 与 min-hold）
   if (!isFinite(rawEnd)) {
     rawEnd = lineStart + Math.min(3, Math.max(MIN_LINE_HOLD, (nextStart - lineStart) * 0.5));
   }
@@ -1433,7 +1459,7 @@ var karaokeGeo = {
   lastSw: null,
 };
 
-function buildKaraokeGeo(v, words) {
+function buildKaraokeGeo(v, words, lineIndex) {
   // words = 渲染 span 集合（多字符 token 已拆为逐字符 span），
   // 通过 data-w 映射回 v.words 的时间轴索引
   var cumX = [];
@@ -1482,6 +1508,30 @@ function buildKaraokeGeo(v, words) {
       xe: cumX[j] + widths[j],
     });
     i = j + 1;
+  }
+
+  // 某些 KRC 的最后一字时长会比行 duration 早结束（尾音被截断）。
+  // 延长最后一段到已校验的行结束，使填色与间奏切换使用同一时刻。
+  if (segs.length > 0) {
+    var line = pageState.lyrics[lineIndex];
+    var nextLine = pageState.lyrics[lineIndex + 1];
+    var lineStart = (line && typeof line.time === 'number' && isFinite(line.time))
+      ? line.time
+      : ((typeof v.time === 'number' && isFinite(v.time)) ? v.time : segs[0].ts);
+    var nextStart = (nextLine && typeof nextLine.time === 'number' && isFinite(nextLine.time))
+      ? nextLine.time
+      : NaN;
+    // 最后一句没有 nextStart，用整曲时长拦住「把 total 误当行 duration」的 KRC。
+    if (!isFinite(nextStart) && pageState.status && pageState.status.currentTrack) {
+      var trackDuration = Number(pageState.status.currentTrack.duration);
+      if (isFinite(trackDuration) && trackDuration > 10000) trackDuration /= 1000;
+      if (isFinite(trackDuration) && trackDuration > lineStart) nextStart = trackDuration;
+    }
+    var timelineEnd = getVerbatimTimelineEnd(v, lineStart, nextStart);
+    var lastSeg = segs[segs.length - 1];
+    if (isFinite(timelineEnd) && timelineEnd > lastSeg.te) {
+      lastSeg.te = timelineEnd;
+    }
   }
 
   karaokeGeo.cumX = cumX;
@@ -1556,7 +1606,7 @@ function updateWordHighlight(position) {
     var words = activeLine.getElementsByClassName('lyric-word');
     // span 数与构建时记录的一致才渲染（多字符 token 已拆为逐字符 span）
     if (!v._spanCount || words.length !== v._spanCount) return;
-    buildKaraokeGeo(v, words);
+    buildKaraokeGeo(v, words, idx);
     // span 快照为数组（避免每帧访问 live collection）+ 写入去重缓存（NaN = 未写过）
     var n = words.length;
     karaokeGeo.spans = new Array(n);
@@ -2477,14 +2527,11 @@ function applyLyricReadableColors() {
   var themeAltRaw = isDark ? lastColors.light : lastColors.dark;
   var primaryCandidates = [primaryRaw, themeAltRaw, secondaryRaw, lastColors.accent];
   var secondaryCandidates = [secondaryRaw, lastColors.accent, themeAltRaw, primaryRaw];
-  var passedCandidates = [primaryRaw, themeAltRaw, secondaryRaw];
   var primary = deriveReadableLyricColor(primaryCandidates, '#fc3c44', isDark, isDark ? 0.78 : 0.34, 3.7);
   var secondary = deriveReadableLyricColor(secondaryCandidates, primaryRaw, isDark, isDark ? 0.70 : 0.42, 3.4);
-  var passed = deriveReadableLyricColor(passedCandidates, primary, isDark, isDark ? 0.68 : 0.38, 3.0);
 
   root.style.setProperty('--lyric-active-primary', primary);
   root.style.setProperty('--lyric-active-secondary', secondary);
-  root.style.setProperty('--lyric-passed', passed);
   root.style.setProperty('--lyric-unfilled', isDark ? 'rgba(245, 245, 247, 0.34)' : 'rgba(29, 29, 31, 0.34)');
   root.style.setProperty('--lyric-glow', rgbaFromHex(primary, isDark ? 0.34 : 0.18));
 }
