@@ -1,10 +1,10 @@
 {
   "$schema": "https://myriad.app/schemas/tapp-store-v1.json",
   "name": "Myriad Official Tapp Store",
-  "version": "1.8.5",
+  "version": "1.8.6",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-07-19T12:00:00Z",
+  "updated_at": "2026-07-19T12:30:00Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.app",
@@ -14,7 +14,7 @@
     {
       "id": "com.myriad.music-player",
       "name": "音乐播放器",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "description": "控制系统音乐播放，查看歌词与播放列表",
       "long_description": "对接系统播放器，显示封面、进度与播放控制；支持同步歌词、列表搜索，以及顺序、循环、单曲和随机模式。",
       "locales": {
@@ -59,12 +59,12 @@
       "featured": true,
       "verified": true,
       "created_at": "2025-12-10T00:00:00Z",
-      "updated_at": "2026-07-19T12:00:00Z"
+      "updated_at": "2026-07-19T12:30:00Z"
     },
     {
       "id": "com.myriad.quick-notes",
       "name": "便携便签",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "description": "快速记录想法，支持搜索与主页小组件",
       "long_description": "在页面中编写、搜索和整理便签，并通过 4×2 / 4×4 小组件在主页速览或速记。支持明暗主题与中英日。",
       "locales": {
@@ -115,12 +115,12 @@
       "featured": true,
       "verified": true,
       "created_at": "2025-12-04T00:00:00Z",
-      "updated_at": "2026-07-19T12:00:00Z"
+      "updated_at": "2026-07-19T12:30:00Z"
     },
     {
       "id": "com.myriad.config-generator",
       "name": "Myriad 安装配置生成",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "description": "生成 Compose、.env 与 Nginx 部署配置",
       "long_description": "填写域名与数据库参数，生成官方生产拓扑的 docker-compose、.env、Nginx 与部署说明（含 1Panel）。",
       "locales": {
@@ -159,7 +159,7 @@
       "featured": true,
       "verified": true,
       "created_at": "2025-12-14T00:00:00Z",
-      "updated_at": "2026-07-19T12:00:00Z"
+      "updated_at": "2026-07-19T12:30:00Z"
     }
   ]
 }
