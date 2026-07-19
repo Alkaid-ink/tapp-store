@@ -86,6 +86,11 @@ tapp-store/
 
       // 可选字段
       "long_description": "详细描述...",
+      // name/description 的多语言覆盖（BCP-47 键；未命中回退顶层中文）
+      "locales": {
+        "en-US": { "name": "App Name", "description": "Short description" },
+        "ja-JP": { "name": "アプリ名", "description": "短い説明" }
+      },
       "license": "MIT",
       "homepage": "https://...",
       "repository": "https://...",

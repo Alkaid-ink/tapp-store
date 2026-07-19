@@ -4,6 +4,16 @@
   "version": "1.0.0",
   "minSystemVersion": "0.2.1",
   "description": "控制系统音乐播放，查看歌词与播放列表",
+  "locales": {
+    "en-US": {
+      "name": "Music Player",
+      "description": "Control system music playback, view lyrics and playlists"
+    },
+    "ja-JP": {
+      "name": "ミュージックプレーヤー",
+      "description": "システム音楽の再生を操作し、歌詞とプレイリストを表示"
+    }
+  },
   "category": "media",
   "main": "main.js",
   "author": {

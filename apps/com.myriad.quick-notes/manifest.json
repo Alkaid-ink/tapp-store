@@ -4,6 +4,16 @@
   "version": "1.0.0",
   "minSystemVersion": "0.2.1",
   "description": "快速记录想法，支持搜索与主页小组件",
+  "locales": {
+    "en-US": {
+      "name": "Quick Notes",
+      "description": "Quickly jot down ideas with search and home screen widgets"
+    },
+    "ja-JP": {
+      "name": "クイックノート",
+      "description": "アイデアを素早くメモ。検索とホームウィジェット対応"
+    }
+  },
   "category": "productivity",
   "main": "main.js",
   "author": {
