@@ -1,0 +1,567 @@
+<!-- 背景层 -->
+<div id="tapp-background">
+  <div class="page-bg-base"></div>
+  <div class="page-bg-glow page-bg-glow-1"></div>
+  <div class="page-bg-glow page-bg-glow-2"></div>
+</div>
+
+<!-- 内容层 -->
+<div id="tapp-content">
+  <!-- 顶部导航栏 -->
+  <nav id="aro-nav" class="aro-nav">
+    <button class="aro-nav-item aro-nav-active" data-view="feed" id="nav-feed">
+      <div id="nav-feed-avatar" class="nav-feed-avatar">?</div>
+      <span id="nav-feed-label" class="nav-feed-name"></span>
+    </button>
+    <button class="aro-nav-item" data-view="messages" id="nav-messages">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+      <span id="nav-messages-label">信使</span>
+    </button>
+    <button class="aro-nav-item" data-view="rings" id="nav-rings">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M0 15L24 9"/></svg>
+      <span id="nav-rings-label">环网</span>
+    </button>
+  </nav>
+
+  <!-- ====== 信使视图 ====== -->
+  <div id="view-messages" class="aro-view">
+    <div class="messenger-app">
+      <!-- 左侧：会话列表 -->
+      <aside id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+          <h2 class="sidebar-title">信使</h2>
+          <button id="create-btn" class="create-btn" title="新建">+</button>
+        </div>
+        <div class="aro-search-bar">
+          <span class="aro-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+          <input id="conv-search" class="aro-search-input" type="search" autocomplete="off" enterkeyhint="search" placeholder="搜索会话…" />
+        </div>
+        <div id="conv-list" class="conv-list"></div>
+      </aside>
+
+      <!-- 中间：聊天区 -->
+      <main id="chat-main" class="chat-main">
+        <div id="empty-state" class="empty-state">
+          <div class="empty-icon"><svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 4L12 13 2 4"/></svg></div>
+          <p class="empty-text">选择一个会话开始聊天</p>
+        </div>
+        <div id="chat-container" class="chat-container" style="display:none">
+          <div id="chat-header" class="chat-header">
+            <button id="back-btn" class="back-btn">←</button>
+            <div id="chat-hdr-avatar" class="chat-hdr-avatar"></div>
+            <div class="chat-header-info">
+              <div id="chat-name" class="chat-name"></div>
+              <div id="chat-meta" class="chat-meta"></div>
+            </div>
+            <div id="chat-actions" class="chat-actions"></div>
+          </div>
+          <div id="e2e-ready-banner" class="e2e-ready-banner" hidden role="status" aria-live="polite"></div>
+          <div id="pinned-bar" class="pinned-bar" style="display:none"></div>
+          <div id="messages" class="messages-area"></div>
+          <div class="input-float-wrap">
+            <div id="quote-preview" class="quote-preview" style="display:none"></div>
+            <div id="attach-preview" class="attach-preview" style="display:none"></div>
+            <div id="input-bar" class="input-bar">
+              <button id="attach-btn" class="attach-btn" title="附件">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              </button>
+              <textarea id="msg-input" class="msg-input" rows="1" placeholder="输入消息..."></textarea>
+              <button id="send-btn" class="send-btn" disabled aria-label="Send">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 20V4M5 11l7-7 7 7"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <input id="attach-file-input" type="file" style="display:none" />
+          <input id="attach-image-input" type="file" accept="image/*" style="display:none" />
+        </div>
+      </main>
+
+      <!-- 群文件面板（仅群聊；覆盖在消息视图上，复用 history 侧栏壳） -->
+      <div id="room-files-overlay" class="history-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="room-files-title" hidden>
+        <div class="history-sheet" role="document">
+          <div class="history-grab" aria-hidden="true"><span class="history-grab-bar"></span></div>
+          <div class="history-header">
+            <div class="history-header-leading">
+              <div class="history-header-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+              </div>
+              <div class="history-header-text">
+                <h3 id="room-files-title" class="history-title">群文件</h3>
+                <div id="room-files-subtitle" class="history-subtitle"></div>
+              </div>
+            </div>
+            <button type="button" id="room-files-close" class="history-close" aria-label="Close">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="history-toolbar">
+            <div class="aro-search-bar history-search-bar">
+              <span class="aro-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+              <input id="room-files-search" class="aro-search-input" type="search" autocomplete="off" enterkeyhint="search" placeholder="搜索文件名…" />
+            </div>
+            <div id="room-files-filters" class="history-filters" role="tablist" aria-label="Filter">
+              <button type="button" class="history-filter history-filter-active" data-room-files-filter="all" role="tab" aria-selected="true">全部</button>
+              <button type="button" class="history-filter" data-room-files-filter="image" role="tab" aria-selected="false">图片</button>
+              <button type="button" class="history-filter" data-room-files-filter="file" role="tab" aria-selected="false">文件</button>
+            </div>
+          </div>
+          <div id="room-files-list" class="history-list"></div>
+          <div class="history-footer">
+            <div id="room-files-meta" class="history-meta"></div>
+            <button type="button" id="room-files-load-more" class="history-load-more" hidden>加载更多</button>
+            <p id="room-files-hint" class="room-files-hint"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 聊天记录面板（覆盖在消息视图上） -->
+      <div id="chat-history-overlay" class="history-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="history-title" hidden>
+        <div class="history-sheet" role="document">
+          <div class="history-grab" aria-hidden="true"><span class="history-grab-bar"></span></div>
+          <div class="history-header">
+            <div class="history-header-leading">
+              <div class="history-header-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+              </div>
+              <div class="history-header-text">
+                <h3 id="history-title" class="history-title">聊天记录</h3>
+                <div id="history-subtitle" class="history-subtitle"></div>
+              </div>
+            </div>
+            <button type="button" id="history-close" class="history-close" aria-label="Close">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="history-toolbar">
+            <div class="aro-search-bar history-search-bar">
+              <span class="aro-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+              <input id="history-search" class="aro-search-input" type="search" autocomplete="off" enterkeyhint="search" placeholder="搜索聊天记录…" />
+            </div>
+            <div id="history-filters" class="history-filters" role="tablist" aria-label="Filter">
+              <button type="button" class="history-filter history-filter-active" data-history-filter="all" role="tab" aria-selected="true">全部</button>
+              <button type="button" class="history-filter" data-history-filter="text" role="tab" aria-selected="false">文字</button>
+              <button type="button" class="history-filter" data-history-filter="image" role="tab" aria-selected="false">图片</button>
+              <button type="button" class="history-filter" data-history-filter="file" role="tab" aria-selected="false">文件</button>
+              <button type="button" class="history-filter" data-history-filter="share" role="tab" aria-selected="false">分享</button>
+              <button type="button" class="history-filter" data-history-filter="pinned" role="tab" aria-selected="false">置顶</button>
+            </div>
+          </div>
+          <div id="history-list" class="history-list"></div>
+          <div class="history-footer">
+            <div id="history-meta" class="history-meta"></div>
+            <button type="button" id="history-load-more" class="history-load-more" hidden>加载更早消息</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧：成员面板 -->
+      <aside id="member-panel" class="member-panel" style="display:none">
+        <div class="member-header">
+          <button id="member-back-btn" class="member-back-btn">←</button>
+          <h3 id="member-title" class="member-title">成员</h3>
+          <div id="invite-wrap" class="invite-wrap" style="display:none">
+            <button id="invite-toggle" class="aro-icon-btn invite-toggle" title="邀请成员">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="aro-search-bar aro-search-bar-compact">
+          <span class="aro-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+          <input id="member-search" class="aro-search-input" type="search" autocomplete="off" enterkeyhint="search" placeholder="搜索成员…" />
+        </div>
+        <div id="member-list" class="member-list"></div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- ====== 动态视图 (Feed, X-style sidebar + content) ====== -->
+  <div id="view-feed" class="aro-view aro-view-active">
+    <div class="feed-layout">
+      <!-- Left sidebar -->
+      <aside class="feed-sidebar" id="feed-sidebar">
+        <nav class="feed-sidebar-nav">
+          <button class="feed-nav-item feed-nav-active" data-sub="timeline">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path d="M9 22V12h6v10"/></svg>
+            <span id="feed-nav-timeline">动态</span>
+          </button>
+          <button class="feed-nav-item" data-sub="following">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+            <span id="feed-nav-following">关注</span>
+            <span class="feed-nav-badge" id="feed-badge-following" hidden>0</span>
+          </button>
+          <button class="feed-nav-item" data-sub="followers">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+            <span id="feed-nav-followers">粉丝</span>
+            <span class="feed-nav-badge" id="feed-badge-followers" hidden>0</span>
+          </button>
+          <button class="feed-nav-item" data-sub="published">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+            <span id="feed-nav-published">已发布</span>
+            <span class="feed-nav-badge" id="feed-badge-published" hidden>0</span>
+          </button>
+          <button class="feed-nav-item" data-sub="bookmarks">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+            <span id="feed-nav-bookmarks">收藏</span>
+            <span class="feed-nav-badge" id="feed-badge-bookmarks" hidden>0</span>
+          </button>
+          <button class="feed-nav-item" data-sub="settings">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9c.3.6.9 1 1.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>
+            <span id="feed-nav-settings">设置</span>
+          </button>
+        </nav>
+        <div class="feed-sidebar-footer">
+          <div class="feed-profile-card" data-fed-profile>
+            <div class="feed-profile-summary" data-fed-toggle role="button" tabindex="0" aria-expanded="false">
+              <div id="feed-avatar" class="feed-avatar" data-feed-avatar>?</div>
+              <div class="feed-profile-info">
+                <div id="feed-display-name" class="feed-display-name" data-feed-display-name></div>
+                <div id="feed-handle" class="feed-handle" data-fed-handle-summary></div>
+              </div>
+              <button class="feed-profile-copy" data-copy-fed="handle" title="复制">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+              </button>
+              <button class="feed-profile-toggle" data-fed-toggle-button title="展开">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+            </div>
+            <div class="feed-profile-details" data-fed-details>
+              <button class="feed-identity-actor" data-copy-fed="actor" type="button" data-fed-actor></button>
+            </div>
+            <div class="feed-profile-tablet-popover" data-fed-tablet-popover>
+              <div class="feed-profile-tablet-main">
+                <div class="feed-profile-info">
+                  <div class="feed-display-name" data-feed-display-name></div>
+                  <div class="feed-handle" data-fed-handle-summary></div>
+                </div>
+                <button class="feed-profile-copy" data-copy-fed="handle" title="复制">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                </button>
+                <button class="feed-profile-toggle" data-fed-toggle-button title="展开">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+                </button>
+              </div>
+              <div class="feed-profile-details" data-fed-details>
+                <button class="feed-identity-actor" data-copy-fed="actor" type="button" data-fed-actor></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+      <!-- Main content -->
+      <main class="feed-main">
+        <div class="feed-main-header">
+          <div class="feed-header-leading">
+            <div class="feed-main-heading">
+              <div id="feed-section-title" class="feed-section-title">首页</div>
+              <div id="feed-section-meta" class="feed-section-meta">关注的人与你的动态</div>
+            </div>
+          </div>
+          <div class="feed-header-actions">
+            <button id="refresh-feed-btn" class="feed-refresh-btn" title="刷新">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </button>
+            <div class="feed-plus-wrap" id="feed-plus-wrap" style="display:none">
+              <button id="feed-plus-btn" class="feed-plus-btn" type="button" title="添加" aria-haspopup="menu" aria-expanded="false" aria-controls="feed-plus-menu">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+              </button>
+              <div id="feed-plus-menu" class="feed-plus-menu" role="menu" hidden>
+                <button type="button" role="menuitem" class="feed-plus-item" data-feed-plus="post" id="feed-plus-post">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                  <span id="feed-plus-post-label">发帖</span>
+                </button>
+                <button type="button" role="menuitem" class="feed-plus-item" data-feed-plus="follow" id="feed-plus-follow">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
+                  <span id="feed-plus-follow-label">关注</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Mobile tabs (visible only on small screens) -->
+        <div class="feed-mobile-tabs" id="feed-mobile-tabs">
+          <div class="feed-plus-wrap feed-plus-wrap-mobile" id="feed-plus-wrap-mobile" style="display:none">
+            <button id="feed-plus-mobile-btn" class="feed-mobile-compose" type="button" title="添加" aria-haspopup="menu" aria-expanded="false" aria-controls="feed-plus-menu-mobile">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <div id="feed-plus-menu-mobile" class="feed-plus-menu feed-plus-menu-mobile" role="menu" hidden>
+              <button type="button" role="menuitem" class="feed-plus-item" data-feed-plus="post" id="feed-plus-post-mobile">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                <span id="feed-plus-post-label-mobile">发帖</span>
+              </button>
+              <button type="button" role="menuitem" class="feed-plus-item" data-feed-plus="follow" id="feed-plus-follow-mobile">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
+                <span id="feed-plus-follow-label-mobile">关注</span>
+              </button>
+            </div>
+          </div>
+          <button class="feed-mobile-tab feed-mobile-tab-active" data-sub="timeline"><span id="feed-tab-timeline">动态</span></button>
+          <button class="feed-mobile-tab" data-sub="following"><span id="feed-tab-following">关注</span><span class="feed-nav-badge" id="feed-mobile-badge-following" hidden>0</span></button>
+          <button class="feed-mobile-tab" data-sub="followers"><span id="feed-tab-followers">粉丝</span><span class="feed-nav-badge" id="feed-mobile-badge-followers" hidden>0</span></button>
+          <button class="feed-mobile-tab" data-sub="published"><span id="feed-tab-published">已发布</span><span class="feed-nav-badge" id="feed-mobile-badge-published" hidden>0</span></button>
+          <button class="feed-mobile-tab" data-sub="bookmarks"><span id="feed-tab-bookmarks">收藏</span><span class="feed-nav-badge" id="feed-mobile-badge-bookmarks" hidden>0</span></button>
+          <button class="feed-mobile-tab" data-sub="settings"><span id="feed-tab-settings">设置</span></button>
+          <button id="refresh-feed-mobile-btn" class="feed-mobile-refresh" title="刷新">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          </button>
+        </div>
+        <div class="feed-profile-card feed-profile-mobile" data-fed-profile>
+          <div class="feed-profile-summary" data-fed-toggle role="button" tabindex="0" aria-expanded="false">
+            <div class="feed-avatar" data-feed-avatar>?</div>
+            <div class="feed-profile-info">
+              <div class="feed-display-name" data-feed-display-name></div>
+              <div class="feed-handle" data-fed-handle-summary></div>
+            </div>
+            <button class="feed-profile-copy" data-copy-fed="handle" title="复制">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            </button>
+            <button class="feed-profile-toggle" data-fed-toggle-button title="展开">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+          </div>
+          <div class="feed-profile-details" data-fed-details>
+            <button class="feed-identity-actor" data-copy-fed="actor" type="button" data-fed-actor></button>
+          </div>
+        </div>
+        <div class="aro-search-bar feed-search-bar">
+          <span class="aro-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+          <input id="feed-search" class="aro-search-input" type="search" autocomplete="off" enterkeyhint="search" placeholder="搜索动态…" />
+        </div>
+        <div id="feed-content" class="feed-content"></div>
+        <div id="feed-empty" class="feed-empty" style="display:none">
+          <div class="aro-empty-mark feed-empty-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5a14 14 0 0114 14"/><path d="M5 11a8 8 0 018 8"/><circle cx="6" cy="18" r="1.6"/></svg></div>
+          <div id="feed-empty-title" class="feed-empty-title">还没有动态</div>
+          <span id="feed-empty-text">关注别人或发帖，首页就会亮起来</span>
+          <button type="button" id="feed-empty-retry" class="feed-empty-retry">重试</button>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- ====== 环网视图 ====== -->
+  <div id="view-rings" class="aro-view">
+    <div class="aro-panel-layout">
+      <!-- 左侧：环网列表 -->
+      <aside id="ring-sidebar" class="sidebar">
+        <div class="sidebar-header">
+          <h2 id="ring-sidebar-title" class="sidebar-title">环网</h2>
+          <button id="ring-create-open-btn" class="create-btn" title="新建">+</button>
+        </div>
+        <div class="aro-search-bar">
+          <span class="aro-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+          <input id="ring-search" class="aro-search-input" type="search" autocomplete="off" enterkeyhint="search" placeholder="搜索环网…" />
+        </div>
+        <div id="ring-list" class="conv-list"></div>
+      </aside>
+      <!-- 右侧：环网详情 -->
+      <main class="panel-main">
+        <div id="ring-empty-state" class="empty-state">
+          <div class="empty-icon"><svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M0 15L24 9"/></svg></div>
+          <p class="empty-text" id="ring-select-hint">选择一个环网查看详情</p>
+        </div>
+        <div id="ring-detail" class="panel-detail" style="display:none">
+          <div class="panel-detail-header">
+            <button id="ring-back-btn" class="back-btn">←</button>
+            <div id="ring-detail-icon" class="ring-hdr-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M0 15L24 9"/></svg></div>
+            <div class="chat-header-info">
+              <div id="ring-detail-name" class="chat-name"></div>
+              <div id="ring-detail-meta" class="chat-meta"></div>
+            </div>
+            <div class="chat-actions">
+              <button id="ring-sync-btn" class="action-btn ring-action-sync" title="同步">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                <span id="ring-sync-label">同步</span>
+              </button>
+              <div class="manage-wrap">
+                <button id="ring-manage-btn" class="aro-icon-btn manage-btn">⋯</button>
+                <div id="ring-manage-dropdown" class="manage-dropdown">
+                  <button id="ring-leave-btn" class="manage-item manage-item-danger">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+                    <span id="ring-leave-label">退出环网</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Ring ID (always visible for cross-instance join) -->
+          <div class="ring-id-bar" id="ring-id-bar">
+            <span class="ring-id-label" id="ring-id-label">Ring ID</span>
+            <code class="ring-id-value" id="ring-id-value" title=""></code>
+            <button type="button" class="ring-id-copy" id="ring-id-copy" title="Copy" aria-label="Copy">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            </button>
+          </div>
+          <!-- 同步状态 -->
+          <div id="ring-sync-status" class="ring-sync-bar" style="display:none"></div>
+          <!-- 添加节点 -->
+          <div class="invite-bar" id="ring-peer-bar">
+            <input id="ring-peer-input" class="invite-input" type="text" placeholder="Actor URL 或 @user@domain" />
+            <button id="ring-add-peer-btn" class="invite-btn">添加</button>
+          </div>
+          <!-- 节点列表 -->
+          <div id="ring-peers-list" class="member-list"></div>
+          <div id="ring-peers-empty" class="conv-empty" style="display:none">
+            <span data-i18n-empty-peers>暂无节点</span>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- 创建环网对话框 -->
+  <div id="ring-create-dialog" class="create-overlay" style="display:none">
+    <div class="create-dialog">
+      <div class="create-dialog-header">
+        <h3 id="ring-create-title" class="create-dialog-title">创建环网</h3>
+        <button id="ring-create-close" class="create-dialog-close">✕</button>
+      </div>
+      <div class="create-form">
+        <input id="ring-name-input" class="create-input" type="text" placeholder="环网名称" />
+        <select id="ring-type-select" class="create-input" style="height:40px;cursor:pointer">
+          <option id="ring-type-opt-brew" value="brew-recommend">Brew 推荐</option>
+          <option id="ring-type-opt-tapp" value="tapp-store">Tapp 商店</option>
+          <option id="ring-type-opt-library" value="library-exchange">资料交换</option>
+          <option id="ring-type-opt-instance" value="instance-directory">实例目录</option>
+        </select>
+        <div id="ring-brew-category-wrap" style="display:none;flex-direction:column;gap:6px">
+          <label id="ring-brew-category-label" for="ring-brew-category-select" style="font-size:12px;opacity:.8">Brew category (optional)</label>
+          <select id="ring-brew-category-select" class="create-input" style="height:40px;cursor:pointer">
+            <option id="ring-brew-category-all" value="">All my categories</option>
+          </select>
+          <input id="ring-brew-category-input" class="create-input" type="text" placeholder="Or type a category name" style="display:none" />
+        </div>
+        <button id="create-ring-btn" class="create-submit">创建</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 关注对话框（从 feed + 菜单打开） -->
+  <div id="feed-follow-dialog" class="create-overlay" style="display:none">
+    <div class="create-dialog">
+      <div class="create-dialog-header">
+        <h3 id="feed-follow-dialog-title" class="create-dialog-title">关注</h3>
+        <button id="feed-follow-dialog-close" class="create-dialog-close" type="button">✕</button>
+      </div>
+      <div class="create-form">
+        <input id="feed-follow-input" class="create-input" type="text" placeholder="Actor URL 或 @user@domain" autocomplete="off" />
+        <button id="feed-follow-btn" class="create-submit" type="button">关注</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 发帖对话框（从 feed + 菜单打开；与关注弹窗同级） -->
+  <div id="feed-compose-dialog" class="create-overlay feed-compose-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="feed-compose-dialog-title">
+    <div class="create-dialog feed-compose-dialog">
+      <div class="create-dialog-header">
+        <div class="feed-compose-title-row">
+          <h3 id="feed-compose-dialog-title" class="create-dialog-title">发帖</h3>
+          <span id="feed-compose-draft-hint" class="feed-compose-draft-hint" hidden></span>
+        </div>
+        <button id="feed-compose-dialog-close" class="create-dialog-close" type="button" aria-label="Close">✕</button>
+      </div>
+      <div class="feed-compose-body">
+        <textarea id="feed-compose-text" class="feed-compose-text" rows="4" placeholder="分享点什么…"></textarea>
+        <div id="feed-compose-previews" class="feed-compose-previews"></div>
+        <div id="feed-compose-draft-notice" class="feed-compose-draft-notice" hidden></div>
+        <div class="feed-compose-actions">
+          <div class="feed-compose-attach">
+            <button type="button" id="feed-compose-image-btn" class="feed-compose-tool" title="图片">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+              <span id="feed-compose-image-label">图片</span>
+            </button>
+            <button type="button" id="feed-compose-video-btn" class="feed-compose-tool" title="视频">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3V9z"/></svg>
+              <span id="feed-compose-video-label">视频</span>
+            </button>
+            <input id="feed-compose-image-input" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple style="display:none" />
+            <input id="feed-compose-video-input" type="file" accept="video/mp4,video/webm,video/quicktime" multiple style="display:none" />
+          </div>
+          <div class="feed-compose-submit">
+            <button type="button" id="feed-compose-cancel" class="feed-compose-cancel">取消</button>
+            <button type="button" id="feed-compose-publish" class="feed-compose-publish">发布</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 引用转发对话框 -->
+  <div id="quote-repost-dialog" class="create-overlay feed-compose-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="quote-repost-title" hidden>
+    <div class="create-dialog feed-compose-dialog quote-repost-dialog">
+      <div class="create-dialog-header">
+        <h3 id="quote-repost-title" class="create-dialog-title">Quote repost</h3>
+        <button id="quote-repost-close" class="create-dialog-close" type="button" aria-label="Close">✕</button>
+      </div>
+      <div class="feed-compose-body">
+        <textarea id="quote-repost-text" class="feed-compose-text" rows="3" placeholder="Add a comment…"></textarea>
+        <div id="quote-repost-preview" class="quote-repost-preview" hidden></div>
+        <div class="feed-compose-actions quote-repost-actions">
+          <div class="feed-compose-submit">
+            <button type="button" id="quote-repost-cancel" class="feed-compose-cancel">Cancel</button>
+            <button type="button" id="quote-repost-submit" class="feed-compose-publish">Repost</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 创建对话框 -->
+  <div id="create-dialog" class="create-overlay" style="display:none">
+    <div class="create-dialog">
+      <div class="create-dialog-header">
+        <h3 id="create-dialog-title" class="create-dialog-title">新建</h3>
+        <button id="create-dialog-close" class="create-dialog-close">✕</button>
+      </div>
+      <div class="create-dialog-tabs">
+        <button id="create-tab-channel" class="create-tab create-tab-active" data-tab="channel">私信</button>
+        <button id="create-tab-room" class="create-tab" data-tab="room">群聊</button>
+      </div>
+      <div id="create-form-channel" class="create-form">
+        <input id="create-channel-input" class="create-input" type="text" placeholder="Actor URL 或 @user@domain" />
+        <button id="create-channel-btn" class="create-submit">创建通道</button>
+      </div>
+      <div id="create-form-room" class="create-form" style="display:none">
+        <input id="create-room-input" class="create-input" type="text" placeholder="房间名称" />
+        <label class="edit-check-row" id="create-room-public-row">
+          <input type="checkbox" id="create-room-public" />
+          <span id="create-room-public-label">创建为公开群（可展示 ID，不可再私有）</span>
+        </label>
+        <button id="create-room-btn" class="create-submit">创建房间</button>
+        <div class="create-divider" id="create-join-divider"></div>
+        <label class="edit-label" id="join-room-id-label">加入公开群</label>
+        <input id="join-room-id-input" class="create-input" type="text" placeholder="输入 room id" autocomplete="off" />
+        <button id="join-room-id-btn" class="create-submit create-submit-secondary" type="button">加入</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 编辑房间对话框 -->
+  <div id="edit-room-dialog" class="create-overlay" style="display:none">
+    <div class="create-dialog">
+      <div class="create-dialog-header">
+        <h3 id="edit-room-title" class="create-dialog-title">编辑房间</h3>
+        <button id="edit-room-close" class="create-dialog-close">✕</button>
+      </div>
+      <div class="create-form">
+        <label class="edit-label" id="edit-name-label">房间名称</label>
+        <input id="edit-room-name" class="create-input" type="text" />
+        <label class="edit-label" id="edit-desc-label">房间描述</label>
+        <input id="edit-room-desc" class="create-input" type="text" />
+        <label class="edit-check-row" id="edit-room-public-row">
+          <input type="checkbox" id="edit-room-public" />
+          <span id="edit-room-public-label">公开群组</span>
+        </label>
+        <p class="edit-hint" id="edit-room-public-hint" style="display:none"></p>
+        <div class="edit-room-id-box" id="edit-room-id-box" style="display:none">
+          <label class="edit-label" id="edit-room-id-label">群组 ID</label>
+          <div class="edit-room-id-row">
+            <code id="edit-room-id-value" class="edit-room-id-value"></code>
+            <button type="button" class="edit-room-id-copy" id="edit-room-id-copy">复制</button>
+          </div>
+        </div>
+        <button id="edit-room-save" class="create-submit">保存</button>
+      </div>
+    </div>
+  </div>
+</div>

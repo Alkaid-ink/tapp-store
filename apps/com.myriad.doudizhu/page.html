@@ -1,0 +1,84 @@
+<div id="tapp-background"><div class="ddz-bg"></div></div>
+<div id="tapp-content" class="ddz-root">
+  <header class="ddz-header glass">
+    <div>
+      <h1 class="ddz-title">斗地主</h1>
+      <p id="ddz-status" class="ddz-status">准备中…</p>
+    </div>
+    <div class="ddz-meta">
+      <span id="ddz-phase">大厅</span>
+      <span id="ddz-room-label" class="ddz-muted"></span>
+    </div>
+  </header>
+
+  <!-- LOBBY -->
+  <section id="ddz-lobby" class="ddz-panel glass">
+    <h2>房间大厅</h2>
+    <p class="ddz-hint">创建房间并邀请 2 位好友，三人准备后开始；或单机练习。</p>
+    <div class="ddz-row">
+      <button type="button" id="ddz-create" class="ddz-btn">创建房间</button>
+      <button type="button" id="ddz-solo" class="ddz-btn ddz-btn-accent">单机练习</button>
+    </div>
+    <div class="ddz-row">
+      <input id="ddz-join-id" class="ddz-input" placeholder="房间 ID" autocomplete="off" />
+      <button type="button" id="ddz-join" class="ddz-btn ddz-btn-ghost">加入房间</button>
+    </div>
+    <div class="ddz-row">
+      <input id="ddz-invite-actor" class="ddz-input" placeholder="好友 Actor（用户名或 URL）" autocomplete="off" />
+      <button type="button" id="ddz-invite" class="ddz-btn ddz-btn-ghost">邀请好友</button>
+    </div>
+    <div class="ddz-row">
+      <button type="button" id="ddz-ready" class="ddz-btn" disabled>准备</button>
+      <button type="button" id="ddz-start" class="ddz-btn ddz-btn-accent" disabled>开始对局</button>
+      <button type="button" id="ddz-leave" class="ddz-btn ddz-btn-ghost" disabled>离开</button>
+    </div>
+    <div id="ddz-seats" class="ddz-seats"></div>
+    <p id="ddz-lobby-msg" class="ddz-msg"></p>
+  </section>
+
+  <!-- TABLE -->
+  <section id="ddz-table" class="ddz-table glass hidden">
+    <div class="ddz-opponents">
+      <div class="ddz-seat" data-view="left">
+        <div class="ddz-seat-name" id="ddz-name-left">玩家</div>
+        <div class="ddz-seat-info"><span id="ddz-count-left">0</span> 张 · <span id="ddz-role-left"></span></div>
+        <div class="ddz-played" id="ddz-played-left"></div>
+      </div>
+      <div class="ddz-center">
+        <div id="ddz-bottom" class="ddz-bottom"></div>
+        <div id="ddz-last" class="ddz-last"></div>
+        <div id="ddz-turn-hint" class="ddz-turn-hint"></div>
+      </div>
+      <div class="ddz-seat" data-view="right">
+        <div class="ddz-seat-name" id="ddz-name-right">玩家</div>
+        <div class="ddz-seat-info"><span id="ddz-count-right">0</span> 张 · <span id="ddz-role-right"></span></div>
+        <div class="ddz-played" id="ddz-played-right"></div>
+      </div>
+    </div>
+
+    <div class="ddz-me">
+      <div class="ddz-seat-name" id="ddz-name-me">我</div>
+      <div class="ddz-seat-info"><span id="ddz-role-me"></span> · 手牌 <span id="ddz-count-me">0</span></div>
+      <div id="ddz-hand" class="ddz-hand" role="listbox" aria-label="手牌"></div>
+    </div>
+
+    <div class="ddz-controls">
+      <div id="ddz-auction-btns" class="ddz-row hidden">
+        <button type="button" class="ddz-btn" data-bid="1">1 分</button>
+        <button type="button" class="ddz-btn" data-bid="2">2 分</button>
+        <button type="button" class="ddz-btn" data-bid="3">3 分</button>
+        <button type="button" class="ddz-btn ddz-btn-ghost" id="ddz-bid-pass">不叫</button>
+      </div>
+      <div id="ddz-play-btns" class="ddz-row hidden">
+        <button type="button" class="ddz-btn ddz-btn-accent" id="ddz-play">出牌</button>
+        <button type="button" class="ddz-btn ddz-btn-ghost" id="ddz-pass">过牌</button>
+        <button type="button" class="ddz-btn ddz-btn-ghost" id="ddz-clear">取消选择</button>
+      </div>
+      <div id="ddz-end-btns" class="ddz-row hidden">
+        <button type="button" class="ddz-btn" id="ddz-again">再来一局</button>
+        <button type="button" class="ddz-btn ddz-btn-ghost" id="ddz-to-lobby">回大厅</button>
+      </div>
+    </div>
+    <p id="ddz-table-msg" class="ddz-msg"></p>
+  </section>
+</div>

@@ -1,0 +1,100 @@
+.ddz-root {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  box-sizing: border-box;
+  color: rgba(255,255,255,.92);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.ddz-bg {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(1000px 480px at 15% -10%, color-mix(in srgb, #ef4444 28%, transparent), transparent 55%),
+    radial-gradient(800px 400px at 90% 0%, color-mix(in srgb, #f59e0b 22%, transparent), transparent 50%),
+    linear-gradient(165deg, #0c1a12 0%, #122418 45%, #0a1410 100%);
+}
+.glass {
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.1);
+  background: color-mix(in srgb, #0f1f16 70%, transparent);
+  backdrop-filter: blur(12px);
+}
+.ddz-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; gap: 12px;
+}
+.ddz-title { margin: 0; font-size: 20px; font-weight: 800; letter-spacing: .04em; }
+.ddz-status { margin: 4px 0 0; font-size: 12px; opacity: .75; }
+.ddz-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-size: 13px; }
+.ddz-muted { opacity: .65; font-size: 12px; }
+.ddz-panel { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.ddz-panel h2 { margin: 0; font-size: 16px; }
+.ddz-hint { margin: 0; font-size: 13px; opacity: .75; line-height: 1.45; }
+.ddz-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ddz-input {
+  flex: 1; min-width: 140px;
+  border-radius: 10px; border: 1px solid rgba(255,255,255,.15);
+  background: rgba(0,0,0,.25); color: inherit; padding: 8px 12px; font-size: 14px;
+}
+.ddz-btn {
+  border: 0; border-radius: 999px; padding: 8px 14px; font-weight: 700;
+  cursor: pointer; color: #0b1020;
+  background: linear-gradient(135deg, #fcd34d, #f97316);
+}
+.ddz-btn:disabled { opacity: .4; cursor: not-allowed; }
+.ddz-btn-accent { background: linear-gradient(135deg, #86efac, #22c55e); }
+.ddz-btn-ghost {
+  color: rgba(255,255,255,.9); background: transparent;
+  border: 1px solid rgba(255,255,255,.2);
+}
+.ddz-seats {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 4px;
+}
+.ddz-seat-card {
+  padding: 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,.1);
+  background: rgba(0,0,0,.2); font-size: 12px; min-height: 64px;
+}
+.ddz-seat-card.ready { border-color: #4ade80; }
+.ddz-seat-card.empty { opacity: .5; }
+.ddz-msg { margin: 0; font-size: 12px; color: #fde68a; min-height: 1.2em; }
+.ddz-table { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.ddz-table.hidden, .hidden { display: none !important; }
+.ddz-opponents {
+  display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 10px; align-items: start;
+}
+.ddz-seat-name { font-weight: 700; font-size: 13px; }
+.ddz-seat-info { font-size: 11px; opacity: .7; margin: 2px 0 6px; }
+.ddz-center { text-align: center; }
+.ddz-bottom, .ddz-last, .ddz-hand, .ddz-played {
+  display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; min-height: 28px;
+}
+.ddz-card {
+  width: 36px; height: 50px; border-radius: 6px;
+  background: #f8fafc; color: #0f172a;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 800; box-shadow: 0 2px 6px rgba(0,0,0,.35);
+  user-select: none; border: 2px solid transparent;
+}
+.ddz-card.red { color: #dc2626; }
+.ddz-card.joker { background: linear-gradient(160deg, #fef3c7, #fde68a); color: #7c2d12; width: 40px; }
+.ddz-card.selected {
+  transform: translateY(-10px);
+  border-color: #22c55e;
+  box-shadow: 0 8px 16px rgba(34,197,94,.35);
+}
+.ddz-card.btnlike { cursor: pointer; }
+.ddz-card.back {
+  background: linear-gradient(145deg, #1e3a2f, #14532d);
+  color: rgba(255,255,255,.5); font-size: 10px;
+}
+.ddz-hand { justify-content: center; padding: 8px 0 4px; min-height: 64px; }
+.ddz-me { text-align: center; }
+.ddz-turn-hint { margin-top: 8px; font-size: 13px; font-weight: 600; color: #86efac; }
+.ddz-controls { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+@media (max-width: 560px) {
+  .ddz-seats { grid-template-columns: 1fr; }
+  .ddz-opponents { grid-template-columns: 1fr; }
+  .ddz-card { width: 30px; height: 42px; font-size: 10px; }
+}

@@ -1,0 +1,35 @@
+{
+  "id": "com.myriad.doudizhu",
+  "name": "斗地主",
+  "version": "1.0.0",
+  "minSystemVersion": "0.3.0",
+  "description": "3 人斗地主：叫分出牌；联邦 Room 邀请好友实时对战，亦可单机练习",
+  "locales": {
+    "en-US": {
+      "name": "Fight the Landlord",
+      "description": "3-player Dou Dizhu with federation rooms and realtime multiplayer"
+    },
+    "ja-JP": {
+      "name": "闘地主",
+      "description": "3人制の闘地主。連邦ルームで招待してリアルタイム対戦"
+    }
+  },
+  "category": "game",
+  "main": "main.js",
+  "author": {
+    "name": "Myriad Team",
+    "url": "https://github.com/Myriad-You"
+  },
+  "permissions": [
+    "storage",
+    "federation:read",
+    "federation:write",
+    "federation:message"
+  ],
+  "iconSvg": "<svg viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><rect x=\"3\" y=\"4\" width=\"12\" height=\"16\" rx=\"1.5\" stroke=\"currentColor\" stroke-width=\"2\"/><rect x=\"9\" y=\"4\" width=\"12\" height=\"16\" rx=\"1.5\" stroke=\"currentColor\" stroke-width=\"2\"/><path d=\"M12 10h2M12 14h3\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"/></svg>",
+  "themeColor": "#ef4444",
+  "hasPage": true,
+  "cssMode": "separated",
+  "pageStyles": "page.css",
+  "pageTemplate": "page.html"
+}

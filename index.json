@@ -1,10 +1,10 @@
 {
   "$schema": "https://myriad.app/schemas/tapp-store-v1.json",
   "name": "Myriad Official Tapp Store",
-  "version": "1.8.6",
+  "version": "1.8.8",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-07-19T11:28:19Z",
+  "updated_at": "2026-07-20T12:35:43Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.app",
@@ -35,7 +35,13 @@
       "homepage": "https://github.com/Myriad-You/tapp-store/tree/main/apps/com.myriad.music-player",
       "repository": "https://github.com/Myriad-You/tapp-store",
       "category": "media",
-      "tags": ["音乐", "播放器", "歌词", "播放列表", "多语言"],
+      "tags": [
+        "音乐",
+        "播放器",
+        "歌词",
+        "播放列表",
+        "多语言"
+      ],
       "permissions": [
         "storage",
         "ui:notification",
@@ -85,7 +91,13 @@
       "homepage": "https://github.com/Myriad-You/tapp-store/tree/main/apps/com.myriad.quick-notes",
       "repository": "https://github.com/Myriad-You/tapp-store",
       "category": "productivity",
-      "tags": ["笔记", "便签", "搜索", "小组件", "多语言"],
+      "tags": [
+        "笔记",
+        "便签",
+        "搜索",
+        "小组件",
+        "多语言"
+      ],
       "permissions": [
         "storage",
         "ui:notification",
@@ -141,8 +153,22 @@
       "homepage": "https://github.com/Myriad-You/tapp-store/tree/main/apps/com.myriad.config-generator",
       "repository": "https://github.com/Myriad-You/tapp-store",
       "category": "developer",
-      "tags": ["配置", "部署", "Docker", "Nginx", "Updater", "工具", "开发者"],
-      "permissions": ["storage", "ui:notification", "ui:theme", "ui:confirm", "network:fetch"],
+      "tags": [
+        "配置",
+        "部署",
+        "Docker",
+        "Nginx",
+        "Updater",
+        "工具",
+        "开发者"
+      ],
+      "permissions": [
+        "storage",
+        "ui:notification",
+        "ui:theme",
+        "ui:confirm",
+        "network:fetch"
+      ],
       "icon_svg": "<svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/><polyline points='14,2 14,8 20,8' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/><path d='M12 18v-6M9 15l3 3 3-3' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>",
       "theme_color": "#6366F1",
       "screenshots": [],
@@ -160,6 +186,145 @@
       "verified": true,
       "created_at": "2025-12-14T00:00:00Z",
       "updated_at": "2026-07-19T11:28:19Z"
+    },
+    {
+      "id": "com.myriad.doudizhu",
+      "name": "斗地主",
+      "version": "1.0.0",
+      "description": "3 人斗地主：叫分出牌；联邦 Room 邀请好友实时对战，亦可单机练习",
+      "long_description": "经典 3 人 54 张牌斗地主。房主创建联邦房间并邀请好友，三人准备后开始；支持叫分、出牌/过牌（单/对/三张/三带/顺子/连对/飞机/炸弹/王炸）。协议使用 message_type=doudizhu 房间消息 + subscribeRoom 实时同步；房主分配全局序号，成员发 intent。亦可单机练习。",
+      "locales": {
+        "en-US": {
+          "name": "Fight the Landlord",
+          "description": "3-player Dou Dizhu with federation rooms and realtime multiplayer"
+        },
+        "ja-JP": {
+          "name": "闘地主",
+          "description": "3人制の闘地主。連邦ルームで招待してリアルタイム対戦"
+        }
+      },
+      "author": {
+        "name": "Myriad Team",
+        "url": "https://github.com/Myriad-You"
+      },
+      "license": "MIT",
+      "homepage": "https://github.com/Myriad-You/tapp-store/tree/main/apps/com.myriad.doudizhu",
+      "repository": "https://github.com/Myriad-You/tapp-store",
+      "category": "game",
+      "tags": [
+        "游戏",
+        "斗地主",
+        "联机",
+        "联邦",
+        "牌类"
+      ],
+      "permissions": [
+        "storage",
+        "federation:read",
+        "federation:write",
+        "federation:message"
+      ],
+      "icon_svg": "<svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><rect x='3' y='4' width='12' height='16' rx='1.5' stroke='currentColor' stroke-width='2'/><rect x='9' y='4' width='12' height='16' rx='1.5' stroke='currentColor' stroke-width='2'/><path d='M12 10h2M12 14h3' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg>",
+      "theme_color": "#ef4444",
+      "screenshots": [],
+      "download": {
+        "manifest": "apps/com.myriad.doudizhu/manifest.json",
+        "code": "apps/com.myriad.doudizhu/main.js",
+        "readme": "apps/com.myriad.doudizhu/README.md",
+        "page_styles": "apps/com.myriad.doudizhu/page.css",
+        "page_template": "apps/com.myriad.doudizhu/page.html"
+      },
+      "size": 51787,
+      "downloads": 0,
+      "rating": 0,
+      "featured": true,
+      "verified": true,
+      "created_at": "2026-07-20T00:00:00Z",
+      "updated_at": "2026-07-20T12:27:28Z"
+    },
+    {
+      "id": "com.myriad.aro",
+      "name": "Aro",
+      "version": "1.0.0",
+      "description": "社交中心，统一管理消息、时间线、环网与个人资料",
+      "long_description": "社交中心：统一管理联邦消息（Channel/Room）、时间线、环网与个人资料。支持后台新消息通知、附件与多语言（中/英/日）。",
+      "locales": {
+        "en-US": {
+          "name": "Aro",
+          "description": "Social hub for messages, timeline, ring network and profile in one place"
+        },
+        "ja-JP": {
+          "name": "Aro",
+          "description": "メッセージ・タイムライン・リングネット・プロフィールをまとめるソーシャルハブ"
+        }
+      },
+      "author": {
+        "name": "Myriad Team",
+        "url": "https://github.com/Myriad-Dreamin"
+      },
+      "license": "MIT",
+      "homepage": "https://github.com/Myriad-You/tapp-store/tree/main/apps/com.myriad.aro",
+      "repository": "https://github.com/Myriad-You/tapp-store",
+      "category": "social",
+      "tags": [
+        "社交",
+        "消息",
+        "联邦",
+        "时间线",
+        "环网",
+        "官方"
+      ],
+      "permissions": [
+        "storage",
+        "ui:notification",
+        "ui:theme",
+        "federation:read",
+        "federation:write",
+        "federation:message",
+        "federation:files",
+        "platform:read",
+        "report:read",
+        "tappList:read",
+        "tappList:manage",
+        "brew:read"
+      ],
+      "icon_svg": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M2 12h20\"/><path d=\"M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z\"/></svg>",
+      "theme_color": "#6366f1",
+      "screenshots": [],
+      "download": {
+        "manifest": "apps/com.myriad.aro/manifest.json",
+        "code": "apps/com.myriad.aro/index.js",
+        "readme": "apps/com.myriad.aro/README.md",
+        "styles": "apps/com.myriad.aro/styles.css",
+        "page_styles": "apps/com.myriad.aro/page.css",
+        "page_template": "apps/com.myriad.aro/page.html",
+        "i18n": {
+          "zh": "apps/com.myriad.aro/i18n/zh.json",
+          "en": "apps/com.myriad.aro/i18n/en.json",
+          "ja": "apps/com.myriad.aro/i18n/ja.json"
+        },
+        "page_modules": {
+          "i18n.js": "apps/com.myriad.aro/page/i18n.js",
+          "state.js": "apps/com.myriad.aro/page/state.js",
+          "helpers.js": "apps/com.myriad.aro/page/helpers.js",
+          "attachments.js": "apps/com.myriad.aro/page/attachments.js",
+          "chat.js": "apps/com.myriad.aro/page/chat.js",
+          "members.js": "apps/com.myriad.aro/page/members.js",
+          "history.js": "apps/com.myriad.aro/page/history.js",
+          "files.js": "apps/com.myriad.aro/page/files.js",
+          "api.js": "apps/com.myriad.aro/page/api.js",
+          "views.js": "apps/com.myriad.aro/page/views.js",
+          "events.js": "apps/com.myriad.aro/page/events.js",
+          "index.js": "apps/com.myriad.aro/page/index.js"
+        }
+      },
+      "size": 1543786,
+      "downloads": 0,
+      "rating": 0,
+      "featured": true,
+      "verified": true,
+      "created_at": "2025-12-01T00:00:00Z",
+      "updated_at": "2026-07-20T12:35:43Z"
     }
   ]
 }
