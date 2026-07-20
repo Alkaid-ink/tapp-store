@@ -1410,10 +1410,21 @@ function switchFeedSubTab(sub) {
   document.querySelectorAll('.feed-nav-item').forEach(function (btn) {
     btn.classList.toggle('feed-nav-active', btn.dataset.sub === sub);
   });
-  // Update mobile tabs
+  // Update mobile tabs + keep active chip in view (horizontal scroller)
+  var activeMobileTab = null;
   document.querySelectorAll('.feed-mobile-tab').forEach(function (btn) {
-    btn.classList.toggle('feed-mobile-tab-active', btn.dataset.sub === sub);
+    var on = btn.dataset.sub === sub;
+    btn.classList.toggle('feed-mobile-tab-active', on);
+    if (btn.setAttribute) btn.setAttribute('aria-selected', on ? 'true' : 'false');
+    if (on) activeMobileTab = btn;
   });
+  if (activeMobileTab && typeof activeMobileTab.scrollIntoView === 'function') {
+    try {
+      activeMobileTab.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    } catch (eScroll) {
+      try { activeMobileTab.scrollIntoView(false); } catch (e2) { /* ignore */ }
+    }
+  }
   // Contextual + must recompute immediately on tab change (before async load).
   if (typeof updateFeedPlusVisibility === 'function') updateFeedPlusVisibility();
   // Leaving Post tab: collapse composer so it doesn't linger under other tabs.

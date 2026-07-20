@@ -163,20 +163,76 @@ body.dark{background:#0a0a0a;color:rgba(255,255,255,.92)}
 .feed-refresh-btn:disabled{opacity:.65;cursor:default;transform:none}
 .feed-refresh-loading svg{animation:aroSpin .8s linear infinite}
 @keyframes aroSpin{to{transform:rotate(360deg)}}
-/* Feed Mobile Tabs (hidden on desktop) */
-.feed-mobile-tabs{display:none;border-bottom:1px solid rgba(128,128,128,.08);flex-shrink:0;background:rgba(255,255,255,.45);position:relative;z-index:5;overflow:visible}
-.feed-mobile-tab{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:12px 4px;border:none;background:none;font-size:13px;font-weight:500;color:var(--text-secondary,#536471);cursor:pointer;text-align:center;transition:all .15s;border-bottom:2px solid transparent;min-width:0}
-.feed-mobile-tab:hover{background:rgba(128,128,128,.04)}
-.feed-mobile-tab-active{color:var(--text-primary,#0f1419)!important;font-weight:700;border-bottom-color:var(--tapp-primary,#6366f1)!important}
-.feed-mobile-tab .feed-nav-badge{margin-left:0;min-width:16px;height:16px;padding:0 4px;font-size:9px}
-.feed-plus-wrap-mobile{display:flex;align-items:stretch;flex-shrink:0;position:relative}
-.feed-mobile-compose{width:44px;border:none;background:none;color:var(--tapp-primary,#6366f1);display:flex;align-items:center;justify-content:center;cursor:pointer;border-bottom:2px solid transparent;flex-shrink:0}
+/* Feed Mobile Tabs (hidden on desktop)
+   Layout: [+ compose] | scrollable labels | [refresh]
+   Tabs keep natural width and scroll instead of being squeezed. */
+.feed-mobile-tabs{
+  display:none;align-items:stretch;gap:0;
+  border-bottom:1px solid rgba(128,128,128,.08);flex-shrink:0;
+  background:rgba(255,255,255,.72);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  position:relative;z-index:5;overflow:visible;
+  min-height:48px;padding:0 2px;
+}
+.feed-mobile-tabs-scroller{
+  flex:1 1 auto;min-width:0;
+  display:flex;align-items:stretch;gap:2px;
+  overflow-x:auto;overflow-y:hidden;
+  -webkit-overflow-scrolling:touch;
+  scroll-snap-type:x proximity;
+  scrollbar-width:none;
+  overscroll-behavior-x:contain;
+  /* Soft edge fade so overflow is obvious without chrome */
+  mask-image:linear-gradient(90deg,transparent 0,#000 10px,#000 calc(100% - 10px),transparent 100%);
+  -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 10px,#000 calc(100% - 10px),transparent 100%);
+}
+.feed-mobile-tabs-scroller::-webkit-scrollbar{display:none;width:0;height:0}
+.feed-mobile-tab{
+  flex:0 0 auto;
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:12px 14px;min-height:48px;min-width:max-content;
+  border:none;background:none;
+  font-size:14px;font-weight:600;letter-spacing:.01em;line-height:1.2;
+  color:var(--text-secondary,#536471);cursor:pointer;text-align:center;
+  white-space:nowrap;scroll-snap-align:center;
+  border-bottom:2.5px solid transparent;
+  transition:color .15s,background .15s,border-color .15s;
+  font-family:inherit;-webkit-tap-highlight-color:transparent;
+}
+.feed-mobile-tab:hover{background:rgba(128,128,128,.05)}
+.feed-mobile-tab:active{background:rgba(128,128,128,.08)}
+.feed-mobile-tab-active{
+  color:var(--text-primary,#0f1419)!important;font-weight:750;
+  border-bottom-color:var(--tapp-primary,#6366f1)!important;
+}
+.feed-mobile-tab .feed-nav-badge{
+  margin-left:0;min-width:18px;height:18px;padding:0 5px;font-size:10px;
+  flex-shrink:0;
+}
+.feed-plus-wrap-mobile{
+  display:flex;align-items:stretch;flex-shrink:0;position:relative;
+  border-right:1px solid rgba(128,128,128,.06);
+}
+.feed-mobile-compose,.feed-mobile-refresh{
+  width:44px;min-width:44px;min-height:48px;
+  border:none;background:none;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  flex-shrink:0;-webkit-tap-highlight-color:transparent;
+  transition:background .15s,color .15s;
+}
+.feed-mobile-compose{color:var(--tapp-primary,#6366f1)}
 .feed-mobile-compose:hover{background:rgba(99,102,241,.08)}
-.feed-mobile-compose[aria-expanded="true"]{background:rgba(99,102,241,.1)}
-.feed-mobile-refresh{width:44px;border:none;background:none;color:var(--text-secondary,#536471);display:flex;align-items:center;justify-content:center;cursor:pointer;border-bottom:2px solid transparent}
-.feed-mobile-refresh:hover{background:rgba(128,128,128,.04);color:var(--tapp-primary,#6366f1)}
+.feed-mobile-compose[aria-expanded="true"]{background:rgba(99,102,241,.12)}
+.feed-mobile-refresh{
+  color:var(--text-secondary,#536471);
+  border-left:1px solid rgba(128,128,128,.06);
+}
+.feed-mobile-refresh:hover{background:rgba(128,128,128,.05);color:var(--tapp-primary,#6366f1)}
 .feed-mobile-refresh:disabled{opacity:.55;cursor:default}
 .feed-mobile-refresh.feed-refresh-loading svg{animation:aroSpin .8s linear infinite}
+@media(max-width:380px){
+  .feed-mobile-tab{padding:12px 12px;font-size:13.5px}
+  .feed-mobile-compose,.feed-mobile-refresh{width:40px;min-width:40px}
+}
 /* Follow dialog form (reuses create-dialog shell) */
 .feed-follow-input,.create-form #feed-follow-input{width:100%}
 #feed-follow-btn:disabled{opacity:.5;cursor:not-allowed}
@@ -271,9 +327,12 @@ body.dark{background:#0a0a0a;color:rgba(255,255,255,.92)}
 .dark .feed-section-meta{color:rgba(255,255,255,.45)}
 .dark .feed-refresh-btn{background:rgba(255,255,255,.06);color:rgba(255,255,255,.56)}
 .dark .feed-refresh-btn:hover{background:rgba(var(--tapp-primary-rgb,100,100,255),.16);color:var(--tapp-primary,#818cf8)}
-.dark .feed-mobile-tabs{background:rgba(10,10,10,.5)}
+.dark .feed-mobile-tabs{background:rgba(10,10,10,.72);border-color:rgba(255,255,255,.06)}
+.dark .feed-mobile-tab{color:rgba(255,255,255,.5)}
+.dark .feed-mobile-tab:hover{background:rgba(255,255,255,.04)}
 .dark .feed-mobile-tab-active{color:rgba(255,255,255,.95)!important}
-.dark .feed-mobile-refresh{color:rgba(255,255,255,.5)}
+.dark .feed-plus-wrap-mobile{border-color:rgba(255,255,255,.06)}
+.dark .feed-mobile-refresh{color:rgba(255,255,255,.5);border-color:rgba(255,255,255,.06)}
 .dark .feed-mobile-refresh:hover{background:rgba(255,255,255,.04);color:var(--tapp-primary,#818cf8)}
 .dark .feed-nav-badge{background:rgba(var(--tapp-primary-rgb,100,100,255),.2);color:var(--tapp-primary,#818cf8)}
 .dark .feed-profile-card{border-color:rgba(255,255,255,.08);background:rgba(255,255,255,.035)}
@@ -293,7 +352,7 @@ body.dark{background:#0a0a0a;color:rgba(255,255,255,.92)}
   .aro-nav{justify-content:center;gap:4px}
   .feed-sidebar{display:none}
   .feed-main-header{display:none}
-  .feed-mobile-tabs{display:flex}
+  .feed-mobile-tabs{display:flex;align-items:stretch}
   .feed-profile-mobile{display:flex}
 }
 
@@ -1655,7 +1714,6 @@ button.msg-file-card:hover .msg-file-action{color:rgb(var(--acc));background:rgb
 .dark .manage-item{color:rgba(255,255,255,.9)}
 .dark .meta-badge{color:rgba(255,255,255,.6)}
 .dark .feed-handle{color:rgba(255,255,255,.45)}
-.dark .feed-mobile-tab{color:rgba(255,255,255,.5)}
 .dark .feed-item{border-color:rgba(255,255,255,.04)}
 .dark .feed-item-handle{color:rgba(255,255,255,.45)}
 .dark .feed-item-time{color:rgba(255,255,255,.4)}

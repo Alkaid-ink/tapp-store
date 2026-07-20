@@ -511,15 +511,28 @@ function buildLibraryShareSnapshot(item, platformId) {
   var meta = item && item.metadata && typeof item.metadata === 'object' ? item.metadata : null;
   if (item) {
     title = String(item.title || item.name || item.username || '').trim();
-    contentType = String(item.type || item.content_type || item.subject_type || '').trim();
+    contentType = String(item.type || item.content_type || item.subject_type || '').trim().toLowerCase();
+    if (contentType === 'bangumi') contentType = 'anime';
+    if (contentType === 'games') contentType = 'game';
     image = String(item.image || item.cover || item.display_image || item.thumbnail || '').trim();
     if (!image && meta) {
       image = String(meta.image || meta.cover || meta.display_image || '').trim();
     }
+    if (!image && (platformId === 'steam' || item.platform === 'steam')) {
+      var appid = (item.appid != null ? item.appid : (meta && meta.appid)) || item.id;
+      if (appid != null && String(appid).match(/^\d+$/)) {
+        image = 'https://cdn.cloudflare.steamstatic.com/steam/apps/' + appid + '/header.jpg';
+      }
+    }
+    if (image.indexOf('http://') === 0) image = 'https://' + image.slice(7);
     itemId = item.id != null && item.id !== ''
       ? String(item.id)
       : (item.subject_id != null ? String(item.subject_id)
-        : (item.title_id != null ? String(item.title_id) : ''));
+        : (item.title_id != null ? String(item.title_id)
+          : (item.appid != null ? String(item.appid)
+            : (meta && meta.appid != null ? String(meta.appid)
+              : (meta && meta.bvid ? String(meta.bvid)
+                : (meta && meta.season_id != null ? String(meta.season_id) : ''))))));
     description = String(item.description || item.summary || '').trim();
   }
   if (!title) title = itemId || (lang.shareUntitled || 'Untitled');
@@ -611,30 +624,63 @@ function openLibraryPicker(icons, titles) {
     showPickerLoading(body);
     // getData expects stable slug (steam), not numeric PK
     Tapp.platform.getData(pid, { limit: 50 }).then(function (res) {
-      allItems = (res && res.items) || [];
+      // Host may return { items }, { data: { items } }, or a bare array.
+      var root = res && res.data && typeof res.data === 'object' ? res.data : res;
+      var list = [];
+      if (Array.isArray(root)) list = root;
+      else if (root && Array.isArray(root.items)) list = root.items;
+      else if (res && Array.isArray(res.items)) list = res.items;
+      allItems = list;
       renderLibraryItems(allItems);
-    }).catch(function () {
+    }).catch(function (err) {
+      console.error('[Aro] library getData failed', pid, err);
       body.innerHTML = '<div class="picker-empty">' + esc(lang.libraryPickerLoadFail || lang.loadFail || lang.pickerEmpty) + '</div>';
     });
   }
 
   function libraryItemCover(item) {
     if (!item) return '';
-    return item.image || item.cover || item.display_image || item.thumbnail
-      || (item.metadata && (item.metadata.image || item.metadata.cover)) || '';
+    var m = item.metadata || {};
+    var cover = item.image || item.cover || item.display_image || item.thumbnail
+      || m.image || m.cover || '';
+    // Legacy steam filters only kept playtime — rebuild CDN art from appid.
+    if (!cover && (item.platform === 'steam' || activePlatform === 'steam')) {
+      var appid = item.appid || m.appid || item.id;
+      if (appid != null && String(appid).match(/^\d+$/)) {
+        cover = 'https://cdn.cloudflare.steamstatic.com/steam/apps/' + appid + '/header.jpg';
+      }
+    }
+    if (cover && String(cover).indexOf('http://') === 0) {
+      cover = 'https://' + String(cover).slice(7);
+    }
+    return cover;
   }
 
   function libraryItemMeta(item) {
     var meta = item.platform || activePlatform || '';
     var itemType = item.type || item.content_type || '';
-    if (itemType) meta += (meta ? ' · ' : '') + itemType;
+    if (itemType && itemType !== 'library' && itemType !== 'item') {
+      meta += (meta ? ' · ' : '') + itemType;
+    }
     var m = item.metadata || {};
     if (item.score !== undefined && item.score !== null) meta += (meta ? ' · ' : '') + '★ ' + item.score;
     else if (m.rate != null) meta += (meta ? ' · ' : '') + '★ ' + m.rate;
     else if (m.score != null) meta += (meta ? ' · ' : '') + '★ ' + m.score;
     if (item.year) meta += (meta ? ' · ' : '') + item.year;
-    else if (m.playtime != null && m.playtime !== '') meta += (meta ? ' · ' : '') + m.playtime + ' min';
-    else if (item.playtime != null) meta += (meta ? ' · ' : '') + item.playtime + ' min';
+    else {
+      var pt = m.playtime != null && m.playtime !== '' ? m.playtime : item.playtime;
+      if (pt != null && pt !== '') {
+        var mins = Number(pt);
+        if (isFinite(mins) && mins > 0) {
+          meta += (meta ? ' · ' : '') + (mins >= 60
+            ? (Math.round(mins / 60) + 'h')
+            : (Math.round(mins) + 'm'));
+        } else {
+          meta += (meta ? ' · ' : '') + String(pt);
+        }
+      }
+    }
+    if (m.progress) meta += (meta ? ' · ' : '') + String(m.progress);
     return meta;
   }
 
