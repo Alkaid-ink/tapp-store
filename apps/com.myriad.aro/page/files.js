@@ -262,13 +262,6 @@ function unwrapTransfersResponse(res) {
   return [];
 }
 
-function unwrapMessagesResponse(res) {
-  if (!res) return [];
-  if (Array.isArray(res)) return res;
-  if (Array.isArray(res.messages)) return res.messages;
-  if (res.data && Array.isArray(res.data.messages)) return res.data.messages;
-  return [];
-}
 
 function unwrapRoomFilesResponse(res) {
   if (!res) return { files: [], hasMore: false, total: 0 };
