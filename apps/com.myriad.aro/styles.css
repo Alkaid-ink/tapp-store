@@ -965,14 +965,29 @@ body.dark{background:#0a0a0a;color:rgba(255,255,255,.92)}
 .member-list{flex:1;overflow-y:auto;padding:8px}
 /* Invite popover */
 .invite-wrap{position:relative}
-/* Shared 36×36 toolbar icon-button token (hit target + chrome). Variants set color/bg. */
+/* Shared 36×36 toolbar icon-button token — history / files / members / manage share one chrome. */
 .aro-icon-btn,.member-toggle-btn,.manage-btn,.invite-toggle{
   width:36px;height:36px;min-width:36px;min-height:36px;padding:0;
-  border-radius:8px;border:none;cursor:pointer;flex-shrink:0;line-height:1;
-  display:flex;align-items:center;justify-content:center;
-  transition:background .15s,color .15s;
+  border-radius:10px;border:none;cursor:pointer;flex-shrink:0;line-height:1;
+  display:inline-flex;align-items:center;justify-content:center;
+  transition:background .15s,color .15s,transform .1s;
+  -webkit-tap-highlight-color:transparent;
 }
-.aro-icon-btn svg,.member-toggle-btn svg,.invite-toggle svg{width:18px;height:18px;flex-shrink:0}
+.aro-icon-btn svg,.member-toggle-btn svg,.manage-btn svg,.invite-toggle svg{
+  width:18px;height:18px;flex-shrink:0;display:block;
+}
+/* Default muted chip (history, room files, members, manage ⋯) */
+.aro-icon-btn,.member-toggle-btn,.manage-btn{
+  background:rgba(128,128,128,.06);color:var(--text-secondary,#888);
+}
+.aro-icon-btn:hover,.member-toggle-btn:hover,.manage-btn:hover{
+  background:rgba(128,128,128,.12);color:var(--text-primary,#333);
+}
+.aro-icon-btn:active,.member-toggle-btn:active,.manage-btn:active{transform:scale(.96)}
+.aro-icon-btn:focus-visible,.member-toggle-btn:focus-visible,.manage-btn:focus-visible{
+  outline:2px solid rgba(var(--tapp-primary-rgb,99,102,241),.45);outline-offset:1px;
+}
+/* Invite stays primary-tinted */
 .invite-toggle{background:none;color:var(--tapp-primary,#6366f1)}
 .invite-toggle:hover{background:rgba(var(--tapp-primary-rgb,100,100,255),.1)}
 .invite-popover{position:fixed;width:240px;background:var(--bg-primary,#fff);border:1px solid rgba(128,128,128,.1);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:200;overflow:hidden}
@@ -1080,10 +1095,9 @@ body.dark{background:#0a0a0a;color:rgba(255,255,255,.92)}
 .chat-actions{display:flex;gap:6px;flex-shrink:0;align-items:center;flex-wrap:wrap;min-width:0;max-width:min(100%,52vw);justify-content:flex-end}
 .chat-header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid rgba(128,128,128,.06);flex-shrink:0;min-width:0}
 .chat-header-info{min-width:0;flex:1;overflow:hidden}
-#history-open-btn,#room-files-open-btn{flex-shrink:0}
-/* Muted header chrome — same family as .aro-icon-btn (size from shared rule above) */
-.member-toggle-btn,.manage-btn{background:rgba(128,128,128,.06);color:var(--text-secondary,#999);font-size:16px}
-.member-toggle-btn:hover,.manage-btn:hover{background:rgba(128,128,128,.12)}
+#history-open-btn,#room-files-open-btn,.member-toggle-btn,.manage-btn{flex-shrink:0}
+/* Manage ⋯ uses text glyph — keep optical size with icon buttons */
+.manage-btn{font-size:18px;font-weight:600;letter-spacing:0}
 .action-btn{font-size:11px;padding:4px 10px;border-radius:10px;border:none;cursor:pointer;transition:background .15s}
 .action-accept{color:#fff;background:#22c55e}
 .action-accept:hover{background:#16a34a}
@@ -1724,7 +1738,12 @@ button.msg-file-card:hover .msg-file-action{color:rgb(var(--acc));background:rgb
 .dark .member-name{color:rgba(255,255,255,.9)}
 .dark .member-title{color:rgba(255,255,255,.45)}
 .dark .member-back-btn{color:rgba(255,255,255,.9)}
-.dark .member-toggle-btn,.dark .manage-btn{color:rgba(255,255,255,.6)}
+.dark .aro-icon-btn,.dark .member-toggle-btn,.dark .manage-btn{
+  background:rgba(255,255,255,.06);color:rgba(255,255,255,.62);
+}
+.dark .aro-icon-btn:hover,.dark .member-toggle-btn:hover,.dark .manage-btn:hover{
+  background:rgba(255,255,255,.12);color:rgba(255,255,255,.92);
+}
 .dark .empty-icon{background:rgba(255,255,255,.06);color:rgba(255,255,255,.35)}
 .dark .empty-state{color:rgba(255,255,255,.5)}
 .dark .empty-text{color:rgba(255,255,255,.5)}

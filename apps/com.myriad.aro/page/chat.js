@@ -1656,15 +1656,16 @@ function openReportDetail(reportId, card) {
 // another function if module order shifts). Used by renderChatHeader in members.js.
 function historyHeaderButtonHtml() {
   var title = lang.historyTitle || 'Chat history';
-  return '<button type="button" class="aro-icon-btn" id="history-open-btn" title="' + esc(title) + '" aria-label="' + esc(title) + '">'
-    + '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'
+  // Same chrome classes as member-toggle / manage (unified header toolbar)
+  return '<button type="button" class="aro-icon-btn chat-hdr-icon-btn" id="history-open-btn" title="' + esc(title) + '" aria-label="' + esc(title) + '">'
+    + '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'
     + '</button>';
 }
 
 function roomFilesHeaderButtonHtml() {
   var title = lang.roomFilesTitle || 'Group files';
-  return '<button type="button" class="aro-icon-btn" id="room-files-open-btn" title="' + esc(title) + '" aria-label="' + esc(title) + '">'
-    + '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>'
+  return '<button type="button" class="aro-icon-btn chat-hdr-icon-btn" id="room-files-open-btn" title="' + esc(title) + '" aria-label="' + esc(title) + '">'
+    + '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>'
     + '</button>';
 }
 
