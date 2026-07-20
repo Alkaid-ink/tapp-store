@@ -1385,7 +1385,7 @@ async function loadSettingsDeliveryPanel() {
   } catch (e) {
     console.error('[Aro] delivery panel', e);
     body.innerHTML = '<div class="settings-note settings-status-error">'
-      + esc(lang.settingsDeliveryLoadFail || 'Couldn't load delivery status') + '</div>';
+      + esc(lang.settingsDeliveryLoadFail || "Couldn't load delivery status") + '</div>';
   }
 }
 
