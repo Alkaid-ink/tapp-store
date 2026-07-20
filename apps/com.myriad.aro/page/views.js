@@ -745,10 +745,17 @@ function renderQuotedObjectHtml(quoted, depth) {
     h += '<span class="feed-item-quoted-kind">' + esc(label) + '</span>';
   }
   h += '</div>';
-  if (text) {
+  if (text && !looksLikeBareUrl(text)) {
     h += '<div class="feed-item-quoted-text">' + esc(String(text).slice(0, 280)) + '</div>';
-  } else if (quoted.id) {
+  } else if (text && looksLikeBareUrl(text)) {
+    // Prefer human label over raw activity URL
+    h += '<div class="feed-item-quoted-text" style="opacity:.75">'
+      + esc(lang.quoteRepostQuoted || 'Quoted post') + '</div>';
+  } else if (quoted.id && !looksLikeBareUrl(String(quoted.id))) {
     h += '<div class="feed-item-quoted-text feed-item-quoted-id">' + esc(String(quoted.id).slice(0, 80)) + '</div>';
+  } else {
+    h += '<div class="feed-item-quoted-text" style="opacity:.75">'
+      + esc(lang.quoteRepostQuoted || 'Quoted post') + '</div>';
   }
   var inner = quoted['mfp:quotedObject'] || quoted.mfp_quotedObject || null;
   if (inner && typeof inner === 'object') {
@@ -759,6 +766,14 @@ function renderQuotedObjectHtml(quoted, depth) {
   }
   h += '</div>';
   return h;
+}
+
+/** True when s is essentially a bare http(s) URL (not prose). */
+function looksLikeBareUrl(s) {
+  s = String(s || '').trim();
+  if (!s || s.length > 240) return false;
+  if (/\s/.test(s)) return false;
+  return /^https?:\/\//i.test(s);
 }
 
 function openQuoteRepostModal(objectId) {
@@ -1163,7 +1178,15 @@ function renderTimelineItem(item) {
       contentJson.content_preview ||
       ''
     );
-    linkUrl = contentJson.link || contentJson.url || '';
+    // Prefer explicit external link; ignore AP Note self-url (otherwise whole body becomes a hyperlink).
+    linkUrl = contentJson.link || '';
+    if (!linkUrl && contentJson.url && typeof contentJson.url === 'string') {
+      var selfId = contentJson.id || '';
+      if (contentJson.url !== selfId && contentJson.type && contentJson.type !== 'Note'
+          && contentJson['mfp:kind'] !== 'repost' && contentJson.mfp_kind !== 'repost') {
+        linkUrl = contentJson.url;
+      }
+    }
     if (typeof linkUrl !== 'string') linkUrl = '';
     // Ring brew entries often put source as a string name
     if (!text && contentJson.summary) text = stripHtmlPreview(contentJson.summary);
@@ -1196,6 +1219,10 @@ function renderTimelineItem(item) {
   ));
   var isAnnounce = item.activity_type === 'Announce';
   var isRepostCard = isQuoteRepost || isAnnounce;
+  // Never turn repost/note commentary into a single giant link.
+  if (isRepostCard || (contentJson && (contentJson.type === 'Note' || contentJson['mfp:kind'] === 'repost'))) {
+    linkUrl = contentJson && contentJson.link ? String(contentJson.link) : '';
+  }
   var h = '<div class="feed-item' + (isRepostCard ? ' is-repost' : '') + (inReplyTo && !isRepostCard ? ' is-reply' : '') + '" data-object-id="' + esc(objectId) + '"'
     + (item.activity_id ? ' data-activity-id="' + esc(String(item.activity_id)) + '"' : '')
     + '>';
@@ -1232,10 +1259,11 @@ function renderTimelineItem(item) {
     if (quoted && typeof quoted === 'object') {
       h += renderQuotedObjectHtml(quoted, 0);
     } else if (contentJson.quoteUrl || contentJson.inReplyTo || contentJson['mfp:quotedObjectId']) {
-      var fallbackId = contentJson['mfp:quotedObjectId'] || contentJson.quoteUrl || contentJson.inReplyTo || '';
+      // Never dump raw activity URL as the card body — show a readable label.
       h += '<div class="feed-item-quoted"><div class="feed-item-quoted-meta">'
         + esc(lang.quoteRepostQuoted || 'Quoted post') + '</div>'
-        + '<div class="feed-item-quoted-text" style="opacity:.65">' + esc(String(fallbackId).slice(0, 96)) + '</div></div>';
+        + '<div class="feed-item-quoted-text" style="opacity:.75">'
+        + esc(lang.quoteRepostQuoted || 'Quoted post') + '</div></div>';
     }
   }
   h += renderTimelineMedia(attachments);
@@ -1333,12 +1361,14 @@ function publishedTypeLabel(type) {
     'brew-article': lang.attachBrew,
     'library': lang.attachLibrary,
     'report': lang.attachReport,
+    'repost': lang.quoteRepostLabel || lang.repostBtn || 'Repost',
   };
   return map[type] || type || '';
 }
 
 function renderPublishedItem(item) {
-  var typeIcons = { 'report': SVG_ICONS.report, 'brew-article': SVG_ICONS.memo, 'tapp': SVG_ICONS.tapp, 'library': SVG_ICONS.library, 'note': SVG_ICONS.page };
+  var isRepost = item.content_type === 'repost' || item.content_type === 'announce';
+  var typeIcons = { 'report': SVG_ICONS.report, 'brew-article': SVG_ICONS.memo, 'tapp': SVG_ICONS.tapp, 'library': SVG_ICONS.library, 'note': SVG_ICONS.page, 'repost': SVG_ICONS.page };
   var icon = typeIcons[item.content_type] || SVG_ICONS.page;
   var dateStr = '';
   try { dateStr = timeAgo(item.published_at); } catch (e) {}
@@ -1346,28 +1376,55 @@ function renderPublishedItem(item) {
   // attachments come from list_published (joined Create object) — same shape as Note AP.
   var attachments = extractNoteAttachments(item);
   var titleLine = stripHtmlPreview(item.title || item.name || '');
-  var preview = stripHtmlPreview(item.content_preview || item.summary || '');
-  if (!preview && titleLine) preview = titleLine;
+  var preview = stripHtmlPreview(item.content_preview || '');
+  var summary = stripHtmlPreview(item.summary || '');
+  if (isRepost) {
+    // Commentary is the body; quoted snippet lives in summary (backend: "↪ …").
+    if (!preview) preview = titleLine || summary;
+    if (!titleLine) titleLine = publishedTypeLabel('repost');
+  } else {
+    if (!preview && titleLine) preview = titleLine;
+    if (!preview && summary) preview = summary;
+  }
   // Media-only Note: still show a short placeholder so the card is not blank.
   if (!preview && attachments.length) {
     preview = lang.composeMedia || '📎';
   }
   if (!preview) preview = stripHtmlPreview(item.content_id || '');
-  var h = '<div class="feed-item">';
-  h += '<div class="feed-item-icon">' + icon + '</div>';
+  if (looksLikeBareUrl(preview)) {
+    preview = publishedTypeLabel(item.content_type) || (lang.composePost || 'Post');
+  }
+  var h = '<div class="feed-item' + (isRepost ? ' is-repost' : '') + '">';
+  if (isRepost) {
+    h += '<div class="feed-item-avatar">' + icon + '</div>';
+  } else {
+    h += '<div class="feed-item-icon">' + icon + '</div>';
+  }
   h += '<div class="feed-item-body">';
+  if (isRepost) {
+    h += '<div class="feed-item-repost-label">'
+      + '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>'
+      + '<span>' + esc(lang.quoteRepostLabel || lang.repostBtn || 'Repost') + '</span></div>';
+  }
   h += '<div class="feed-item-header">';
   h += '<span class="feed-item-name">' + esc(titleLine || publishedTypeLabel(item.content_type)) + '</span>';
   if (dateStr) h += '<span class="feed-item-sep">&middot;</span><span class="feed-item-time">' + esc(dateStr) + '</span>';
   h += '</div>';
-  if (titleLine && preview && preview !== titleLine) {
+  if (preview && (!titleLine || preview !== titleLine || isRepost)) {
     h += '<div class="feed-item-text">' + esc(preview) + '</div>';
-  } else if (preview) {
-    h += '<div class="feed-item-text">' + esc(preview) + '</div>';
+  }
+  // Quoted snippet for reposts (backend summary)
+  if (isRepost && summary && summary !== preview) {
+    var qText = summary.replace(/^↪\s*/, '');
+    if (qText && !looksLikeBareUrl(qText)) {
+      h += '<div class="feed-item-quoted"><div class="feed-item-quoted-meta">'
+        + esc(lang.quoteRepostQuoted || 'Quoted post') + '</div>'
+        + '<div class="feed-item-quoted-text">' + esc(qText.slice(0, 280)) + '</div></div>';
+    }
   }
   // Same media strip as timeline so Note images/videos appear on 已发布.
   h += renderTimelineMedia(attachments);
-  if (titleLine && item.content_type && item.content_type !== 'note') {
+  if (titleLine && item.content_type && item.content_type !== 'note' && !isRepost) {
     h += '<div class="feed-item-meta" style="font-size:11px;color:var(--text-secondary,#888)">' + esc(publishedTypeLabel(item.content_type)) + '</div>';
   }
   h += '<div class="feed-item-actions">';

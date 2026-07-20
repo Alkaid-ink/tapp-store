@@ -1457,8 +1457,8 @@ function bindSettingsPageEvents(root) {
   var cancelAll = root.querySelector('#settings-delivery-cancel-all');
   if (cancelAll) {
     cancelAll.addEventListener('click', async function () {
-      if (typeof Tapp.federation.cancelAllPendingDelivery !== 'function') {
-        notifyError(lang.settingsDeliveryCancelFail || 'Cancel failed', new Error('API unavailable'));
+      if (!Tapp.federation || typeof Tapp.federation.cancelAllPendingDelivery !== 'function') {
+        notifyError(lang.settingsDeliveryCancelFail || 'Cancel failed', new Error('API unavailable — rebuild host'));
         return;
       }
       try {
@@ -1474,7 +1474,7 @@ function bindSettingsPageEvents(root) {
         if (res) {
           cancelled = res.cancelled != null
             ? res.cancelled
-            : (res.data && res.data.cancelled) || 0;
+            : (res.data && res.data.cancelled != null ? res.data.cancelled : 0);
         }
         try {
           Tapp.ui.showNotification({
@@ -1485,6 +1485,7 @@ function bindSettingsPageEvents(root) {
         } catch (e0) {}
         loadSettingsDeliveryPanel();
       } catch (e) {
+        console.error('[Aro] cancelAllPendingDelivery', e);
         notifyError(lang.settingsDeliveryCancelFail || 'Cancel failed', e);
       }
     });
@@ -1526,8 +1527,8 @@ function bindSettingsPageEvents(root) {
       var retryBtn = t.closest('[data-delivery-retry]');
       var cancelBtn = t.closest('[data-delivery-cancel]');
       if (retryBtn) {
-        var rid = parseInt(retryBtn.getAttribute('data-delivery-retry') || '0', 10);
-        if (!rid || typeof Tapp.federation.retryDelivery !== 'function') return;
+        var rid = Number.parseInt(String(retryBtn.getAttribute('data-delivery-retry') || '0'), 10);
+        if (!Number.isFinite(rid) || rid <= 0 || !Tapp.federation || typeof Tapp.federation.retryDelivery !== 'function') return;
         try {
           await Tapp.federation.retryDelivery(rid);
           loadSettingsDeliveryPanel();
@@ -1537,8 +1538,16 @@ function bindSettingsPageEvents(root) {
         return;
       }
       if (cancelBtn) {
-        var cid = parseInt(cancelBtn.getAttribute('data-delivery-cancel') || '0', 10);
-        if (!cid || typeof Tapp.federation.cancelDelivery !== 'function') return;
+        var cidRaw = cancelBtn.getAttribute('data-delivery-cancel') || '0';
+        var cid = Number.parseInt(String(cidRaw), 10);
+        if (!Number.isFinite(cid) || cid <= 0) {
+          notifyError(lang.settingsDeliveryCancelFail || 'Cancel failed', new Error('Invalid id'));
+          return;
+        }
+        if (!Tapp.federation || typeof Tapp.federation.cancelDelivery !== 'function') {
+          notifyError(lang.settingsDeliveryCancelFail || 'Cancel failed', new Error('API unavailable'));
+          return;
+        }
         try {
           await Tapp.federation.cancelDelivery(cid);
           try {
@@ -1549,6 +1558,7 @@ function bindSettingsPageEvents(root) {
           } catch (e1) {}
           loadSettingsDeliveryPanel();
         } catch (err2) {
+          console.error('[Aro] cancelDelivery', err2);
           notifyError(lang.settingsDeliveryCancelFail || 'Cancel failed', err2);
         }
       }

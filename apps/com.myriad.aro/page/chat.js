@@ -42,18 +42,66 @@ function filterConversationItems(items, query) {
   });
 }
 
+/** Apply sidebar tab: 私信 / 群组 / 已关闭 (closed after dm+room). */
+function filterConversationByTab(items) {
+  var tab = state.convTab || 'dm';
+  return items.filter(function (item) {
+    if (tab === 'dm') {
+      return item.kind === 'channel' && item.status !== 'closed';
+    }
+    if (tab === 'room') {
+      return item.kind === 'room';
+    }
+    if (tab === 'closed') {
+      return item.kind === 'channel' && item.status === 'closed';
+    }
+    return true;
+  });
+}
+
+function syncConvTabsUi() {
+  var tab = state.convTab || 'dm';
+  document.querySelectorAll('.conv-tab').forEach(function (btn) {
+    var on = btn.getAttribute('data-conv-tab') === tab;
+    btn.classList.toggle('conv-tab-active', on);
+    if (btn.setAttribute) btn.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+}
+
+function setConvTab(tab) {
+  if (tab !== 'dm' && tab !== 'room' && tab !== 'closed') tab = 'dm';
+  state.convTab = tab;
+  syncConvTabsUi();
+  renderConvList();
+}
+
 function renderConvList() {
   var list = $('conv-list');
   if (!list) return;
 
-  var allItems = buildConversationItems();
-  var q = (state.search && state.search.conv) || '';
-  var items = filterConversationItems(allItems, q);
+  syncConvTabsUi();
 
-  if (allItems.length === 0) {
+  var allItems = buildConversationItems();
+  var tabItems = filterConversationByTab(allItems);
+  var q = (state.search && state.search.conv) || '';
+  var items = filterConversationItems(tabItems, q);
+
+  if (tabItems.length === 0 && !q) {
+    var emptyTitle = lang.noConv || lang.title || 'Messenger';
+    var emptyHint = lang.noConvHint || lang.selectHint || 'Start a chat with +';
+    if ((state.convTab || 'dm') === 'closed') {
+      emptyTitle = lang.convTabClosedEmpty || lang.closed || 'Closed';
+      emptyHint = lang.convTabClosedEmptyHint || 'No closed chats';
+    } else if ((state.convTab || 'dm') === 'room') {
+      emptyTitle = lang.rooms || lang.convTabRoom || 'Groups';
+      emptyHint = lang.noRoomsHint || lang.noConvHint || emptyHint;
+    } else {
+      emptyTitle = lang.dm || lang.convTabDm || 'DMs';
+      emptyHint = lang.noConvHint || emptyHint;
+    }
     list.innerHTML = '<div class="conv-empty conv-empty-fill"><span style="display:flex;flex-direction:column;gap:6px;align-items:center;max-width:200px">'
-      + '<span style="font-weight:600;font-size:13px;color:var(--text-primary,#333)">' + esc(lang.noConv || lang.title || 'Messenger') + '</span>'
-      + '<span style="font-size:12px;line-height:1.45;opacity:.8">' + esc(lang.noConvHint || lang.selectHint || 'Start a chat with +') + '</span></span></div>';
+      + '<span style="font-weight:600;font-size:13px;color:var(--text-primary,#333)">' + esc(emptyTitle) + '</span>'
+      + '<span style="font-size:12px;line-height:1.45;opacity:.8">' + esc(emptyHint) + '</span></span></div>';
     return;
   }
 

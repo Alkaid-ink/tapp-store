@@ -29,6 +29,8 @@ var state = {
   isAdmin: false,
   // Attachment
   pendingAttach: null, // { type, file?, data?, name, size, mime, ... }
+  /** Messenger sidebar filter: dm | room | closed */
+  convTab: 'dm',
   // Aro views
   currentView: 'feed',
   // Feed (merged timeline + profile)

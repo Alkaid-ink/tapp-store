@@ -293,17 +293,17 @@ body.dark{background:#0a0a0a;color:rgba(255,255,255,.92)}
 .feed-reply-submit:disabled{opacity:.55;cursor:not-allowed}
 .feed-item-inreply{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary,#8b98a5);margin:0 0 4px;font-weight:500}
 .feed-item-inreply svg{flex-shrink:0;opacity:.85}
-/* Repost / quote-repost special header */
-.feed-item.is-repost{background:linear-gradient(180deg,rgba(34,197,94,.045) 0%,transparent 56px)}
-.feed-item.is-repost:hover{background:linear-gradient(180deg,rgba(34,197,94,.07) 0%,rgba(128,128,128,.028) 72px)}
+/* Repost / quote-repost header (no gradient chrome) */
+.feed-item.is-repost{background:transparent}
+.feed-item.is-repost:hover{background:rgba(128,128,128,.028)}
 .feed-item-repost-label{
   display:flex;align-items:center;gap:6px;flex-wrap:wrap;
   font-size:12px;font-weight:600;color:#16a34a;margin:0 0 6px;letter-spacing:.01em;
 }
 .feed-item-repost-label svg{flex-shrink:0;color:#22c55e}
 .feed-item-repost-by{font-weight:700;color:var(--text-secondary,#6b7280)}
-.dark .feed-item.is-repost{background:linear-gradient(180deg,rgba(34,197,94,.08) 0%,transparent 56px)}
-.dark .feed-item.is-repost:hover{background:linear-gradient(180deg,rgba(34,197,94,.11) 0%,rgba(255,255,255,.03) 72px)}
+.dark .feed-item.is-repost{background:transparent}
+.dark .feed-item.is-repost:hover{background:rgba(255,255,255,.03)}
 .dark .feed-item-repost-label{color:#4ade80}
 .dark .feed-item-repost-by{color:rgba(255,255,255,.55)}
 
@@ -361,6 +361,32 @@ body.dark{background:#0a0a0a;color:rgba(255,255,255,.92)}
 .sidebar{display:flex;flex-direction:column;width:280px;border-right:1px solid rgba(128,128,128,.08);flex-shrink:0;overflow:hidden}
 .sidebar-header{padding:14px 14px 12px;border-bottom:1px solid rgba(128,128,128,.06);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:52px}
 .sidebar-title{margin:0;font-size:16px;font-weight:700;color:var(--text-primary,#1a1a1a);letter-spacing:-.02em}
+/* Messenger list tabs: 私信 → 群组 → 已关闭 */
+.conv-tabs{
+  display:flex;align-items:stretch;gap:2px;flex-shrink:0;
+  padding:6px 10px 0;border-bottom:1px solid rgba(128,128,128,.06);
+  background:rgba(255,255,255,.4);
+}
+.conv-tab{
+  flex:1 1 0;min-width:0;
+  display:inline-flex;align-items:center;justify-content:center;
+  padding:10px 8px;border:none;background:none;cursor:pointer;
+  font-size:13px;font-weight:600;font-family:inherit;
+  color:var(--text-secondary,#8b98a5);
+  border-bottom:2.5px solid transparent;
+  white-space:nowrap;transition:color .12s,border-color .12s,background .12s;
+  -webkit-tap-highlight-color:transparent;
+}
+.conv-tab:hover{color:var(--text-primary,#1a1a1a);background:rgba(128,128,128,.04)}
+.conv-tab-active{
+  color:var(--text-primary,#0f1419)!important;
+  font-weight:750;
+  border-bottom-color:var(--tapp-primary,#6366f1)!important;
+}
+.dark .conv-tabs{background:rgba(0,0,0,.18);border-color:rgba(255,255,255,.06)}
+.dark .conv-tab{color:rgba(255,255,255,.5)}
+.dark .conv-tab:hover{color:rgba(255,255,255,.9);background:rgba(255,255,255,.04)}
+.dark .conv-tab-active{color:rgba(255,255,255,.95)!important}
 .create-btn{width:36px;height:36px;min-width:36px;min-height:36px;border-radius:10px;border:none;background:var(--tapp-primary,#6366f1);color:#fff;font-size:22px;font-weight:400;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:opacity .15s,transform .12s;flex-shrink:0;line-height:1}
 .create-btn:hover{opacity:.9}
 .create-btn:active{transform:scale(.96)}
