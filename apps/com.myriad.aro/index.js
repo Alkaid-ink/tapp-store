@@ -177,6 +177,8 @@
       "unbookmarkBtn": "Remove bookmark",
       "replyBtn": "Reply",
       "repostBtn": "Repost",
+      "repostLabel": "Repost",
+      "quoteRepostLabel": "Quote repost",
       "unrepostBtn": "Undo repost",
       "replyPlaceholder": "Write a reply…",
       "replySubmit": "Reply",
@@ -413,7 +415,7 @@
       "settingsWhoCanMessage": "Who can message you",
       "settingsWhoCanMessageHint": "Server-side messaging limits are not available yet. Preference is stored on this device only.",
       "settingsDelivery": "Outbound delivery",
-      "settingsDeliveryHint": "Federation messages waiting to send, failed deliveries, and recent queue items. Cancel pending items or retry failed ones.",
+      "settingsDeliveryHint": "Federation messages waiting to send, failed deliveries, and recent queue items. Cancel any pending/sending item, cancel all at once, or retry failed ones.",
       "settingsDeliveryPending": "Pending",
       "settingsDeliveryDelivering": "Sending",
       "settingsDeliveryDelivered": "Delivered",
@@ -423,6 +425,9 @@
       "settingsDeliveryRetry": "Retry",
       "settingsDeliveryCancel": "Cancel",
       "settingsDeliveryRetryAll": "Retry all failed",
+      "settingsDeliveryCancelAll": "Cancel all",
+      "settingsDeliveryCancelAllConfirm": "Cancel all pending and in-progress deliveries?",
+      "settingsDeliveryCancelAllOk": "Cancelled {n} deliveries",
       "settingsDeliveryCancelOk": "Delivery cancelled",
       "settingsDeliveryCancelFail": "Couldn't cancel delivery",
       "settingsDeliveryRetryFail": "Couldn't retry delivery",
@@ -660,6 +665,8 @@
       "unbookmarkBtn": "ブックマーク解除",
       "replyBtn": "返信",
       "repostBtn": "リポスト",
+      "repostLabel": "リポスト",
+      "quoteRepostLabel": "引用リポスト",
       "unrepostBtn": "リポストを取り消す",
       "replyPlaceholder": "返信を書く…",
       "replySubmit": "返信する",
@@ -896,7 +903,7 @@
       "settingsWhoCanMessage": "メッセージを送れる相手",
       "settingsWhoCanMessageHint": "サーバー側のメッセージ制限はまだありません。端末内の設定として保存されます。",
       "settingsDelivery": "送信・配信状況",
-      "settingsDeliveryHint": "送信待ち・失敗した連邦配信を確認し、キャンセルまたは再試行できます。",
+      "settingsDeliveryHint": "送信待ち・送信中・失敗した連邦配信を確認できます。個別キャンセル、一括キャンセル、失敗の再試行ができます。",
       "settingsDeliveryPending": "待機中",
       "settingsDeliveryDelivering": "送信中",
       "settingsDeliveryDelivered": "配信済み",
@@ -906,6 +913,9 @@
       "settingsDeliveryRetry": "再試行",
       "settingsDeliveryCancel": "キャンセル",
       "settingsDeliveryRetryAll": "失敗をすべて再試行",
+      "settingsDeliveryCancelAll": "すべてキャンセル",
+      "settingsDeliveryCancelAllConfirm": "待機中・送信中の配信をすべてキャンセルしますか？",
+      "settingsDeliveryCancelAllOk": "{n} 件の配信をキャンセルしました",
       "settingsDeliveryCancelOk": "配信をキャンセルしました",
       "settingsDeliveryCancelFail": "キャンセルに失敗しました",
       "settingsDeliveryRetryFail": "再試行に失敗しました",
@@ -1143,6 +1153,8 @@
       "unbookmarkBtn": "取消收藏",
       "replyBtn": "评论",
       "repostBtn": "转发",
+      "repostLabel": "转发",
+      "quoteRepostLabel": "引用转发",
       "unrepostBtn": "取消转发",
       "replyPlaceholder": "写一条评论…",
       "replySubmit": "发送评论",
@@ -1379,7 +1391,7 @@
       "settingsWhoCanMessage": "谁可以私信你",
       "settingsWhoCanMessageHint": "服务端消息限制尚未提供。偏好仅保存在本设备。",
       "settingsDelivery": "发送投递状态",
-      "settingsDeliveryHint": "查看等待发送、投递失败与近期队列。可取消待发送任务或重试失败项。",
+      "settingsDeliveryHint": "查看等待发送、投递失败与近期队列。可取消任意待发送/发送中任务，或一键全部取消；失败项可重试。",
       "settingsDeliveryPending": "等待中",
       "settingsDeliveryDelivering": "发送中",
       "settingsDeliveryDelivered": "已投递",
@@ -1389,6 +1401,9 @@
       "settingsDeliveryRetry": "重试",
       "settingsDeliveryCancel": "取消",
       "settingsDeliveryRetryAll": "重试全部失败",
+      "settingsDeliveryCancelAll": "全部取消",
+      "settingsDeliveryCancelAllConfirm": "取消全部等待中与发送中的投递任务？",
+      "settingsDeliveryCancelAllOk": "已取消 {n} 条投递",
       "settingsDeliveryCancelOk": "已取消投递",
       "settingsDeliveryCancelFail": "取消失败",
       "settingsDeliveryRetryFail": "重试失败",
@@ -7581,6 +7596,8 @@
     html += '<div class="backup-actions" style="margin-top:10px">';
     html += '<button type="button" class="backup-btn" id="settings-delivery-refresh">'
       + esc(lang.settingsDeliveryRefresh || 'Refresh') + '</button>';
+    html += '<button type="button" class="backup-btn backup-btn-danger" id="settings-delivery-cancel-all">'
+      + esc(lang.settingsDeliveryCancelAll || 'Cancel all') + '</button>';
     html += '<button type="button" class="backup-btn backup-btn-primary" id="settings-delivery-retry-all">'
       + esc(lang.settingsDeliveryRetryAll || 'Retry all failed') + '</button>';
     html += '</div></div>';
@@ -7629,7 +7646,8 @@
     h += '<div class="settings-delivery-list">';
     items.forEach(function (it) {
       var st = String(it.status || '').toLowerCase();
-      var canCancel = st === 'pending' || st === 'delivering';
+      // Cancel any non-delivered item (pending/delivering/dead). Delivered cannot be cancelled.
+      var canCancel = st !== 'delivered' && !!it.id;
       var canRetry = st === 'dead';
       h += '<div class="settings-delivery-item" data-delivery-id="' + esc(String(it.id || '')) + '">';
       h += '<div class="settings-delivery-item-top">';
@@ -7749,6 +7767,41 @@
     var refreshDel = root.querySelector('#settings-delivery-refresh');
     if (refreshDel) {
       refreshDel.addEventListener('click', function () { loadSettingsDeliveryPanel(); });
+    }
+    var cancelAll = root.querySelector('#settings-delivery-cancel-all');
+    if (cancelAll) {
+      cancelAll.addEventListener('click', async function () {
+        if (typeof Tapp.federation.cancelAllPendingDelivery !== 'function') {
+          notifyError(lang.settingsDeliveryCancelFail || 'Cancel failed', new Error('API unavailable'));
+          return;
+        }
+        try {
+          if (typeof aroConfirm === 'function') {
+            var ok = await aroConfirm(
+              lang.settingsDeliveryCancelAllConfirm || 'Cancel all pending and in-progress deliveries?',
+              true
+            );
+            if (!ok) return;
+          }
+          var res = await Tapp.federation.cancelAllPendingDelivery(100);
+          var cancelled = 0;
+          if (res) {
+            cancelled = res.cancelled != null
+              ? res.cancelled
+              : (res.data && res.data.cancelled) || 0;
+          }
+          try {
+            Tapp.ui.showNotification({
+              title: (lang.settingsDeliveryCancelAllOk || 'Cancelled {n} deliveries')
+                .replace('{n}', String(cancelled)),
+              type: 'success'
+            });
+          } catch (e0) {}
+          loadSettingsDeliveryPanel();
+        } catch (e) {
+          notifyError(lang.settingsDeliveryCancelFail || 'Cancel failed', e);
+        }
+      });
     }
     var retryAll = root.querySelector('#settings-delivery-retry-all');
     if (retryAll) {
@@ -11354,7 +11407,7 @@
     depth = depth || 0;
     if (!quoted || typeof quoted !== 'object') return '';
     if (depth >= MAX_QUOTE_RENDER_DEPTH) {
-      return '<div class="feed-item-quoted feed-item-quoted-truncated">'
+      return '<div class="feed-item-quoted feed-item-quoted-truncated" data-quote-depth="' + depth + '">'
         + esc(lang.quoteRepostTruncated || 'Earlier quotes not shown') + '</div>';
     }
     var author = attributedToLabel(quoted.attributedTo);
@@ -11364,13 +11417,20 @@
     var label = isNestedRepost
       ? (lang.quoteRepostNested || lang.quoteRepostQuoted || 'Quoted repost')
       : (lang.quoteRepostQuoted || 'Quoted post');
-    if (author) label = label + ' · ' + author;
-    var h = '<div class="feed-item-quoted" data-quote-depth="' + depth + '">';
-    h += '<div class="feed-item-quoted-meta">' + esc(label) + '</div>';
+    // Single flat card: no nested bordered wrappers — only indent deeper levels.
+    var h = '<div class="feed-item-quoted' + (isNestedRepost ? ' is-nested-repost' : '') + '" data-quote-depth="' + depth + '">';
+    h += '<div class="feed-item-quoted-meta">';
+    if (author) {
+      h += '<span class="feed-item-quoted-author">' + esc(author) + '</span>';
+      h += '<span class="feed-item-quoted-kind">' + esc(label) + '</span>';
+    } else {
+      h += '<span class="feed-item-quoted-kind">' + esc(label) + '</span>';
+    }
+    h += '</div>';
     if (text) {
       h += '<div class="feed-item-quoted-text">' + esc(String(text).slice(0, 280)) + '</div>';
     } else if (quoted.id) {
-      h += '<div class="feed-item-quoted-text" style="opacity:.65">' + esc(String(quoted.id).slice(0, 80)) + '</div>';
+      h += '<div class="feed-item-quoted-text feed-item-quoted-id">' + esc(String(quoted.id).slice(0, 80)) + '</div>';
     }
     var inner = quoted['mfp:quotedObject'] || quoted.mfp_quotedObject || null;
     if (inner && typeof inner === 'object') {
@@ -11396,16 +11456,20 @@
       var cj = typeof timelineContentObject === 'function' ? timelineContentObject(item) : null;
       var text = feedItemPreviewText(item);
       var body = '';
-      // Show the post being quoted as a snapshot card; if it is itself a repost, nest.
+      // Single snapshot card only (no outer chrome + inner card double wrap).
+      // If quoting a repost, prefer its embedded original so we don't fake an extra nest level.
       if (cj && (cj['mfp:kind'] === 'repost' || cj.mfp_kind === 'repost' || item && item.object_type === 'repost')) {
-        var snap = {
-          id: resolveObjectId(item) || objectId,
-          attributedTo: (item && item.actor && item.actor.actor_url) || (cj && cj.attributedTo) || '',
-          content_preview: text,
-          'mfp:kind': 'repost',
-          'mfp:quotedObject': cj['mfp:quotedObject'] || cj.mfp_quotedObject || null
-        };
-        body = renderQuotedObjectHtml(snap, 0);
+        var nested = cj['mfp:quotedObject'] || cj.mfp_quotedObject || null;
+        if (nested && typeof nested === 'object') {
+          body = renderQuotedObjectHtml(nested, 0);
+        } else {
+          body = renderQuotedObjectHtml({
+            id: resolveObjectId(item) || objectId,
+            attributedTo: (item && item.actor && item.actor.actor_url) || (cj && cj.attributedTo) || '',
+            content_preview: text,
+            type: 'Note'
+          }, 0);
+        }
       } else if (text || (cj && cj.id)) {
         body = renderQuotedObjectHtml({
           id: objectId,
@@ -11807,29 +11871,36 @@
     var publishTarget = isOwn && typeof extractPublishTarget === 'function' ? extractPublishTarget(item) : null;
     var canDelete = !state.isGuest && isOwn && item.activity_type !== 'Announce'
       && publishTarget && (publishTarget.content_id || publishTarget.activity_id);
-    var h = '<div class="feed-item" data-object-id="' + esc(objectId) + '"'
-      + (item.activity_id ? ' data-activity-id="' + esc(String(item.activity_id)) + '"' : '')
-      + '>';
-    h += '<div class="feed-item-avatar">' + avatarContentHtml(actor.avatar_url || '', name) + '</div>';
-    h += '<div class="feed-item-body">';
-    h += '<div class="feed-item-header">';
-    h += '<span class="feed-item-name">' + esc(name) + '</span>';
-    if (handle) h += '<span class="feed-item-handle">' + esc(handle) + '</span>';
-    if (ts) h += '<span class="feed-item-sep">&middot;</span><span class="feed-item-time">' + esc(ts) + '</span>';
-    h += '</div>';
     var isQuoteRepost = !!(contentJson && (
       contentJson['mfp:kind'] === 'repost' ||
       contentJson.mfp_kind === 'repost' ||
       item.object_type === 'repost'
     ));
-    if (isQuoteRepost) {
-      h += '<div class="feed-item-inreply">' + esc(lang.repostBtn || 'Repost') + '</div>';
+    var isAnnounce = item.activity_type === 'Announce';
+    var isRepostCard = isQuoteRepost || isAnnounce;
+    var h = '<div class="feed-item' + (isRepostCard ? ' is-repost' : '') + (inReplyTo && !isRepostCard ? ' is-reply' : '') + '" data-object-id="' + esc(objectId) + '"'
+      + (item.activity_id ? ' data-activity-id="' + esc(String(item.activity_id)) + '"' : '')
+      + '>';
+    h += '<div class="feed-item-avatar">' + avatarContentHtml(actor.avatar_url || '', name) + '</div>';
+    h += '<div class="feed-item-body">';
+    if (isRepostCard) {
+      h += '<div class="feed-item-repost-label" aria-hidden="false">'
+        + '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>'
+        + '<span>' + esc(isQuoteRepost
+          ? (lang.quoteRepostLabel || lang.quoteRepostTitle || 'Quote repost')
+          : (lang.repostLabel || lang.repostBtn || 'Repost')) + '</span>'
+        + (name ? '<span class="feed-item-repost-by">' + esc(name) + '</span>' : '')
+        + '</div>';
     } else if (inReplyTo) {
-      h += '<div class="feed-item-inreply">' + esc(lang.inReplyTo || 'Replying to a post') + '</div>';
+      h += '<div class="feed-item-inreply">'
+        + '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M20 20v-7a4 4 0 00-4-4H4"/></svg>'
+        + '<span>' + esc(lang.inReplyTo || 'Replying to a post') + '</span></div>';
     }
-    if (item.activity_type === 'Announce') {
-      h += '<div class="feed-item-inreply">' + esc(lang.repostBtn || 'Repost') + '</div>';
-    }
+    h += '<div class="feed-item-header">';
+    h += '<span class="feed-item-name">' + esc(name) + '</span>';
+    if (handle) h += '<span class="feed-item-handle">' + esc(handle) + '</span>';
+    if (ts) h += '<span class="feed-item-sep">&middot;</span><span class="feed-item-time">' + esc(ts) + '</span>';
+    h += '</div>';
     if (text) {
       if (linkUrl) {
         h += '<div class="feed-item-text"><a href="' + esc(linkUrl) + '" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline">' + esc(text) + '</a></div>';

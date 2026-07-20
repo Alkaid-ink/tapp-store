@@ -725,7 +725,7 @@ function renderQuotedObjectHtml(quoted, depth) {
   depth = depth || 0;
   if (!quoted || typeof quoted !== 'object') return '';
   if (depth >= MAX_QUOTE_RENDER_DEPTH) {
-    return '<div class="feed-item-quoted feed-item-quoted-truncated">'
+    return '<div class="feed-item-quoted feed-item-quoted-truncated" data-quote-depth="' + depth + '">'
       + esc(lang.quoteRepostTruncated || 'Earlier quotes not shown') + '</div>';
   }
   var author = attributedToLabel(quoted.attributedTo);
@@ -735,13 +735,20 @@ function renderQuotedObjectHtml(quoted, depth) {
   var label = isNestedRepost
     ? (lang.quoteRepostNested || lang.quoteRepostQuoted || 'Quoted repost')
     : (lang.quoteRepostQuoted || 'Quoted post');
-  if (author) label = label + ' · ' + author;
-  var h = '<div class="feed-item-quoted" data-quote-depth="' + depth + '">';
-  h += '<div class="feed-item-quoted-meta">' + esc(label) + '</div>';
+  // Soft fill only — no border chrome; nested levels stay flat cards.
+  var h = '<div class="feed-item-quoted' + (isNestedRepost ? ' is-nested-repost' : '') + '" data-quote-depth="' + depth + '">';
+  h += '<div class="feed-item-quoted-meta">';
+  if (author) {
+    h += '<span class="feed-item-quoted-author">' + esc(author) + '</span>';
+    h += '<span class="feed-item-quoted-kind">' + esc(label) + '</span>';
+  } else {
+    h += '<span class="feed-item-quoted-kind">' + esc(label) + '</span>';
+  }
+  h += '</div>';
   if (text) {
     h += '<div class="feed-item-quoted-text">' + esc(String(text).slice(0, 280)) + '</div>';
   } else if (quoted.id) {
-    h += '<div class="feed-item-quoted-text" style="opacity:.65">' + esc(String(quoted.id).slice(0, 80)) + '</div>';
+    h += '<div class="feed-item-quoted-text feed-item-quoted-id">' + esc(String(quoted.id).slice(0, 80)) + '</div>';
   }
   var inner = quoted['mfp:quotedObject'] || quoted.mfp_quotedObject || null;
   if (inner && typeof inner === 'object') {
@@ -767,16 +774,20 @@ function openQuoteRepostModal(objectId) {
     var cj = typeof timelineContentObject === 'function' ? timelineContentObject(item) : null;
     var text = feedItemPreviewText(item);
     var body = '';
-    // Show the post being quoted as a snapshot card; if it is itself a repost, nest.
+    // Single snapshot card only (no outer chrome + inner card double wrap).
+    // If quoting a repost, prefer its embedded original so we don't fake an extra nest level.
     if (cj && (cj['mfp:kind'] === 'repost' || cj.mfp_kind === 'repost' || item && item.object_type === 'repost')) {
-      var snap = {
-        id: resolveObjectId(item) || objectId,
-        attributedTo: (item && item.actor && item.actor.actor_url) || (cj && cj.attributedTo) || '',
-        content_preview: text,
-        'mfp:kind': 'repost',
-        'mfp:quotedObject': cj['mfp:quotedObject'] || cj.mfp_quotedObject || null
-      };
-      body = renderQuotedObjectHtml(snap, 0);
+      var nested = cj['mfp:quotedObject'] || cj.mfp_quotedObject || null;
+      if (nested && typeof nested === 'object') {
+        body = renderQuotedObjectHtml(nested, 0);
+      } else {
+        body = renderQuotedObjectHtml({
+          id: resolveObjectId(item) || objectId,
+          attributedTo: (item && item.actor && item.actor.actor_url) || (cj && cj.attributedTo) || '',
+          content_preview: text,
+          type: 'Note'
+        }, 0);
+      }
     } else if (text || (cj && cj.id)) {
       body = renderQuotedObjectHtml({
         id: objectId,
@@ -1178,29 +1189,36 @@ function renderTimelineItem(item) {
   var publishTarget = isOwn && typeof extractPublishTarget === 'function' ? extractPublishTarget(item) : null;
   var canDelete = !state.isGuest && isOwn && item.activity_type !== 'Announce'
     && publishTarget && (publishTarget.content_id || publishTarget.activity_id);
-  var h = '<div class="feed-item" data-object-id="' + esc(objectId) + '"'
-    + (item.activity_id ? ' data-activity-id="' + esc(String(item.activity_id)) + '"' : '')
-    + '>';
-  h += '<div class="feed-item-avatar">' + avatarContentHtml(actor.avatar_url || '', name) + '</div>';
-  h += '<div class="feed-item-body">';
-  h += '<div class="feed-item-header">';
-  h += '<span class="feed-item-name">' + esc(name) + '</span>';
-  if (handle) h += '<span class="feed-item-handle">' + esc(handle) + '</span>';
-  if (ts) h += '<span class="feed-item-sep">&middot;</span><span class="feed-item-time">' + esc(ts) + '</span>';
-  h += '</div>';
   var isQuoteRepost = !!(contentJson && (
     contentJson['mfp:kind'] === 'repost' ||
     contentJson.mfp_kind === 'repost' ||
     item.object_type === 'repost'
   ));
-  if (isQuoteRepost) {
-    h += '<div class="feed-item-inreply">' + esc(lang.repostBtn || 'Repost') + '</div>';
+  var isAnnounce = item.activity_type === 'Announce';
+  var isRepostCard = isQuoteRepost || isAnnounce;
+  var h = '<div class="feed-item' + (isRepostCard ? ' is-repost' : '') + (inReplyTo && !isRepostCard ? ' is-reply' : '') + '" data-object-id="' + esc(objectId) + '"'
+    + (item.activity_id ? ' data-activity-id="' + esc(String(item.activity_id)) + '"' : '')
+    + '>';
+  h += '<div class="feed-item-avatar">' + avatarContentHtml(actor.avatar_url || '', name) + '</div>';
+  h += '<div class="feed-item-body">';
+  if (isRepostCard) {
+    h += '<div class="feed-item-repost-label">'
+      + '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>'
+      + '<span>' + esc(isQuoteRepost
+        ? (lang.quoteRepostLabel || lang.quoteRepostTitle || 'Quote repost')
+        : (lang.repostLabel || lang.repostBtn || 'Repost')) + '</span>'
+      + (name ? '<span class="feed-item-repost-by">' + esc(name) + '</span>' : '')
+      + '</div>';
   } else if (inReplyTo) {
-    h += '<div class="feed-item-inreply">' + esc(lang.inReplyTo || 'Replying to a post') + '</div>';
+    h += '<div class="feed-item-inreply">'
+      + '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M20 20v-7a4 4 0 00-4-4H4"/></svg>'
+      + '<span>' + esc(lang.inReplyTo || 'Replying to a post') + '</span></div>';
   }
-  if (item.activity_type === 'Announce') {
-    h += '<div class="feed-item-inreply">' + esc(lang.repostBtn || 'Repost') + '</div>';
-  }
+  h += '<div class="feed-item-header">';
+  h += '<span class="feed-item-name">' + esc(name) + '</span>';
+  if (handle) h += '<span class="feed-item-handle">' + esc(handle) + '</span>';
+  if (ts) h += '<span class="feed-item-sep">&middot;</span><span class="feed-item-time">' + esc(ts) + '</span>';
+  h += '</div>';
   if (text) {
     if (linkUrl) {
       h += '<div class="feed-item-text"><a href="' + esc(linkUrl) + '" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline">' + esc(text) + '</a></div>';

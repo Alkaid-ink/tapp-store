@@ -1282,6 +1282,8 @@ async function renderSettingsPage() {
   html += '<div class="backup-actions" style="margin-top:10px">';
   html += '<button type="button" class="backup-btn" id="settings-delivery-refresh">'
     + esc(lang.settingsDeliveryRefresh || 'Refresh') + '</button>';
+  html += '<button type="button" class="backup-btn backup-btn-danger" id="settings-delivery-cancel-all">'
+    + esc(lang.settingsDeliveryCancelAll || 'Cancel all') + '</button>';
   html += '<button type="button" class="backup-btn backup-btn-primary" id="settings-delivery-retry-all">'
     + esc(lang.settingsDeliveryRetryAll || 'Retry all failed') + '</button>';
   html += '</div></div>';
@@ -1330,7 +1332,8 @@ function renderSettingsDeliveryHtml(stats, items) {
   h += '<div class="settings-delivery-list">';
   items.forEach(function (it) {
     var st = String(it.status || '').toLowerCase();
-    var canCancel = st === 'pending' || st === 'delivering';
+    // Cancel any non-delivered item (pending/delivering/dead). Delivered cannot be cancelled.
+    var canCancel = st !== 'delivered' && !!it.id;
     var canRetry = st === 'dead';
     h += '<div class="settings-delivery-item" data-delivery-id="' + esc(String(it.id || '')) + '">';
     h += '<div class="settings-delivery-item-top">';
@@ -1450,6 +1453,41 @@ function bindSettingsPageEvents(root) {
   var refreshDel = root.querySelector('#settings-delivery-refresh');
   if (refreshDel) {
     refreshDel.addEventListener('click', function () { loadSettingsDeliveryPanel(); });
+  }
+  var cancelAll = root.querySelector('#settings-delivery-cancel-all');
+  if (cancelAll) {
+    cancelAll.addEventListener('click', async function () {
+      if (typeof Tapp.federation.cancelAllPendingDelivery !== 'function') {
+        notifyError(lang.settingsDeliveryCancelFail || 'Cancel failed', new Error('API unavailable'));
+        return;
+      }
+      try {
+        if (typeof aroConfirm === 'function') {
+          var ok = await aroConfirm(
+            lang.settingsDeliveryCancelAllConfirm || 'Cancel all pending and in-progress deliveries?',
+            true
+          );
+          if (!ok) return;
+        }
+        var res = await Tapp.federation.cancelAllPendingDelivery(100);
+        var cancelled = 0;
+        if (res) {
+          cancelled = res.cancelled != null
+            ? res.cancelled
+            : (res.data && res.data.cancelled) || 0;
+        }
+        try {
+          Tapp.ui.showNotification({
+            title: (lang.settingsDeliveryCancelAllOk || 'Cancelled {n} deliveries')
+              .replace('{n}', String(cancelled)),
+            type: 'success'
+          });
+        } catch (e0) {}
+        loadSettingsDeliveryPanel();
+      } catch (e) {
+        notifyError(lang.settingsDeliveryCancelFail || 'Cancel failed', e);
+      }
+    });
   }
   var retryAll = root.querySelector('#settings-delivery-retry-all');
   if (retryAll) {
