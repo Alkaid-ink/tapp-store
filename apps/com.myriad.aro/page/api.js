@@ -1375,10 +1375,7 @@ function showEditRoomDialog() {
       idVal.textContent = '';
     }
   }
-  overlay.classList.remove('aro-leaving');
-  overlay.hidden = false;
-  overlay.style.pointerEvents = 'auto';
-  overlay.style.display = 'flex';
+  showAroOverlay(overlay);
 }
 
 function hideEditRoomDialog() {
@@ -1675,10 +1672,7 @@ async function doLeaveRoom() {
 function showCreateDialog() {
   var overlay = $('create-dialog');
   if (overlay) {
-    overlay.classList.remove('aro-leaving');
-    overlay.hidden = false;
-    overlay.style.pointerEvents = 'auto';
-    overlay.style.display = 'flex';
+    showAroOverlay(overlay);
   }
   switchCreateTab('channel');
 }

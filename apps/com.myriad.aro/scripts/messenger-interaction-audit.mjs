@@ -375,6 +375,173 @@ function checkGens() {
 }
 
 // ---------------------------------------------------------------------------
+// 7) showAroOverlay + create-overlay open paths restore full triad
+// After forceHide/dismissTransientUi, hidden=true + PE=none; display:flex alone
+// cannot reopen (.create-overlay[hidden]{display:none!important}).
+// ---------------------------------------------------------------------------
+
+/** Full open triad: clear hidden, pointerEvents auto, display flex (order flexible). */
+function hasOverlayOpenTriad(src) {
+  const pe =
+    /(?:style\.)?pointerEvents\s*=\s*['"]auto['"]/.test(src) ||
+    /pointer-events\s*:\s*auto/.test(src);
+  const hiddenClear =
+    /\.hidden\s*=\s*false/.test(src) ||
+    /removeAttribute\s*\(\s*['"]hidden['"]\s*\)/.test(src);
+  const displayFlex =
+    /(?:style\.)?display\s*=\s*['"]flex['"]/.test(src) ||
+    /display\s*:\s*flex/.test(src);
+  return pe && hiddenClear && displayFlex;
+}
+
+function usesShowAroOverlayOrTriad(src) {
+  return /\bshowAroOverlay\s*\(/.test(src) || hasOverlayOpenTriad(src);
+}
+
+function checkShowAroOverlay() {
+  const helpers = read('page/helpers.js');
+  if (!helpers) return;
+
+  // Strip comments first so extractFunctionBody is not confused by apostrophes in // comments
+  // (e.g. "don't") which would otherwise be parsed as string delimiters.
+  const helpersClean = stripComments(helpers);
+
+  // Function must exist with the restore triad
+  const body = extractFunctionBody(helpersClean, /function\s+showAroOverlay\s*\([^)]*\)\s*/);
+  if (!body) {
+    fail('7-showAroOverlay-fn', 'function showAroOverlay missing in page/helpers.js');
+  } else {
+    const hasHidden =
+      /\.hidden\s*=\s*false/.test(body) ||
+      /removeAttribute\s*\(\s*['"]hidden['"]\s*\)/.test(body);
+    const hasPe = /(?:style\.)?pointerEvents\s*=\s*['"]auto['"]/.test(body);
+    const hasFlex = /(?:style\.)?display\s*=\s*['"]flex['"]/.test(body);
+    const removesLeaving = /classList\.remove\s*\([^)]*aro-leaving/.test(body);
+    if (hasHidden && hasPe && hasFlex) {
+      pass(
+        '7-showAroOverlay-fn',
+        `function present with triad (hidden clear + PE auto + display flex${removesLeaving ? '; clears aro-leaving' : ''})`,
+      );
+    } else {
+      fail(
+        '7-showAroOverlay-fn',
+        `incomplete triad: hiddenClear=${hasHidden}, PE auto=${hasPe}, display flex=${hasFlex}`,
+      );
+    }
+  }
+
+  // openComposer / openFollowDialog in views.js
+  const views = read('page/views.js');
+  if (views) {
+    const viewsClean = stripComments(views);
+    for (const [name, re] of [
+      ['openComposer', /function\s+openComposer\s*\([^)]*\)\s*/],
+      ['openFollowDialog', /function\s+openFollowDialog\s*\([^)]*\)\s*/],
+    ]) {
+      const fnBody = extractFunctionBody(viewsClean, re);
+      if (!fnBody) {
+        fail(`7-${name}`, `function ${name} not found in page/views.js`);
+      } else if (usesShowAroOverlayOrTriad(fnBody)) {
+        pass(`7-${name}`, 'uses showAroOverlay or full open triad');
+      } else {
+        fail(
+          `7-${name}`,
+          'must call showAroOverlay OR set pointerEvents auto + clear hidden + display flex',
+        );
+      }
+    }
+
+    // quote-repost open path (openQuoteRepostModal)
+    const quoteFn =
+      extractFunctionBody(viewsClean, /function\s+openQuoteRepost\w*\s*\([^)]*\)\s*/) ||
+      extractFunctionBody(viewsClean, /function\s+showQuoteRepost\w*\s*\([^)]*\)\s*/) ||
+      extractFunctionBody(viewsClean, /function\s+\w*[Qq]uote[Rr]epost\w*\s*\([^)]*\)\s*/);
+    let quoteOk = false;
+    if (quoteFn && usesShowAroOverlayOrTriad(quoteFn)) {
+      quoteOk = true;
+    } else {
+      // Fallback: scan windows around quote-repost-dialog for open triad / showAroOverlay
+      let from = 0;
+      while (from < viewsClean.length) {
+        const i = viewsClean.indexOf('quote-repost-dialog', from);
+        if (i === -1) break;
+        const window = viewsClean.slice(Math.max(0, i - 80), Math.min(viewsClean.length, i + 400));
+        if (/\bshowAroOverlay\s*\(/.test(window) || hasOverlayOpenTriad(window)) {
+          quoteOk = true;
+          break;
+        }
+        from = i + 20;
+      }
+    }
+    if (quoteOk) {
+      pass('7-quote-repost-open', 'uses showAroOverlay or full open triad');
+    } else {
+      fail(
+        '7-quote-repost-open',
+        'quote-repost open path must call showAroOverlay OR pointerEvents auto + clear hidden + display flex',
+      );
+    }
+  }
+
+  // ring-create open path in events.js (bindEvents split across views/events)
+  const events = read('page/events.js');
+  if (events) {
+    const cleanEv = stripComments(events);
+    let ringOk = false;
+    let from = 0;
+    while (from < cleanEv.length) {
+      const i = cleanEv.indexOf('ring-create-dialog', from);
+      if (i === -1) break;
+      const window = cleanEv.slice(Math.max(0, i - 80), Math.min(cleanEv.length, i + 350));
+      // Open path: showAroOverlay or display flex with triad — not aroDismiss-only close
+      if (/\bshowAroOverlay\s*\(/.test(window) || hasOverlayOpenTriad(window)) {
+        ringOk = true;
+        break;
+      }
+      from = i + 20;
+    }
+    if (ringOk) {
+      pass('7-ring-create-open', 'uses showAroOverlay or full open triad');
+    } else {
+      fail(
+        '7-ring-create-open',
+        'ring-create open path must call showAroOverlay OR pointerEvents auto + clear hidden + display flex',
+      );
+    }
+  }
+
+  // showCreateDialog in api.js
+  const api = read('page/api.js');
+  if (api) {
+    const apiClean = stripComments(api);
+    const createBody = extractFunctionBody(apiClean, /function\s+showCreateDialog\s*\([^)]*\)\s*/);
+    if (!createBody) {
+      fail('7-showCreateDialog', 'function showCreateDialog not found in page/api.js');
+    } else if (usesShowAroOverlayOrTriad(createBody)) {
+      pass('7-showCreateDialog', 'uses showAroOverlay or full open triad');
+    } else {
+      fail(
+        '7-showCreateDialog',
+        'must call showAroOverlay OR set pointerEvents auto + clear hidden + display flex',
+      );
+    }
+
+    // showEditRoomDialog is also a create-overlay open path (bonus consistency)
+    const editBody = extractFunctionBody(apiClean, /function\s+showEditRoomDialog\s*\([^)]*\)\s*/);
+    if (editBody) {
+      if (usesShowAroOverlayOrTriad(editBody)) {
+        pass('7-showEditRoomDialog', 'uses showAroOverlay or full open triad');
+      } else {
+        fail(
+          '7-showEditRoomDialog',
+          'must call showAroOverlay OR set pointerEvents auto + clear hidden + display flex',
+        );
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Run
 // ---------------------------------------------------------------------------
 console.log(`Aro messenger interaction audit\nroot: ${ARO_ROOT}\n`);
@@ -385,6 +552,7 @@ checkConvListDelegation();
 checkCreateOverlayCss();
 checkHelpers();
 checkGens();
+checkShowAroOverlay();
 
 console.log('--- PASS ---');
 for (const p of passes) console.log(`  ✓ ${p}`);
