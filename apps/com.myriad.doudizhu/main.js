@@ -451,49 +451,85 @@ console.log('[斗地主] core loaded');
     return 'url("' + String(pathOrUrl).replace(/"/g, '\\"') + '")';
   }
 
-  function applyTextureCssVars(root) {
-    if (!root) return;
-    var set = function (name, key) {
-      var u = textureUrls[key];
-      if (u) root.style.setProperty(name, cssUrl(u));
-    };
-    set('--ddz-tex-scene', 'scene');
-    set('--ddz-tex-felt', 'felt');
-    set('--ddz-tex-felt-dark', 'feltDark');
-    set('--ddz-tex-felt-tile', 'feltTile');
-    set('--ddz-tex-velvet', 'centerVelvet');
-    set('--ddz-tex-wood', 'woodPanel');
-    set('--ddz-tex-card-back', 'cardBack');
-    set('--ddz-tex-card-face', 'cardFace');
-    set('--ddz-tex-paper', 'paper');
-    set('--ddz-tex-suit-S', 'suitS');
-    set('--ddz-tex-suit-H', 'suitH');
-    set('--ddz-tex-suit-D', 'suitD');
-    set('--ddz-tex-suit-C', 'suitC');
-    set('--ddz-tex-joker-sj', 'jokerSj');
-    set('--ddz-tex-joker-bj', 'jokerBj');
-    set('--ddz-tex-seat-frame', 'seatFrame');
-    set('--ddz-tex-bottom-tray', 'bottomTray');
-    set('--ddz-tex-last-tray', 'lastTray');
-    set('--ddz-tex-avatar-ring', 'avatarRing');
-    set('--ddz-tex-logo', 'logoPlate');
-    set('--ddz-tex-btn-play', 'btnPlay');
-    set('--ddz-tex-btn-pass', 'btnPass');
-    set('--ddz-tex-btn-hint', 'btnHint');
-    set('--ddz-tex-btn-bid', 'btnBid');
-    set('--ddz-tex-btn-primary', 'btnPrimary');
-    set('--ddz-tex-btn-ghost', 'btnGhost');
-    set('--ddz-tex-badge-landlord', 'badgeLandlord');
-    set('--ddz-tex-badge-farmer', 'badgeFarmer');
-    set('--ddz-tex-badge-alarm', 'badgeAlarm');
-    set('--ddz-tex-end-ribbon', 'endRibbon');
-    set('--ddz-tex-ornament', 'ornament');
-    set('--ddz-tex-bubble', 'bubbleDark');
-    set('--ddz-tex-turn-ring', 'turnRing');
-    set('--ddz-tex-coin', 'coin');
-    set('--ddz-tex-crown', 'crown');
-    set('--ddz-tex-ready', 'readyCheck');
-    root.classList.add('ddz-textures-ready');
+  /**
+   * Map TEXTURE_MAP keys → CSS custom properties.
+   * MUST include every key in TEXTURE_MAP so no asset is load-only dead weight.
+   */
+  var TEXTURE_CSS_VARS = {
+    scene: '--ddz-tex-scene',
+    felt: '--ddz-tex-felt',
+    feltDark: '--ddz-tex-felt-dark',
+    feltTile: '--ddz-tex-felt-tile',
+    centerVelvet: '--ddz-tex-velvet',
+    woodPanel: '--ddz-tex-wood',
+    cardBack: '--ddz-tex-card-back',
+    cardBackSm: '--ddz-tex-card-back-sm',
+    cardFace: '--ddz-tex-card-face',
+    cardFaceSm: '--ddz-tex-card-face-sm',
+    paper: '--ddz-tex-paper',
+    suitS: '--ddz-tex-suit-S',
+    suitH: '--ddz-tex-suit-H',
+    suitD: '--ddz-tex-suit-D',
+    suitC: '--ddz-tex-suit-C',
+    jokerSj: '--ddz-tex-joker-sj',
+    jokerBj: '--ddz-tex-joker-bj',
+    btnPlay: '--ddz-tex-btn-play',
+    btnPass: '--ddz-tex-btn-pass',
+    btnHint: '--ddz-tex-btn-hint',
+    btnBid: '--ddz-tex-btn-bid',
+    btnPrimary: '--ddz-tex-btn-primary',
+    btnGhost: '--ddz-tex-btn-ghost',
+    bubbleDark: '--ddz-tex-bubble',
+    bubbleGold: '--ddz-tex-bubble-gold',
+    turnRing: '--ddz-tex-turn-ring',
+    badgeLandlord: '--ddz-tex-badge-landlord',
+    badgeFarmer: '--ddz-tex-badge-farmer',
+    badgeAlarm: '--ddz-tex-badge-alarm',
+    seatFrame: '--ddz-tex-seat-frame',
+    bottomTray: '--ddz-tex-bottom-tray',
+    lastTray: '--ddz-tex-last-tray',
+    avatarRing: '--ddz-tex-avatar-ring',
+    logoPlate: '--ddz-tex-logo',
+    ornament: '--ddz-tex-ornament',
+    coin: '--ddz-tex-coin',
+    endRibbon: '--ddz-tex-end-ribbon',
+    crown: '--ddz-tex-crown',
+    readyCheck: '--ddz-tex-ready'
+  };
+
+  /**
+   * Apply texture CSS vars to ancestors that cover BOTH #tapp-background (sibling)
+   * and #tapp-content/.ddz-root. documentElement is required so .ddz-bg-felt paints.
+   */
+  function textureApplyTargets() {
+    var list = [];
+    if (typeof document !== 'undefined') {
+      if (document.documentElement) list.push(document.documentElement);
+      if (document.body) list.push(document.body);
+      var bg = document.getElementById('tapp-background');
+      if (bg) list.push(bg);
+      var root = document.querySelector('.ddz-root');
+      if (root) list.push(root);
+    }
+    return list;
+  }
+
+  function applyTextureCssVars(targets) {
+    var nodes = targets;
+    if (!nodes) nodes = textureApplyTargets();
+    if (!nodes || !nodes.length) return;
+    if (nodes.nodeType) nodes = [nodes]; // single element
+    for (var n = 0; n < nodes.length; n++) {
+      var el = nodes[n];
+      if (!el || !el.style || !el.style.setProperty) continue;
+      var keys = Object.keys(TEXTURE_CSS_VARS);
+      for (var i = 0; i < keys.length; i++) {
+        var key = keys[i];
+        var u = textureUrls[key];
+        if (u) el.style.setProperty(TEXTURE_CSS_VARS[key], cssUrl(u));
+      }
+      if (el.classList) el.classList.add('ddz-textures-ready');
+    }
     texturesReady = true;
   }
 
@@ -514,8 +550,8 @@ console.log('[斗地主] core loaded');
         textureUrls[k] = path;
       }
     }
-    var root = document.querySelector('.ddz-root') || document.documentElement;
-    applyTextureCssVars(root);
+    // documentElement first — #tapp-background is NOT inside .ddz-root
+    applyTextureCssVars(textureApplyTargets());
     return textureUrls;
   }
 
@@ -751,9 +787,14 @@ console.log('[斗地主] core loaded');
   }
 
   function renderSeatAction(view, seat) {
+    var wrap = $('ddz-action-' + view);
     var labelEl = $('ddz-action-label-' + view);
     var cardsEl = view === 'me' ? $('ddz-local-me') : $('ddz-local-' + view);
     var action = seatActions[seat];
+    if (wrap) {
+      wrap.classList.remove('is-bid', 'is-bid-pass', 'is-play', 'is-pass');
+      if (action && action.kind) wrap.classList.add('is-' + action.kind);
+    }
     if (!labelEl) return;
     if (!action) {
       setText(labelEl, '');
@@ -1709,7 +1750,7 @@ console.log('[斗地主] core loaded');
       try {
         var keys = Object.keys(TEXTURE_MAP);
         for (var ti = 0; ti < keys.length; ti++) textureUrls[keys[ti]] = TEXTURE_MAP[keys[ti]];
-        applyTextureCssVars(document.querySelector('.ddz-root') || document.documentElement);
+        applyTextureCssVars(textureApplyTargets());
       } catch (e2) { /* ignore */ }
     }
     wireMessageHandler();

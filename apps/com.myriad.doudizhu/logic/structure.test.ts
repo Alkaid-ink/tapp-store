@@ -175,6 +175,9 @@ describe('com.myriad.doudizhu package layout', () => {
     assert.ok(main.includes('loadTextures') || main.includes('TEXTURE_MAP'))
     assert.ok(main.includes('assets/felt/table_felt.png'))
     assert.ok(main.includes('assets/cards/card_back.png'))
+    assert.ok(main.includes('document.documentElement'), 'texture vars on documentElement')
+    assert.ok(main.includes('textureApplyTargets'), 'multi-target texture apply')
+    assert.ok(main.includes('TEXTURE_CSS_VARS'), 'full key→CSS var map')
   })
 
   it('store index.json lists this app', () => {

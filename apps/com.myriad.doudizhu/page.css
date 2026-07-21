@@ -35,7 +35,9 @@
   --ddz-tex-velvet: none;
   --ddz-tex-wood: none;
   --ddz-tex-card-back: none;
+  --ddz-tex-card-back-sm: none;
   --ddz-tex-card-face: none;
+  --ddz-tex-card-face-sm: none;
   --ddz-tex-paper: none;
   --ddz-tex-seat-frame: none;
   --ddz-tex-bottom-tray: none;
@@ -54,6 +56,7 @@
   --ddz-tex-end-ribbon: none;
   --ddz-tex-ornament: none;
   --ddz-tex-bubble: none;
+  --ddz-tex-bubble-gold: none;
   --ddz-tex-turn-ring: none;
   --ddz-tex-coin: none;
   --ddz-tex-crown: none;
@@ -146,9 +149,12 @@
   border: 1px solid var(--ddz-border);
   background:
     var(--ddz-tex-logo) right 8px center / 120px auto no-repeat,
+    var(--ddz-tex-ornament) left bottom / 100% 10px no-repeat,
+    var(--ddz-tex-coin) left 10px center / 22px 22px no-repeat,
     linear-gradient(180deg, rgba(90, 24, 20, 0.88), rgba(40, 12, 10, 0.82));
   box-shadow: var(--ddz-shadow);
   backdrop-filter: blur(10px);
+  padding-left: 36px;
 }
 
 .ddz-brand {
@@ -477,10 +483,12 @@
 }
 
 .ddz-pill-ready {
-  color: #0a3;
-  background: rgba(61, 206, 122, 0.2);
-  border: 1px solid rgba(61, 206, 122, 0.45);
   color: #7dffb0;
+  border: 1px solid rgba(61, 206, 122, 0.45);
+  background:
+    var(--ddz-tex-ready) 2px center / 12px 12px no-repeat,
+    rgba(61, 206, 122, 0.2);
+  padding-left: 16px;
 }
 
 .ddz-pill-wait {
@@ -769,6 +777,13 @@
   border: 1px dashed rgba(255, 255, 255, 0.12);
 }
 
+.ddz-seat-action.is-bid,
+.ddz-seat-action.is-bid-pass {
+  background:
+    var(--ddz-tex-bubble-gold) center top / 100% auto no-repeat,
+    rgba(80, 40, 10, 0.35);
+}
+
 .ddz-action-label {
   font-size: 11px;
   font-weight: 800;
@@ -895,11 +910,24 @@
   --card-h: 42px;
   border-radius: 6px;
   padding: 2px;
+  background:
+    var(--ddz-tex-card-face-sm) center / cover no-repeat,
+    var(--ddz-tex-card-face) center / cover no-repeat,
+    var(--ddz-tex-paper) center / cover no-repeat,
+    #f8f5ef;
 }
 
 .ddz-card.mini .ddz-card-rank { font-size: 11px; }
 .ddz-card.mini .ddz-card-suit { width: 12px; height: 12px; }
 .ddz-card.mini.joker { width: 32px; }
+
+.ddz-card.mini.back,
+.ddz-played .ddz-card.back {
+  background:
+    var(--ddz-tex-card-back-sm) center / cover no-repeat,
+    var(--ddz-tex-card-back) center / cover no-repeat,
+    linear-gradient(145deg, #1e4a80, #0f2a50);
+}
 
 .ddz-played .ddz-card {
   --card-w: 22px;
