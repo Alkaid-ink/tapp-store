@@ -724,3 +724,196 @@ export function totalCardsInState(state: GameState): number {
   // After auction bottom is absorbed into landlord hand
   return hands
 }
+
+/** Human-readable Chinese labels for combo types (product table feedback). */
+export const COMBO_TYPE_LABELS: Record<ComboType, string> = {
+  single: '单张',
+  pair: '对子',
+  triple: '三张',
+  triple_one: '三带一',
+  triple_two: '三带二',
+  straight: '顺子',
+  pair_seq: '连对',
+  airplane: '飞机',
+  airplane_singles: '飞机带单',
+  airplane_pairs: '飞机带对',
+  bomb: '炸弹',
+  rocket: '王炸',
+}
+
+/** Map a combo type (or raw combo) to a display label. */
+export function comboTypeLabel(typeOrCombo: ComboType | Combo | null | undefined): string {
+  if (!typeOrCombo) return ''
+  const type = typeof typeOrCombo === 'string' ? typeOrCombo : typeOrCombo.type
+  return COMBO_TYPE_LABELS[type] || type
+}
+
+/** Stable key for a card multiset (sorted ids). */
+export function playKey(cards: Card[]): string {
+  return cards.map(c => c.id).sort().join('|')
+}
+
+function takeN(cards: Card[], n: number): Card[] {
+  return cards.slice(0, n)
+}
+
+/**
+ * Enumerate legal plays from `hand` that beat `table` (or any legal lead if table is null).
+ * Returns distinct card subsets ordered roughly low→high / simple→complex for 提示 cycling.
+ * Bombs/rocket are included when they beat the table.
+ */
+export function enumerateLegalPlays(hand: Card[], table: Combo | null): Card[][] {
+  if (!hand.length) return []
+
+  const byRank = countByRank(hand)
+  const ranks = [...byRank.keys()].sort((a, b) => a - b)
+  const candidates: Card[][] = []
+
+  const push = (cards: Card[]) => {
+    if (!cards.length) return
+    const combo = identifyCombo(cards)
+    if (!combo) return
+    if (!canBeat(combo, table)) return
+    candidates.push(cards)
+  }
+
+  // Singles
+  for (const c of hand) push([c])
+
+  // Pairs / triples / bombs from same rank
+  for (const r of ranks) {
+    const group = byRank.get(r)!
+    if (group.length >= 2) push(takeN(group, 2))
+    if (group.length >= 3) push(takeN(group, 3))
+    if (group.length >= 4) push(takeN(group, 4))
+  }
+
+  // Rocket
+  const sj = hand.find(c => c.rank === 'SJ')
+  const bj = hand.find(c => c.rank === 'BJ')
+  if (sj && bj) push([sj, bj])
+
+  // Triple + one / + pair
+  for (const tr of ranks) {
+    const triple = byRank.get(tr)!
+    if (triple.length < 3) continue
+    const body = takeN(triple, 3)
+    for (const sr of ranks) {
+      if (sr === tr) continue
+      const others = byRank.get(sr)!
+      if (others.length >= 1) push([...body, others[0]!])
+      if (others.length >= 2) push([...body, ...takeN(others, 2)])
+    }
+  }
+
+  // Straights of singles (length 5..12) using one card per rank
+  const singleRanks = ranks.filter(r => r < 15) // no 2/jokers in straight body
+  for (let len = 5; len <= Math.min(12, singleRanks.length); len++) {
+    for (let i = 0; i + len <= singleRanks.length; i++) {
+      const slice = singleRanks.slice(i, i + len)
+      if (!consecutiveNoTwo(slice)) continue
+      const cards: Card[] = []
+      for (const r of slice) cards.push(byRank.get(r)![0]!)
+      push(cards)
+    }
+  }
+
+  // Consecutive pairs (连对) length ≥3 pairs
+  const pairRanks = ranks.filter(r => r < 15 && byRank.get(r)!.length >= 2)
+  for (let len = 3; len <= pairRanks.length; len++) {
+    for (let i = 0; i + len <= pairRanks.length; i++) {
+      const slice = pairRanks.slice(i, i + len)
+      if (!consecutiveNoTwo(slice)) continue
+      const cards: Card[] = []
+      for (const r of slice) cards.push(...takeN(byRank.get(r)!, 2))
+      push(cards)
+    }
+  }
+
+  // Airplane pure (≥2 consecutive triples)
+  const tripRanks = ranks.filter(r => r < 15 && byRank.get(r)!.length >= 3)
+  for (let len = 2; len <= tripRanks.length; len++) {
+    for (let i = 0; i + len <= tripRanks.length; i++) {
+      const slice = tripRanks.slice(i, i + len)
+      if (!consecutiveNoTwo(slice)) continue
+      const body: Card[] = []
+      for (const r of slice) body.push(...takeN(byRank.get(r)!, 3))
+
+      // pure airplane
+      push(body.slice())
+
+      // airplane + singles
+      const kickRanks = ranks.filter(r => !slice.includes(r))
+      const singlesPool: Card[] = []
+      for (const r of kickRanks) {
+        for (const c of byRank.get(r)!) singlesPool.push(c)
+      }
+      if (singlesPool.length >= len) {
+        // take lowest `len` singles by rank value
+        singlesPool.sort((a, b) => rankValue(a.rank) - rankValue(b.rank) || a.suit.localeCompare(b.suit))
+        push([...body, ...singlesPool.slice(0, len)])
+      }
+
+      // airplane + pairs
+      const pairKick: Card[][] = []
+      for (const r of kickRanks) {
+        const g = byRank.get(r)!
+        if (g.length >= 2) pairKick.push(takeN(g, 2))
+      }
+      if (pairKick.length >= len) {
+        pairKick.sort((a, b) => rankValue(a[0]!.rank) - rankValue(b[0]!.rank))
+        const attached = pairKick.slice(0, len).flat()
+        push([...body, ...attached])
+      }
+    }
+  }
+
+  // Deduplicate + stable order: smaller length first, then lower mainValue, then key
+  const seen = new Set<string>()
+  const unique: { cards: Card[], combo: Combo, key: string }[] = []
+  for (const cards of candidates) {
+    const key = playKey(cards)
+    if (seen.has(key)) continue
+    const combo = identifyCombo(cards)
+    if (!combo || !canBeat(combo, table)) continue
+    seen.add(key)
+    unique.push({ cards, combo, key })
+  }
+
+  unique.sort((a, b) => {
+    // Prefer non-bomb/rocket first when free or when same-type beats exist
+    const aBoom = a.combo.type === 'bomb' || a.combo.type === 'rocket' ? 1 : 0
+    const bBoom = b.combo.type === 'bomb' || b.combo.type === 'rocket' ? 1 : 0
+    if (aBoom !== bBoom) return aBoom - bBoom
+    if (a.cards.length !== b.cards.length) return a.cards.length - b.cards.length
+    if (a.combo.mainValue !== b.combo.mainValue) return a.combo.mainValue - b.combo.mainValue
+    return a.key.localeCompare(b.key)
+  })
+
+  return unique.map(u => u.cards)
+}
+
+/**
+ * Cycle helper for 提示: return the next legal play after `currentKey` (sorted id key),
+ * wrapping to the first option. Empty list → null.
+ */
+export function nextHintPlay(
+  hand: Card[],
+  table: Combo | null,
+  currentKey: string | null = null,
+): { cards: Card[], key: string, index: number, total: number } | null {
+  const plays = enumerateLegalPlays(hand, table)
+  if (!plays.length) return null
+  let idx = 0
+  if (currentKey) {
+    const found = plays.findIndex(p => playKey(p) === currentKey)
+    idx = found >= 0 ? (found + 1) % plays.length : 0
+  }
+  const cards = plays[idx]!
+  return { cards, key: playKey(cards), index: idx, total: plays.length }
+}
+
+/** True when residual hand size should show 报牌 alarm (1 or 2 cards left). */
+export function shouldAlarmCount(count: number): boolean {
+  return count === 1 || count === 2
+}

@@ -191,8 +191,8 @@
       "id": "com.myriad.doudizhu",
       "name": "斗地主",
       "version": "1.0.0",
-      "description": "3 人斗地主：叫分出牌；联邦 Room 邀请好友实时对战，亦可单机练习",
-      "long_description": "经典 3 人 54 张牌斗地主。房主创建联邦房间并邀请好友，三人准备后开始；支持叫分、出牌/过牌（单/对/三张/三带/顺子/连对/飞机/炸弹/王炸）。协议使用 message_type=doudizhu 房间消息 + subscribeRoom 实时同步；房主分配全局序号，成员发 intent。亦可单机练习。",
+      "description": "3 人斗地主：提示出牌、报牌、分座行动反馈；联邦联机与单机练习",
+      "long_description": "经典 3 人 54 张牌斗地主。产品交互：提示循环合法出牌、1–2 张报牌、分座叫分/出牌/过牌记忆、终局摘要。房主创建联邦房间并邀请好友；亦可单机练习。",
       "locales": {
         "en-US": {
           "name": "Fight the Landlord",
@@ -234,13 +234,13 @@
         "page_styles": "apps/com.myriad.doudizhu/page.css",
         "page_template": "apps/com.myriad.doudizhu/page.html"
       },
-      "size": 51787,
+      "size": 174118,
       "downloads": 0,
       "rating": 0,
       "featured": true,
       "verified": true,
       "created_at": "2026-07-20T00:00:00Z",
-      "updated_at": "2026-07-20T12:27:28Z"
+      "updated_at": "2026-07-21T04:00:00Z"
     },
     {
       "id": "com.myriad.aro",
