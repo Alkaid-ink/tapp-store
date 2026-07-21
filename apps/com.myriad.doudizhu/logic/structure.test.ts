@@ -45,7 +45,6 @@ describe('com.myriad.doudizhu package layout', () => {
 
   it('product table has required zones and control groups', () => {
     const html = readFileSync(join(appDir, 'page.html'), 'utf8')
-    // Table zones: self hand, left/right opponents, bottom, last play, phase/turn
     assert.ok(html.includes('id="ddz-hand"'), 'self hand')
     assert.ok(html.includes('data-view="left"'), 'left opponent')
     assert.ok(html.includes('data-view="right"'), 'right opponent')
@@ -53,27 +52,44 @@ describe('com.myriad.doudizhu package layout', () => {
     assert.ok(html.includes('id="ddz-last"'), 'last play')
     assert.ok(html.includes('id="ddz-phase"'), 'phase')
     assert.ok(html.includes('id="ddz-turn-hint"'), 'turn hint')
-    // Role badges
     assert.ok(html.includes('id="ddz-role-me"'))
     assert.ok(html.includes('id="ddz-role-left"'))
     assert.ok(html.includes('id="ddz-role-right"'))
-    // Auction / play / end control groups
     assert.ok(html.includes('id="ddz-auction-btns"'))
     assert.ok(html.includes('id="ddz-play-btns"'))
     assert.ok(html.includes('id="ddz-end-btns"'))
     assert.ok(html.includes('id="ddz-again"'))
     assert.ok(html.includes('id="ddz-to-lobby"'))
-    // Bid feedback + last-play meta + end summary
     assert.ok(html.includes('id="ddz-bid-score"') || html.includes('id="ddz-auction-score"'))
     assert.ok(html.includes('id="ddz-last-meta"'))
     assert.ok(html.includes('id="ddz-end-summary"'))
-    // Federation lobby actions
     assert.ok(html.includes('id="ddz-create"'))
     assert.ok(html.includes('id="ddz-invite"'))
     assert.ok(html.includes('id="ddz-ready"'))
     assert.ok(html.includes('id="ddz-start"'))
     assert.ok(html.includes('id="ddz-leave"'))
     assert.ok(html.includes('id="ddz-solo"'))
+  })
+
+  it('exposes 提示 control and per-seat action / 报牌 surfaces', () => {
+    const html = readFileSync(join(appDir, 'page.html'), 'utf8')
+    assert.ok(html.includes('id="ddz-hint"'), '提示 button id')
+    assert.ok(html.includes('提示'), '提示 label')
+    // Per-seat last-action surfaces
+    assert.ok(html.includes('id="ddz-action-left"') || html.includes('data-seat-action="left"'))
+    assert.ok(html.includes('id="ddz-action-right"') || html.includes('data-seat-action="right"'))
+    assert.ok(html.includes('id="ddz-action-me"') || html.includes('data-seat-action="me"'))
+    assert.ok(html.includes('id="ddz-action-label-left"'))
+    assert.ok(html.includes('id="ddz-action-label-right"'))
+    assert.ok(html.includes('id="ddz-action-label-me"'))
+    // 报牌 alarm surfaces
+    assert.ok(html.includes('id="ddz-alarm-left"'))
+    assert.ok(html.includes('id="ddz-alarm-right"'))
+    assert.ok(html.includes('id="ddz-alarm-me"'))
+    assert.ok(html.includes('报牌'))
+    // End path
+    assert.ok(html.includes('再来一局'))
+    assert.ok(html.includes('回大厅'))
   })
 
   it('page.css uses product theme tokens and light/dark', () => {
@@ -84,11 +100,12 @@ describe('com.myriad.doudizhu package layout', () => {
     )
     assert.ok(css.includes('.dark'), 'must include .dark rules')
     assert.ok(css.includes('--ddz-primary') || css.includes('var(--tapp-primary'))
-    // Not only hard-coded dark-only greens as the sole surface model
     assert.ok(css.includes('--ddz-text') || css.includes('--ddz-surface'))
     assert.ok(css.includes('.ddz-card.selected') || css.includes('selected'))
     assert.ok(css.includes(':hover') || css.includes(':focus-visible'))
     assert.ok(css.includes('@media'))
+    assert.ok(css.includes('.ddz-alarm') || css.includes('ddz-alarm'))
+    assert.ok(css.includes('.ddz-btn-hint') || css.includes('ddz-hint'))
   })
 
   it('main.js wires federation + host-owned intent sequencing', () => {
@@ -104,18 +121,22 @@ describe('com.myriad.doudizhu package layout', () => {
     assert.ok(main.includes('seatActorLocal') || main.includes('seatActor'))
   })
 
-  it('main.js product feedback: combo label, role badges, theme, last play', () => {
+  it('main.js product interaction: hint cycle, seat actions, alarm, theme', () => {
     const main = readFileSync(join(appDir, 'main.js'), 'utf8')
+    assert.ok(main.includes('enumerateLegalPlays') || main.includes('nextHintPlay'))
+    assert.ok(main.includes('doHint') || main.includes('ddz-hint'))
+    assert.ok(main.includes('seatActions'))
+    assert.ok(main.includes('shouldAlarmCount') || main.includes('ddz-alarm'))
     assert.ok(main.includes('comboTypeLabel') || main.includes('COMBO_LABELS'))
-    assert.ok(main.includes('is-landlord') || main.includes('地主'))
-    assert.ok(main.includes('lastPlaySeat') || main.includes('ddz-last-meta'))
     assert.ok(
       main.includes('onThemeChange')
-        || main.includes('--tapp-primary')
-        || main.includes('applyThemeClass'),
+        || main.includes('applyThemeClass')
+        || main.includes('--tapp-primary'),
     )
     assert.ok(main.includes('ddz-end-summary') || main.includes('再来一局'))
     assert.ok(main.includes('startSolo') || main.includes('单机'))
+    // Invalid play feedback path
+    assert.ok(main.includes('不是合法牌型') || main.includes('压不过'))
   })
 
   it('store index.json lists this app', () => {
@@ -126,13 +147,16 @@ describe('com.myriad.doudizhu package layout', () => {
     assert.ok(app.download?.code?.includes('com.myriad.doudizhu'))
   })
 
-  it('logic modules exist', () => {
+  it('logic modules exist with hint helpers', () => {
     assert.ok(existsSync(join(__dirname, 'rules.ts')))
     assert.ok(existsSync(join(__dirname, 'protocol.ts')))
     const rules = readFileSync(join(__dirname, 'rules.ts'), 'utf8')
     const protocol = readFileSync(join(__dirname, 'protocol.ts'), 'utf8')
     assert.ok(rules.includes('export function deal'))
     assert.ok(rules.includes('export function comboTypeLabel'))
+    assert.ok(rules.includes('export function enumerateLegalPlays'))
+    assert.ok(rules.includes('export function nextHintPlay'))
+    assert.ok(rules.includes('export function shouldAlarmCount'))
     assert.ok(protocol.includes('hostProcessIntent'))
   })
 })

@@ -160,6 +160,134 @@ console.log('[斗地主] core loaded');
     if (incoming.type !== table.type || incoming.length !== table.length) return false;
     return incoming.mainValue > table.mainValue;
   }
+  function playKey(cards) {
+    return cards.map(function (c) { return c.id; }).sort().join('|');
+  }
+  function takeN(cards, n) { return cards.slice(0, n); }
+  function shouldAlarmCount(count) { return count === 1 || count === 2; }
+
+  /** Enumerate legal plays from hand that beat table (or free lead). Product 提示 source. */
+  function enumerateLegalPlays(hand, table) {
+    if (!hand || !hand.length) return [];
+    var byRank = countByRank(hand);
+    var ranks = Object.keys(byRank).map(Number).sort(function (a, b) { return a - b; });
+    var candidates = [];
+    function push(cards) {
+      if (!cards || !cards.length) return;
+      var combo = identifyCombo(cards);
+      if (!combo || !canBeat(combo, table)) return;
+      candidates.push(cards);
+    }
+    for (var i = 0; i < hand.length; i++) push([hand[i]]);
+    for (var ri = 0; ri < ranks.length; ri++) {
+      var group = byRank[ranks[ri]];
+      if (group.length >= 2) push(takeN(group, 2));
+      if (group.length >= 3) push(takeN(group, 3));
+      if (group.length >= 4) push(takeN(group, 4));
+    }
+    var sj = null, bj = null;
+    for (var j = 0; j < hand.length; j++) {
+      if (hand[j].rank === 'SJ') sj = hand[j];
+      if (hand[j].rank === 'BJ') bj = hand[j];
+    }
+    if (sj && bj) push([sj, bj]);
+    for (var tr = 0; tr < ranks.length; tr++) {
+      var triple = byRank[ranks[tr]];
+      if (triple.length < 3) continue;
+      var body = takeN(triple, 3);
+      for (var sr = 0; sr < ranks.length; sr++) {
+        if (ranks[sr] === ranks[tr]) continue;
+        var others = byRank[ranks[sr]];
+        if (others.length >= 1) push(body.concat([others[0]]));
+        if (others.length >= 2) push(body.concat(takeN(others, 2)));
+      }
+    }
+    var singleRanks = ranks.filter(function (r) { return r < 15; });
+    for (var len = 5; len <= Math.min(12, singleRanks.length); len++) {
+      for (var s = 0; s + len <= singleRanks.length; s++) {
+        var slice = singleRanks.slice(s, s + len);
+        if (!consecutiveNoTwo(slice)) continue;
+        var scards = [];
+        for (var k = 0; k < slice.length; k++) scards.push(byRank[slice[k]][0]);
+        push(scards);
+      }
+    }
+    var pairRanks = ranks.filter(function (r) { return r < 15 && byRank[r].length >= 2; });
+    for (var plen = 3; plen <= pairRanks.length; plen++) {
+      for (var p = 0; p + plen <= pairRanks.length; p++) {
+        var pslice = pairRanks.slice(p, p + plen);
+        if (!consecutiveNoTwo(pslice)) continue;
+        var pcards = [];
+        for (var q = 0; q < pslice.length; q++) pcards = pcards.concat(takeN(byRank[pslice[q]], 2));
+        push(pcards);
+      }
+    }
+    var tripRanks = ranks.filter(function (r) { return r < 15 && byRank[r].length >= 3; });
+    for (var alen = 2; alen <= tripRanks.length; alen++) {
+      for (var a = 0; a + alen <= tripRanks.length; a++) {
+        var aslice = tripRanks.slice(a, a + alen);
+        if (!consecutiveNoTwo(aslice)) continue;
+        var abody = [];
+        for (var t = 0; t < aslice.length; t++) abody = abody.concat(takeN(byRank[aslice[t]], 3));
+        push(abody.slice());
+        var kickRanks = ranks.filter(function (r) { return aslice.indexOf(r) < 0; });
+        var singlesPool = [];
+        for (var kr = 0; kr < kickRanks.length; kr++) {
+          singlesPool = singlesPool.concat(byRank[kickRanks[kr]]);
+        }
+        if (singlesPool.length >= alen) {
+          singlesPool.sort(function (x, y) {
+            var dv = rankValue(x.rank) - rankValue(y.rank);
+            return dv !== 0 ? dv : x.suit.localeCompare(y.suit);
+          });
+          push(abody.concat(singlesPool.slice(0, alen)));
+        }
+        var pairKick = [];
+        for (var pr = 0; pr < kickRanks.length; pr++) {
+          if (byRank[kickRanks[pr]].length >= 2) pairKick.push(takeN(byRank[kickRanks[pr]], 2));
+        }
+        if (pairKick.length >= alen) {
+          pairKick.sort(function (x, y) { return rankValue(x[0].rank) - rankValue(y[0].rank); });
+          var attached = [];
+          for (var pk = 0; pk < alen; pk++) attached = attached.concat(pairKick[pk]);
+          push(abody.concat(attached));
+        }
+      }
+    }
+    var seen = {};
+    var unique = [];
+    for (var u = 0; u < candidates.length; u++) {
+      var cards = candidates[u];
+      var key = playKey(cards);
+      if (seen[key]) continue;
+      var combo = identifyCombo(cards);
+      if (!combo || !canBeat(combo, table)) continue;
+      seen[key] = true;
+      unique.push({ cards: cards, combo: combo, key: key });
+    }
+    unique.sort(function (a, b) {
+      var aBoom = (a.combo.type === 'bomb' || a.combo.type === 'rocket') ? 1 : 0;
+      var bBoom = (b.combo.type === 'bomb' || b.combo.type === 'rocket') ? 1 : 0;
+      if (aBoom !== bBoom) return aBoom - bBoom;
+      if (a.cards.length !== b.cards.length) return a.cards.length - b.cards.length;
+      if (a.combo.mainValue !== b.combo.mainValue) return a.combo.mainValue - b.combo.mainValue;
+      return a.key.localeCompare(b.key);
+    });
+    return unique.map(function (x) { return x.cards; });
+  }
+  function nextHintPlay(hand, table, currentKey) {
+    var plays = enumerateLegalPlays(hand, table);
+    if (!plays.length) return null;
+    var idx = 0;
+    if (currentKey) {
+      var found = -1;
+      for (var i = 0; i < plays.length; i++) {
+        if (playKey(plays[i]) === currentKey) { found = i; break; }
+      }
+      idx = found >= 0 ? (found + 1) % plays.length : 0;
+    }
+    return { cards: plays[idx], key: playKey(plays[idx]), index: idx, total: plays.length };
+  }
   function removeFromHand(hand, cards) {
     var ids = {};
     for (var i = 0; i < cards.length; i++) {
@@ -373,6 +501,9 @@ console.log('[斗地主] core loaded');
   var game = null;
   var selected = {};
   var lastPlaySeat = null;
+  /** Per-seat latest action for situational feedback: { kind, label, cards? } */
+  var seatActions = [null, null, null];
+  var hintKey = null;
   var unsubMessage = null;
   var isHost = false;
   var botTimers = [];
@@ -495,6 +626,37 @@ console.log('[斗地主] core loaded');
     return ({ lobby: '大厅', auction: '叫分', playing: '出牌', finished: '结束' })[p] || p;
   }
 
+  function renderSeatAction(view, seat) {
+    var labelEl = $('ddz-action-label-' + view);
+    var cardsEl = view === 'me' ? $('ddz-local-me') : $('ddz-local-' + view);
+    var action = seatActions[seat];
+    if (!labelEl) return;
+    if (!action) {
+      setText(labelEl, '');
+      if (cardsEl) cardsEl.textContent = '';
+      return;
+    }
+    setText(labelEl, action.label || '');
+    if (cardsEl) {
+      if (action.cards && action.cards.length) {
+        renderCards(cardsEl, action.cards, { mini: true });
+      } else {
+        cardsEl.textContent = '';
+      }
+    }
+  }
+
+  function setAlarm(view, count) {
+    var el = $('ddz-alarm-' + view);
+    if (!el) return;
+    var on = shouldAlarmCount(count) && game && (game.phase === 'playing' || game.phase === 'finished');
+    show(el, on);
+    if (on) {
+      setText(el, count === 1 ? '报牌 · 1' : '报牌 · 2');
+      el.classList.toggle('is-critical', count === 1);
+    }
+  }
+
   function updateTableUI() {
     if (!game) return;
     show($('ddz-lobby'), false);
@@ -523,16 +685,24 @@ console.log('[斗地主] core loaded');
     setText($('ddz-avatar-left'), initialOf(shortName(actorAtSeat(left))));
     setText($('ddz-avatar-right'), initialOf(shortName(actorAtSeat(right))));
 
+    // 报牌 at 1–2 residual cards
+    setAlarm('me', game.hands[me].length);
+    setAlarm('left', game.hands[left].length);
+    setAlarm('right', game.hands[right].length);
+
     var seatMe = document.querySelector('.ddz-me');
     var seatLeft = document.querySelector('.ddz-seat-left');
     var seatRight = document.querySelector('.ddz-seat-right');
     if (seatMe) seatMe.classList.toggle('is-turn', game.phase !== 'finished' && game.turn === me);
     if (seatLeft) seatLeft.classList.toggle('is-turn', game.phase !== 'finished' && game.turn === left);
     if (seatRight) seatRight.classList.toggle('is-turn', game.phase !== 'finished' && game.turn === right);
+    if (seatMe) seatMe.classList.toggle('is-alarm', shouldAlarmCount(game.hands[me].length) && game.phase === 'playing');
+    if (seatLeft) seatLeft.classList.toggle('is-alarm', shouldAlarmCount(game.hands[left].length) && game.phase === 'playing');
+    if (seatRight) seatRight.classList.toggle('is-alarm', shouldAlarmCount(game.hands[right].length) && game.phase === 'playing');
 
-    // Bid score surface during auction
+    // Bid score: always visible after any bid; roles stay after landlord set
     var inAuction = game.phase === 'auction';
-    show($('ddz-auction-score'), inAuction);
+    show($('ddz-auction-score'), inAuction || game.bidScore > 0);
     show($('ddz-bid-chip'), inAuction || game.bidScore > 0);
     setText($('ddz-bid-score'), game.bidScore);
     setText($('ddz-bid-chip'), '叫分 ' + (game.bidScore || 0));
@@ -547,7 +717,7 @@ console.log('[斗地主] core loaded');
       mini: true
     });
 
-    // Last play: cards + human-readable combo type + who played
+    // Center last play + meta
     var lastMeta = $('ddz-last-meta');
     if (game.lastCombo && game.lastCombo.cards && game.lastCombo.cards.length) {
       renderCards($('ddz-last'), game.lastCombo.cards, { mini: true });
@@ -556,16 +726,15 @@ console.log('[斗地主] core loaded');
       setText(lastMeta, (comboName ? comboName : '') + (who ? ' · ' + who : ''));
     } else {
       if ($('ddz-last')) $('ddz-last').textContent = '';
-      setText(lastMeta, game.phase === 'playing' ? '自由出牌' : '');
+      setText(lastMeta, game.phase === 'playing' ? '自由出牌' : (game.phase === 'auction' ? '叫分中' : ''));
     }
 
-    // Clear per-seat local play slots (center last-play is canonical)
-    ['ddz-local-left', 'ddz-local-right', 'ddz-local-me'].forEach(function (id) {
-      var el = $(id);
-      if (el) el.textContent = '';
-    });
+    // Per-seat last auction / play / pass for current situational memory
+    renderSeatAction('me', me);
+    renderSeatAction('left', left);
+    renderSeatAction('right', right);
 
-    // Opponent hand-count visual (card backs, capped)
+    // Opponent residual count visual (card backs, capped)
     var leftBacks = Math.min(10, game.hands[left].length);
     var rightBacks = Math.min(10, game.hands[right].length);
     var leftBackCards = [];
@@ -582,6 +751,7 @@ console.log('[斗地主] core loaded');
       onToggle: function (card) {
         if (selected[card.id]) delete selected[card.id];
         else selected[card.id] = true;
+        hintKey = null; // manual pick resets hint cycle anchor
         updateTableUI();
       }
     });
@@ -591,31 +761,42 @@ console.log('[斗地主] core loaded');
     show($('ddz-play-btns'), game.phase === 'playing' && myTurn);
     show($('ddz-end-btns'), game.phase === 'finished');
 
-    // Disable bid buttons that are not higher than current bid
     Array.prototype.forEach.call(document.querySelectorAll('[data-bid]'), function (btn) {
       var score = Number(btn.getAttribute('data-bid'));
       btn.disabled = !(game.phase === 'auction' && myTurn && score > game.bidScore);
     });
     var passBtn = $('ddz-pass');
-    if (passBtn) {
-      passBtn.disabled = !(game.phase === 'playing' && myTurn && game.lastCombo);
-    }
+    var canPass = game.phase === 'playing' && myTurn && !!game.lastCombo;
+    if (passBtn) passBtn.disabled = !canPass;
+
     var playBtn = $('ddz-play');
     if (playBtn) playBtn.disabled = !(game.phase === 'playing' && myTurn);
 
-    var hint = '';
+    var hintBtn = $('ddz-hint');
+    if (hintBtn) {
+      hintBtn.disabled = !(game.phase === 'playing' && myTurn);
+      var legalN = (game.phase === 'playing' && myTurn)
+        ? enumerateLegalPlays(game.hands[me], game.lastCombo).length
+        : 0;
+      hintBtn.classList.toggle('is-empty', game.phase === 'playing' && myTurn && legalN === 0);
+      setText(hintBtn, legalN === 0 && myTurn && game.phase === 'playing'
+        ? (canPass ? '提示（可过）' : '提示')
+        : '提示');
+    }
+
+    var turnText = '';
     if (game.phase === 'auction') {
-      hint = myTurn
+      turnText = myTurn
         ? ('轮到你叫分 · 当前 ' + game.bidScore + ' 分')
         : ('等待 ' + shortName(actorAtSeat(game.turn)) + ' 叫分 · 当前 ' + game.bidScore + ' 分');
     } else if (game.phase === 'playing') {
-      hint = myTurn
+      turnText = myTurn
         ? (game.lastCombo ? ('请压牌或过牌 · ' + comboTypeLabel(game.lastCombo)) : '请出牌（首家）')
         : ('等待 ' + shortName(actorAtSeat(game.turn)) + ' 出牌');
     } else if (game.phase === 'finished') {
       var wname = shortName(actorAtSeat(game.winner));
       var side = game.winningSide === 'landlord' ? '地主胜' : '农民胜';
-      hint = side + ' · ' + wname + ' 出完';
+      turnText = side + ' · ' + wname + ' 出完';
       var summary = $('ddz-end-summary');
       if (summary) {
         summary.textContent = '';
@@ -629,7 +810,7 @@ console.log('[斗地主] core loaded');
         summary.appendChild(sub);
       }
     }
-    setText($('ddz-turn-hint'), hint);
+    setText($('ddz-turn-hint'), turnText);
     setText($('ddz-room-label'), roomId ? (mode === 'solo' ? '单机' : ('房间 ' + roomId)) : '');
   }
 
@@ -809,6 +990,8 @@ console.log('[斗地主] core loaded');
       };
       selected = {};
       lastPlaySeat = null;
+      seatActions = [null, null, null];
+      hintKey = null;
       mode = mode === 'solo' ? 'solo' : 'multi';
       tableMsg('');
       updateLobbyUI();
@@ -821,21 +1004,32 @@ console.log('[斗地主] core loaded');
       var br = applyBid(game, { kind: 'bid', seat: msg.seat, score: msg.score });
       if (br.ok) {
         game = br.state;
+        seatActions[msg.seat] = { kind: 'bid', label: '叫 ' + msg.score + ' 分', cards: null };
         tableMsg('');
         if (br.redeal) hostRedeal();
+        if (game.phase === 'playing') seatActions = [null, null, null];
       } else tableMsg(br.error || '叫分失败');
     } else if (msg.type === 'bid_pass') {
       var pr = applyBid(game, { kind: 'pass', seat: msg.seat });
       if (pr.ok) {
         game = pr.state;
+        seatActions[msg.seat] = { kind: 'bid_pass', label: '不叫', cards: null };
         if (pr.redeal) hostRedeal();
+        if (game.phase === 'playing') seatActions = [null, null, null];
       } else tableMsg(pr.error || '操作失败');
     } else if (msg.type === 'play') {
       var pl = applyPlay(game, { kind: 'play', seat: msg.seat, cards: msg.cards });
       if (pl.ok) {
         game = pl.state;
         lastPlaySeat = msg.seat;
+        var playedCombo = identifyCombo(msg.cards);
+        seatActions[msg.seat] = {
+          kind: 'play',
+          label: comboTypeLabel(playedCombo) || '出牌',
+          cards: msg.cards
+        };
         tableMsg('');
+        hintKey = null;
       } else tableMsg(pl.error || '出牌失败');
       selected = {};
     } else if (msg.type === 'pass') {
@@ -843,9 +1037,13 @@ console.log('[斗地主] core loaded');
       var pa = applyPlay(game, { kind: 'pass', seat: msg.seat });
       if (pa.ok) {
         game = pa.state;
-        // Trick cleared → no active last play seat for table meta
-        if (prevLast && !game.lastCombo) lastPlaySeat = null;
+        seatActions[msg.seat] = { kind: 'pass', label: '不要', cards: null };
+        if (prevLast && !game.lastCombo) {
+          lastPlaySeat = null;
+          seatActions = [null, null, null];
+        }
         tableMsg('');
+        hintKey = null;
       } else tableMsg(pa.error || '过牌失败');
     }
     updateTableUI();
@@ -1242,19 +1440,82 @@ console.log('[斗地主] core loaded');
   async function doPlay() {
     if (!game || game.phase !== 'playing') return;
     var seat = mySeat();
-    if (game.turn !== seat) return;
+    if (game.turn !== seat) {
+      tableMsg('还没轮到你');
+      return;
+    }
     var cards = selectedCards();
-    if (!cards.length) { tableMsg('请先选择手牌'); return; }
+    if (!cards.length) {
+      tableMsg('请先点选手牌，或点「提示」');
+      return;
+    }
     var combo = identifyCombo(cards);
-    if (!combo) { tableMsg('不是合法牌型'); return; }
-    if (!canBeat(combo, game.lastCombo)) { tableMsg('压不过当前牌'); return; }
+    if (!combo) {
+      tableMsg('不是合法牌型，请重选或点「提示」');
+      return;
+    }
+    if (!canBeat(combo, game.lastCombo)) {
+      tableMsg(game.lastCombo
+        ? ('压不过 · 当前 ' + comboTypeLabel(game.lastCombo))
+        : '出牌不合法');
+      return;
+    }
+    tableMsg('');
     await submitIntent({ kind: 'play', cards: cards });
   }
   async function doPass() {
     if (!game || game.phase !== 'playing') return;
     var seat = mySeat();
-    if (game.turn !== seat) return;
+    if (game.turn !== seat) {
+      tableMsg('还没轮到你');
+      return;
+    }
+    if (!game.lastCombo) {
+      tableMsg('首家必须出牌，不能过');
+      return;
+    }
+    tableMsg('');
     await submitIntent({ kind: 'pass' });
+  }
+
+  function doHint() {
+    if (!game || game.phase !== 'playing') return;
+    var seat = mySeat();
+    if (game.turn !== seat) {
+      tableMsg('还没轮到你');
+      return;
+    }
+    var hand = game.hands[seat];
+    var result = nextHintPlay(hand, game.lastCombo, hintKey);
+    if (!result) {
+      selected = {};
+      hintKey = null;
+      if (game.lastCombo) {
+        tableMsg('没有能压的牌，请点「过牌」');
+        var passBtn = $('ddz-pass');
+        if (passBtn) {
+          passBtn.classList.add('ddz-btn-pulse');
+          setTimeout(function () { passBtn.classList.remove('ddz-btn-pulse'); }, 900);
+        }
+      } else {
+        tableMsg('没有可提示的出牌');
+      }
+      updateTableUI();
+      return;
+    }
+    selected = {};
+    for (var i = 0; i < result.cards.length; i++) {
+      selected[result.cards[i].id] = true;
+    }
+    hintKey = result.key;
+    tableMsg(
+      result.total > 1
+        ? ('提示 ' + (result.index + 1) + '/' + result.total + ' · ' + comboTypeLabel(identifyCombo(result.cards)))
+        : ('提示 · ' + comboTypeLabel(identifyCombo(result.cards)))
+    );
+    var msgEl = $('ddz-table-msg');
+    if (msgEl) msgEl.classList.remove('is-error');
+    updateTableUI();
   }
 
   // ─── Wire DOM ───────────────────────────────────────────────
@@ -1267,7 +1528,13 @@ console.log('[斗地主] core loaded');
   $('ddz-solo').addEventListener('click', startSolo);
   $('ddz-play').addEventListener('click', doPlay);
   $('ddz-pass').addEventListener('click', doPass);
-  $('ddz-clear').addEventListener('click', function () { selected = {}; updateTableUI(); });
+  $('ddz-hint').addEventListener('click', doHint);
+  $('ddz-clear').addEventListener('click', function () {
+    selected = {};
+    hintKey = null;
+    tableMsg('');
+    updateTableUI();
+  });
   $('ddz-bid-pass').addEventListener('click', doBidPass);
   Array.prototype.forEach.call(document.querySelectorAll('[data-bid]'), function (btn) {
     btn.addEventListener('click', function () {

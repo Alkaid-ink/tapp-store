@@ -17,10 +17,14 @@ import {
   createDeck,
   deal,
   DECK_SIZE,
+  enumerateLegalPlays,
   HAND_SIZE,
   identifyCombo,
+  nextHintPlay,
   PLAYER_COUNT,
+  playKey,
   rankValue,
+  shouldAlarmCount,
   startDeal,
   totalCardsInState,
 } from './rules.ts'
@@ -356,5 +360,86 @@ describe('comboTypeLabel', () => {
     assert.equal(comboTypeLabel(combo), '对子')
     assert.equal(comboTypeLabel(null), '')
     assert.equal(comboTypeLabel(undefined), '')
+  })
+})
+
+describe('enumerateLegalPlays / nextHintPlay (提示)', () => {
+  it('lists legal singles that beat a table single from a real hand', () => {
+    const hand = [c('S', '3'), c('H', '5'), c('D', '7'), c('C', '9'), c('S', '2')]
+    const table = identifyCombo([c('H', '4')])
+    assert.ok(table)
+    const plays = enumerateLegalPlays(hand, table)
+    assert.ok(plays.length >= 3, `expected beats, got ${plays.length}`)
+    // Every returned play must identify + beat via shipped rules
+    for (const p of plays) {
+      const combo = identifyCombo(p)
+      assert.ok(combo, `not a combo: ${playKey(p)}`)
+      assert.equal(canBeat(combo, table), true)
+      // All cards must be from hand
+      for (const card of p) {
+        assert.ok(hand.some(h => h.id === card.id), `card not in hand ${card.id}`)
+      }
+    }
+    // 3 cannot beat 4; 5/7/9/2 can as singles
+    const singleMains = plays
+      .map(p => identifyCombo(p)!)
+      .filter(x => x.type === 'single')
+      .map(x => x.mainValue)
+    assert.ok(singleMains.every(v => v > rankValue('4')))
+    assert.ok(!plays.some(p => p.length === 1 && p[0]!.rank === '3'))
+  })
+
+  it('returns empty when no legal beat exists (and pass is the only option)', () => {
+    const hand = [c('S', '3'), c('H', '4'), c('D', '5')]
+    const table = identifyCombo([c('S', '2')]) // single 2
+    assert.ok(table)
+    const plays = enumerateLegalPlays(hand, table)
+    // No bomb/rocket in hand; nothing beats 2
+    assert.equal(plays.length, 0)
+    assert.equal(nextHintPlay(hand, table), null)
+  })
+
+  it('cycles hint options and wraps', () => {
+    const hand = [c('S', '5'), c('H', '6'), c('D', '7'), c('C', '8')]
+    const table = identifyCombo([c('S', '4')])
+    assert.ok(table)
+    const first = nextHintPlay(hand, table, null)
+    assert.ok(first)
+    assert.ok(first.total >= 2)
+    const second = nextHintPlay(hand, table, first.key)
+    assert.ok(second)
+    assert.notEqual(second.key, first.key)
+    // Walk full cycle back to first
+    let cur = first
+    const seen = new Set<string>([cur.key])
+    for (let i = 0; i < cur.total + 2; i++) {
+      const n = nextHintPlay(hand, table, cur.key)
+      assert.ok(n)
+      cur = n
+      seen.add(cur.key)
+    }
+    assert.equal(seen.size, first.total)
+  })
+
+  it('free lead enumerates legal combos from hand', () => {
+    const hand = [
+      c('S', '3'), c('H', '3'),
+      c('D', '4'),
+      c('C', '5'), c('S', '5'), c('H', '5'), c('D', '5'), // bomb of 5s
+    ]
+    const plays = enumerateLegalPlays(hand, null)
+    assert.ok(plays.length >= 4)
+    const types = new Set(plays.map(p => identifyCombo(p)!.type))
+    assert.ok(types.has('single'))
+    assert.ok(types.has('pair'))
+    assert.ok(types.has('bomb'))
+  })
+
+  it('shouldAlarmCount marks 1–2 residual cards only', () => {
+    assert.equal(shouldAlarmCount(0), false)
+    assert.equal(shouldAlarmCount(1), true)
+    assert.equal(shouldAlarmCount(2), true)
+    assert.equal(shouldAlarmCount(3), false)
+    assert.equal(shouldAlarmCount(17), false)
   })
 })

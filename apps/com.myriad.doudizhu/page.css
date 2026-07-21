@@ -398,6 +398,28 @@
   box-shadow: 0 4px 12px rgba(245, 158, 11, 0.28);
 }
 
+.ddz-btn-hint {
+  background: linear-gradient(135deg, #60a5fa, #2563eb);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.28);
+  min-width: 72px;
+}
+
+.ddz-btn-hint.is-empty {
+  background: linear-gradient(135deg, #94a3b8, #64748b);
+  box-shadow: none;
+}
+
+.ddz-btn-pulse {
+  animation: ddz-pulse 0.45s ease 0s 2;
+  border-color: var(--ddz-primary) !important;
+  color: var(--ddz-primary) !important;
+}
+
+@keyframes ddz-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(var(--ddz-primary-rgb), 0.35); }
+  50% { transform: scale(1.05); box-shadow: 0 0 0 8px rgba(var(--ddz-primary-rgb), 0); }
+}
+
 /* ========== Seats (lobby) ========== */
 .ddz-seats {
   display: grid;
@@ -590,12 +612,97 @@
   flex: 1;
 }
 
+.ddz-seat-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .ddz-seat-name {
   font-weight: 750;
   font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+}
+
+/* 报牌 alarm for 1–2 residual cards */
+.ddz-alarm {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: var(--ddz-radius-pill);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: linear-gradient(135deg, #f97316, #dc2626);
+  box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.45);
+  animation: ddz-alarm-glow 1.2s ease-in-out infinite;
+}
+
+.ddz-alarm.is-critical {
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+  animation-duration: 0.7s;
+}
+
+@keyframes ddz-alarm-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.35); }
+  50% { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+}
+
+.ddz-seat.is-alarm {
+  border-color: color-mix(in srgb, #ef4444 55%, var(--ddz-border));
+}
+
+.ddz-seat-action {
+  margin-top: 8px;
+  min-height: 28px;
+  padding: 6px 8px;
+  border-radius: var(--ddz-radius-xs);
+  background: var(--ddz-surface-soft);
+  border: 1px dashed var(--ddz-border);
+}
+
+.ddz-seat-action-me {
+  margin-top: 0;
+  min-width: 100px;
+  text-align: right;
+}
+
+.ddz-action-label {
+  font-size: 11px;
+  font-weight: 750;
+  color: var(--ddz-primary);
+  min-height: 1.1em;
+  margin-bottom: 4px;
+}
+
+.ddz-action-label:empty {
+  display: none;
+}
+
+.ddz-action-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  justify-content: center;
+  min-height: 0;
+}
+
+.ddz-seat-action-me .ddz-action-cards {
+  justify-content: flex-end;
+}
+
+.ddz-action-cards:empty {
+  display: none;
+}
+
+.ddz-seat-action:has(.ddz-action-label:empty):has(.ddz-action-cards:empty) {
+  display: none;
 }
 
 .ddz-seat-info {
@@ -840,20 +947,28 @@
   margin-left: 0;
 }
 
-/* Hand: overlapping fan */
+/* Hand: overlapping fan suitable for ~17 cards */
 .ddz-hand {
   justify-content: center;
-  padding: 14px 4px 6px;
-  min-height: 78px;
+  padding: 18px 2px 8px;
+  min-height: 82px;
   gap: 0;
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 
 .ddz-hand .ddz-card {
-  margin-left: -14px;
+  margin-left: -16px;
 }
 
 .ddz-hand .ddz-card:first-child {
   margin-left: 0;
+}
+
+.ddz-hand .ddz-card.selected {
+  z-index: 20 !important;
 }
 
 .ddz-me {
