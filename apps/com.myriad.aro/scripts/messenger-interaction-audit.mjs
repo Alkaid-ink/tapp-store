@@ -539,6 +539,85 @@ function checkShowAroOverlay() {
       }
     }
   }
+
+  // createDetailOverlay (share-detail sheets): must open after appendChild
+  // Regression after #30: CSS defaults picker-overlay to display:none + PE none.
+  const chat = read('page/chat.js');
+  if (chat) {
+    const chatClean = stripComments(chat);
+    const detailBody = extractFunctionBody(
+      chatClean,
+      /function\s+createDetailOverlay\s*\([^)]*\)\s*/,
+    );
+    if (!detailBody) {
+      fail('7-createDetailOverlay', 'function createDetailOverlay not found in page/chat.js');
+    } else if (!/appendChild\s*\(\s*overlay\s*\)/.test(detailBody)) {
+      fail('7-createDetailOverlay', 'createDetailOverlay must appendChild(overlay)');
+    } else if (usesShowAroOverlayOrTriad(detailBody)) {
+      pass('7-createDetailOverlay', 'uses showAroOverlay or full open triad after appendChild');
+    } else {
+      fail(
+        '7-createDetailOverlay',
+        'must call showAroOverlay OR set pointerEvents auto + clear hidden + display flex after appendChild',
+      );
+    }
+  }
+
+  // Any function that assigns className 'picker-overlay' must also open it
+  // (createPickerOverlay, createDetailOverlay, and any future builders).
+  checkPickerOverlayOpenPaths();
+}
+
+/**
+ * Scan page/*.js for className = 'picker-overlay' assignments.
+ * The enclosing function body must call showAroOverlay (or full open triad)
+ * before it returns — otherwise the sheet stays display:none after #30 CSS.
+ */
+function checkPickerOverlayOpenPaths() {
+  const pageDir = path.join(ARO_ROOT, 'page');
+  const files = walkFiles(pageDir, ['.js']);
+  let found = 0;
+  for (const f of files) {
+    const rel = path.relative(ARO_ROOT, f);
+    const src = stripComments(fs.readFileSync(f, 'utf8'));
+    // Match className = 'picker-overlay' / "picker-overlay"
+    const assignRe = /\.className\s*=\s*['"]picker-overlay['"]/g;
+    let m;
+    while ((m = assignRe.exec(src)) !== null) {
+      found++;
+      // Walk backward to nearest function declaration
+      const before = src.slice(0, m.index);
+      const fnMatches = [
+        ...before.matchAll(
+          /function\s+([A-Za-z0-9_$]+)\s*\([^)]*\)\s*\{/g,
+        ),
+      ];
+      const lastFn = fnMatches[fnMatches.length - 1];
+      const fnName = lastFn ? lastFn[1] : `anon@${path.basename(f)}:${m.index}`;
+      let body = null;
+      if (lastFn) {
+        body = extractFunctionBody(
+          src.slice(lastFn.index),
+          new RegExp(
+            `function\\s+${fnName.replace(/\$/g, '\\$')}\\s*\\([^)]*\\)\\s*`,
+          ),
+        );
+      }
+      // Fallback: window around the assignment
+      const window = body || src.slice(m.index, Math.min(src.length, m.index + 1200));
+      if (usesShowAroOverlayOrTriad(window)) {
+        pass(`7-picker-overlay-${fnName}`, `${rel}: opens via showAroOverlay/triad`);
+      } else {
+        fail(
+          `7-picker-overlay-${fnName}`,
+          `${rel}: assigns className picker-overlay but never calls showAroOverlay / open triad`,
+        );
+      }
+    }
+  }
+  if (found === 0) {
+    fail('7-picker-overlay-scan', 'no className = picker-overlay assignments found in page/*.js');
+  }
 }
 
 // ---------------------------------------------------------------------------
