@@ -70,6 +70,8 @@ function closeAttachMenu() {
   var btn = $('attach-btn');
   if (btn) btn.classList.remove('attach-btn-active');
   document.removeEventListener('click', _attachOutsideClick);
+  // PE none first (aroDismiss also does this); leftover .aro-leaving must not eat clicks.
+  try { menu.style.pointerEvents = 'none'; } catch (ePe) { /* ignore */ }
   aroDismiss(menu, { remove: true, ms: 120 });
 }
 
@@ -272,6 +274,9 @@ function pickFedContent(type) {
 function createPickerOverlay(type, icons, titles) {
   var overlay = document.createElement('div');
   overlay.className = 'picker-overlay';
+  // Closed CSS default is display:none + PE none — open triad after append.
+  overlay.style.display = 'none';
+  overlay.style.pointerEvents = 'none';
   var visual = sheetVisual({ type: type, rawSvg: icons[type], fallback: SVG_ICONS.file });
   applySheetAccent(overlay, visual.accent);
   overlay.innerHTML =
@@ -297,6 +302,11 @@ function createPickerOverlay(type, icons, titles) {
   overlay.addEventListener('click', function (e) { if (e.target === overlay) dismissPicker(); });
   overlay.dataset.aroDismissable = '1';
   document.body.appendChild(overlay);
+  if (typeof showAroOverlay === 'function') showAroOverlay(overlay);
+  else {
+    overlay.style.pointerEvents = 'auto';
+    overlay.style.display = 'flex';
+  }
   return overlay;
 }
 
@@ -322,6 +332,8 @@ function bindPickerSearch(overlay, getItems, renderFn, filterFn) {
 
 function dismissPickerOverlay(overlay) {
   if (!overlay) return;
+  // Seal PE immediately so a half-closed sheet never blocks the chat shell.
+  try { overlay.style.pointerEvents = 'none'; } catch (ePe) { /* ignore */ }
   aroDismiss(overlay, { remove: true, ms: 170 });
 }
 

@@ -542,6 +542,149 @@ function checkShowAroOverlay() {
 }
 
 // ---------------------------------------------------------------------------
+// 8) Full-screen portal CSS defaults: confirm/forward/picker/img-viewer
+// Must be display:none + pointer-events:none when closed (both CSS files).
+// ---------------------------------------------------------------------------
+function extractClassRules(cssText, className) {
+  const rules = [];
+  // Escape dots in class names for regex (className is without leading dot)
+  const re = new RegExp(`\\.${className.replace(/\./g, '\\.')}\\s*\\{([^}]*)\\}`, 'g');
+  let m;
+  while ((m = re.exec(cssText)) !== null) {
+    rules.push(m[1].replace(/\s+/g, ' ').trim());
+  }
+  return rules;
+}
+
+function pickBaseLayoutRule(rules) {
+  // Prefer the layout rule (position:fixed / inset) over animation-only shorthands
+  return (
+    rules.find((r) => /position\s*:\s*fixed/.test(r) || /inset\s*:\s*0/.test(r)) || rules[0]
+  );
+}
+
+function checkPortalOverlayCss() {
+  const portals = [
+    'confirm-overlay',
+    'forward-overlay',
+    'picker-overlay',
+    'img-viewer',
+  ];
+  for (const rel of ['page.css', 'styles.css']) {
+    const css = read(rel);
+    if (!css) continue;
+    for (const cls of portals) {
+      const rules = extractClassRules(css, cls);
+      const base = pickBaseLayoutRule(rules);
+      if (!base) {
+        fail(`8-${cls}-${rel}`, `no .${cls} { } rule found`);
+        continue;
+      }
+      const hasDisplayNone = /display\s*:\s*none/.test(base);
+      const hasPeNone = /pointer-events\s*:\s*none/.test(base);
+      // Reject dangerous open-by-default PE auto or display:flex as sole display
+      const hasDangerousDisplayFlex =
+        /display\s*:\s*flex/.test(base) && !/display\s*:\s*none/.test(base);
+      const hasDangerousPeAuto =
+        /pointer-events\s*:\s*auto/.test(base) && !/pointer-events\s*:\s*none/.test(base);
+      if (hasDisplayNone && hasPeNone && !hasDangerousDisplayFlex && !hasDangerousPeAuto) {
+        pass(`8-${cls}-${rel}`, 'display:none + pointer-events:none');
+      } else {
+        fail(
+          `8-${cls}-${rel}`,
+          `display:none=${hasDisplayNone}, PE none=${hasPeNone}, dangerousFlex=${hasDangerousDisplayFlex}, dangerousPeAuto=${hasDangerousPeAuto}; rule="${base.slice(0, 180)}"`,
+        );
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 9) back-btn path must dismiss history/files (or dismissTransientUi)
+// History/files are siblings of #chat-container under #chat-main; on mobile
+// .history-overlay is position:fixed and will block the list if left open.
+// ---------------------------------------------------------------------------
+function checkBackBtnDismissesLayers() {
+  const events = read('page/events.js');
+  if (!events) return;
+  const clean = stripComments(events);
+  // Locate back-btn wiring — either $('back-btn') or getElementById('back-btn')
+  const backIdx =
+    clean.search(/\$\(\s*['"]back-btn['"]\s*\)/) !== -1
+      ? clean.search(/\$\(\s*['"]back-btn['"]\s*\)/)
+      : clean.search(/getElementById\s*\(\s*['"]back-btn['"]\s*\)/);
+  if (backIdx === -1) {
+    fail('9-back-btn', "could not find back-btn reference in page/events.js");
+    return;
+  }
+  // Scan a generous window after the first back-btn hit for the click handler body
+  const window = clean.slice(backIdx, Math.min(clean.length, backIdx + 3500));
+  const hasDismiss =
+    /dismissTransientUi\s*\(/.test(window) ||
+    (/closeChatHistory\s*\(/.test(window) && /closeRoomFiles\s*\(/.test(window));
+  if (hasDismiss) {
+    pass(
+      '9-back-btn-dismiss',
+      /dismissTransientUi\s*\(/.test(window)
+        ? 'back-btn path calls dismissTransientUi'
+        : 'back-btn path calls closeChatHistory + closeRoomFiles',
+    );
+  } else {
+    fail(
+      '9-back-btn-dismiss',
+      'back-btn handler must call dismissTransientUi OR closeChatHistory+closeRoomFiles before clearing chat',
+    );
+  }
+  // Prefer explicit keepChat:false when using dismissTransientUi
+  if (
+    /dismissTransientUi\s*\(/.test(window) &&
+    /keepChat\s*:\s*false/.test(window)
+  ) {
+    pass('9-back-btn-keepChat-false', 'dismissTransientUi({ keepChat: false })');
+  } else if (/dismissTransientUi\s*\(/.test(window)) {
+    // Soft pass — empty opts also means keepChat falsy, but explicit is better
+    pass('9-back-btn-keepChat-false', 'dismissTransientUi present (keepChat not required if falsy default)');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 10) Optional layer inventory dump (informational; never fails the audit)
+// ---------------------------------------------------------------------------
+function dumpLayerInventory() {
+  if (!process.argv.includes('--inventory') && process.env.ARO_AUDIT_INVENTORY !== '1') {
+    return;
+  }
+  const layers = [
+    { cls: 'history-overlay', note: 'chat history / room files (scoped #chat-main)' },
+    { cls: 'create-overlay', note: 'create/edit/compose dialogs' },
+    { cls: 'confirm-overlay', note: 'in-app confirm portal' },
+    { cls: 'forward-overlay', note: 'message forward portal' },
+    { cls: 'picker-overlay', note: 'attachment picker portal' },
+    { cls: 'img-viewer', note: 'full-screen image viewer' },
+    { cls: 'invite-popover', note: 'room invite popover' },
+    { cls: 'attach-menu', note: 'composer attach menu' },
+    { cls: 'member-panel', note: 'room members (mobile full-screen sheet)' },
+    { cls: 'manage-dropdown', note: 'header manage menu' },
+    { cls: 'msg-ctx-menu', note: 'message context menu' },
+  ];
+  console.log('--- LAYER INVENTORY (optional) ---');
+  for (const rel of ['page.css', 'styles.css']) {
+    const css = read(rel);
+    if (!css) continue;
+    console.log(`  [${rel}]`);
+    for (const { cls, note } of layers) {
+      const rules = extractClassRules(css, cls);
+      const base = pickBaseLayoutRule(rules) || '';
+      const display = (base.match(/display\s*:\s*([^;]+)/) || [])[1] || '?';
+      const pe = (base.match(/pointer-events\s*:\s*([^;]+)/) || [])[1] || '(inherit)';
+      const z = (base.match(/z-index\s*:\s*([^;]+)/) || [])[1] || '?';
+      console.log(`    .${cls}: display=${display.trim()} PE=${pe.trim()} z=${z.trim()} — ${note}`);
+    }
+  }
+  console.log('');
+}
+
+// ---------------------------------------------------------------------------
 // Run
 // ---------------------------------------------------------------------------
 console.log(`Aro messenger interaction audit\nroot: ${ARO_ROOT}\n`);
@@ -553,6 +696,9 @@ checkCreateOverlayCss();
 checkHelpers();
 checkGens();
 checkShowAroOverlay();
+checkPortalOverlayCss();
+checkBackBtnDismissesLayers();
+dumpLayerInventory();
 
 console.log('--- PASS ---');
 for (const p of passes) console.log(`  ✓ ${p}`);
@@ -562,5 +708,5 @@ if (failures.length) {
   console.log(`\n${failures.length} check(s) failed, ${passes.length} passed.`);
   process.exit(1);
 }
-console.log(`\nAll ${passes.length} checks passed (10-round structural audit green).`);
+console.log(`\nAll ${passes.length} checks passed (layering audit green).`);
 process.exit(0);
