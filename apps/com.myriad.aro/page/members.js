@@ -8,7 +8,7 @@ function renderMembers() {
     // Always clear mobile full-screen sheet — stuck member-open-mobile blocks the list.
     panel.classList.remove('member-open-mobile', 'member-expanded-tablet');
     panel.style.display = 'none';
-    panel.style.pointerEvents = '';
+    panel.style.pointerEvents = 'none';
     return;
   }
   // Desktop: show side panel. Mobile: keep hidden until user opens (member-open-mobile).
@@ -17,9 +17,13 @@ function renderMembers() {
     // Do not force-show; only ensure pointer-events when intentionally open.
     if (!panel.classList.contains('member-open-mobile')) {
       panel.style.display = '';
+      panel.style.pointerEvents = 'none';
       // media query keeps it display:none until .member-open-mobile
+    } else {
+      panel.style.pointerEvents = 'auto';
     }
   } else {
+    // Desktop/tablet: never cover the sidebar list — panel is a side column only.
     panel.style.display = '';
     panel.style.pointerEvents = '';
   }
@@ -290,6 +294,11 @@ function toggleMemberPanel() {
   var isMobile = window.innerWidth <= 768;
   if (isMobile) {
     panel.classList.toggle('member-open-mobile');
+    if (panel.classList.contains('member-open-mobile')) {
+      panel.style.pointerEvents = 'auto';
+    } else {
+      panel.style.pointerEvents = 'none';
+    }
   } else if (isTablet()) {
     panel.classList.toggle('member-expanded-tablet');
     state.memberPanelOpen = panel.classList.contains('member-expanded-tablet');
@@ -310,7 +319,7 @@ function closeMemberPanel() {
   // Mobile full-screen sheet: force hide so it cannot block sidebar/list
   if (window.innerWidth <= 768) {
     panel.style.display = '';
-    panel.style.pointerEvents = '';
+    panel.style.pointerEvents = 'none';
   }
   state.memberPanelOpen = false;
 }

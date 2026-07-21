@@ -521,6 +521,9 @@ function doForward(msg) {
   var overlay = document.createElement('div');
   overlay.className = 'forward-overlay';
   overlay.dataset.aroDismissable = '1';
+  // Closed CSS default is display:none + PE none — open after append.
+  overlay.style.display = 'none';
+  overlay.style.pointerEvents = 'none';
   var searchPh = lang.searchForward || lang.searchConversations || lang.pickerSearchPlaceholder || 'Search…';
   overlay.innerHTML =
     '<div class="forward-sheet" role="dialog" aria-label="' + esc(lang.forwardTo) + '">'
@@ -590,6 +593,11 @@ function doForward(msg) {
     if (e.target === overlay) dismissForward();
   });
   document.body.appendChild(overlay);
+  if (typeof showAroOverlay === 'function') showAroOverlay(overlay);
+  else {
+    overlay.style.pointerEvents = 'auto';
+    overlay.style.display = 'flex';
+  }
   if (searchInput) {
     try { searchInput.focus(); } catch (eFocus) { /* ignore */ }
   }
@@ -1105,6 +1113,9 @@ function openImageViewer(src, name) {
   var overlay = document.createElement('div');
   overlay.className = 'img-viewer';
   overlay.dataset.aroDismissable = '1';
+  // Closed CSS default is display:none + PE none — open triad after append.
+  overlay.style.display = 'none';
+  overlay.style.pointerEvents = 'none';
   overlay.innerHTML = '<div class="img-viewer-bar">'
     + '<span class="img-viewer-name"></span>'
     + '<button type="button" class="img-viewer-btn" data-act="save" title="' + esc(lang.downloadFile || 'Download') + '" aria-label="' + esc(lang.downloadFile || 'Download') + '">' + SVG_ICONS.download + '</button>'
@@ -1135,6 +1146,11 @@ function openImageViewer(src, name) {
   document.addEventListener('keydown', onKey);
 
   document.body.appendChild(overlay);
+  if (typeof showAroOverlay === 'function') showAroOverlay(overlay);
+  else {
+    overlay.style.pointerEvents = 'auto';
+    overlay.style.display = 'flex';
+  }
   aroPlayEnter(overlay, 'aro-viewer-enter');
 }
 

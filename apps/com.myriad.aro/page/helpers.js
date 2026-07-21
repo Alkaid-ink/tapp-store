@@ -219,6 +219,7 @@ function dismissTransientUi(opts) {
       panel.classList.remove('member-open-mobile');
       if (!opts.keepChat) {
         panel.classList.remove('member-expanded-tablet');
+        try { panel.style.pointerEvents = 'none'; } catch (ePeM) { /* ignore */ }
       }
     }
   } catch (e7) { /* ignore */ }
@@ -1365,6 +1366,9 @@ function aroConfirm(message, danger) {
   return new Promise(function (resolve) {
     var overlay = document.createElement('div');
     overlay.className = 'confirm-overlay';
+    // Closed CSS default is display:none + PE none — open triad required.
+    overlay.style.display = 'none';
+    overlay.style.pointerEvents = 'none';
     overlay.innerHTML = '<div class="confirm-dialog">'
       + '<div class="confirm-message">' + esc(message) + '</div>'
       + '<div class="confirm-actions">'
@@ -1385,6 +1389,11 @@ function aroConfirm(message, danger) {
     overlay.querySelector('.confirm-btn-ok').addEventListener('click', function () { done(true); });
     overlay.addEventListener('click', function (e) { if (e.target === overlay) done(false); });
     document.body.appendChild(overlay);
+    if (typeof showAroOverlay === 'function') showAroOverlay(overlay);
+    else {
+      overlay.style.pointerEvents = 'auto';
+      overlay.style.display = 'flex';
+    }
     overlay.querySelector('.confirm-btn-ok').focus();
   });
 }

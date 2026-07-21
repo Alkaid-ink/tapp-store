@@ -285,7 +285,30 @@
     backBtn.addEventListener('click', function () {
       // Invalidate in-flight open/poll so leaving chat cannot flash stale messages.
       state.openGen = (state.openGen || 0) + 1;
-      if (typeof dismissTransientUi === 'function') dismissTransientUi({});
+      // History/files live under #chat-main (siblings of #chat-container), and on mobile
+      // .history-overlay is position:fixed;z-index:90 — must seal BEFORE hiding chat shell.
+      if (typeof dismissTransientUi === 'function') {
+        dismissTransientUi({ keepChat: false });
+      } else {
+        try { if (typeof closeChatHistory === 'function') closeChatHistory(); } catch (eH) { /* ignore */ }
+        try { if (typeof closeRoomFiles === 'function') closeRoomFiles(); } catch (eF) { /* ignore */ }
+        try { if (typeof closeInvitePopover === 'function') closeInvitePopover(); } catch (eI) { /* ignore */ }
+        try { if (typeof closeAttachMenu === 'function') closeAttachMenu(); } catch (eA) { /* ignore */ }
+        try { if (typeof closeManageDropdown === 'function') closeManageDropdown(); } catch (eM) { /* ignore */ }
+      }
+      // Hard-seal fixed history/files immediately (close helpers may animate; PE must die now).
+      try {
+        ['chat-history-overlay', 'room-files-overlay'].forEach(function (id) {
+          var el = $(id);
+          if (!el) return;
+          if (typeof forceHideInteractive === 'function') forceHideInteractive(el);
+          else {
+            el.style.pointerEvents = 'none';
+            el.style.display = 'none';
+            el.hidden = true;
+          }
+        });
+      } catch (eSealHist) { /* ignore */ }
       var sidebar = $('sidebar');
       var chat = $('chat-container');
       var members = $('member-panel');
@@ -303,7 +326,8 @@
         members.style.display = 'none';
         members.classList.remove('member-open-mobile');
         members.classList.remove('member-expanded-tablet');
-        members.style.pointerEvents = '';
+        // Closed mobile sheet must not intercept list clicks (CSS PE none may lose to inline auto).
+        members.style.pointerEvents = 'none';
       }
       if (empty) {
         empty.style.display = '';

@@ -1193,6 +1193,7 @@ function ensureInvitePopover() {
   div.id = 'invite-popover';
   div.className = 'invite-popover';
   div.style.display = 'none';
+  div.style.pointerEvents = 'none';
   var contactSearchPh = lang.searchContacts || lang.pickerSearchPlaceholder || 'Search…';
   div.innerHTML = '<div class="invite-pop-section">'
     + '<div class="invite-pop-label" id="invite-pop-contacts-label">' + esc(lang.inviteFromContacts) + '</div>'
@@ -1245,7 +1246,9 @@ function toggleInvitePopover(e) {
     pop.style.top = (rect.bottom + 6) + 'px';
     pop.style.left = Math.max(4, rect.right - 240) + 'px';
     pop.classList.remove('aro-leaving');
-    pop.style.pointerEvents = '';
+    pop.hidden = false;
+    try { pop.removeAttribute('hidden'); } catch (eH) { /* ignore */ }
+    pop.style.pointerEvents = 'auto';
     pop.style.display = 'block';
     aroPlayEnter(pop, 'aro-menu-enter');
     renderInvitePopoverContacts();
@@ -1256,7 +1259,13 @@ function toggleInvitePopover(e) {
   }
 }
 function closeInvitePopover() {
-  if (!_invitePopover || _invitePopover.style.display === 'none') return;
+  if (!_invitePopover) return;
+  // Always seal PE + display none (even if already half-closed).
+  try { _invitePopover.style.pointerEvents = 'none'; } catch (ePe) { /* ignore */ }
+  if (_invitePopover.style.display === 'none') {
+    try { _invitePopover.style.display = 'none'; } catch (eD) { /* ignore */ }
+    return;
+  }
   aroDismiss(_invitePopover, { ms: 120 });
 }
 document.addEventListener('click', function (e) {
