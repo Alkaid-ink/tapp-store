@@ -1,7 +1,7 @@
 {
   "id": "com.myriad.doudizhu",
   "name": "斗地主",
-  "version": "1.2.0",
+  "version": "1.0.0",
   "minSystemVersion": "0.3.0",
   "description": "3 人斗地主：提示出牌、报牌、分座行动反馈；联邦联机与单机练习",
   "locales": {
