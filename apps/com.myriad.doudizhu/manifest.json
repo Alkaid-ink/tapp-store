@@ -1,9 +1,9 @@
 {
   "id": "com.myriad.doudizhu",
   "name": "斗地主",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "minSystemVersion": "0.3.0",
-  "description": "3 人斗地主：叫分出牌；联邦 Room 邀请好友实时对战，亦可单机练习",
+  "description": "3 人斗地主：产品级牌桌 UI，叫分出牌；联邦 Room 邀请好友实时对战，亦可单机练习",
   "locales": {
     "en-US": {
       "name": "Fight the Landlord",

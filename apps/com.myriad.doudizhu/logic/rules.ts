@@ -724,3 +724,26 @@ export function totalCardsInState(state: GameState): number {
   // After auction bottom is absorbed into landlord hand
   return hands
 }
+
+/** Human-readable Chinese labels for combo types (product table feedback). */
+export const COMBO_TYPE_LABELS: Record<ComboType, string> = {
+  single: '单张',
+  pair: '对子',
+  triple: '三张',
+  triple_one: '三带一',
+  triple_two: '三带二',
+  straight: '顺子',
+  pair_seq: '连对',
+  airplane: '飞机',
+  airplane_singles: '飞机带单',
+  airplane_pairs: '飞机带对',
+  bomb: '炸弹',
+  rocket: '王炸',
+}
+
+/** Map a combo type (or raw combo) to a display label. */
+export function comboTypeLabel(typeOrCombo: ComboType | Combo | null | undefined): string {
+  if (!typeOrCombo) return ''
+  const type = typeof typeOrCombo === 'string' ? typeOrCombo : typeOrCombo.type
+  return COMBO_TYPE_LABELS[type] || type
+}

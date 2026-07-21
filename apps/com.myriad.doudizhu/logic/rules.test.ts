@@ -13,6 +13,7 @@ import {
   applyPlay,
   BOTTOM_SIZE,
   canBeat,
+  comboTypeLabel,
   createDeck,
   deal,
   DECK_SIZE,
@@ -336,5 +337,24 @@ describe('play / pass / win', () => {
 describe('constants', () => {
   it('player count is 3', () => {
     assert.equal(PLAYER_COUNT, 3)
+  })
+})
+
+describe('comboTypeLabel', () => {
+  it('labels core combo types in Chinese', () => {
+    assert.equal(comboTypeLabel('single'), '单张')
+    assert.equal(comboTypeLabel('pair'), '对子')
+    assert.equal(comboTypeLabel('bomb'), '炸弹')
+    assert.equal(comboTypeLabel('rocket'), '王炸')
+    assert.equal(comboTypeLabel('straight'), '顺子')
+    assert.equal(comboTypeLabel('airplane'), '飞机')
+  })
+
+  it('accepts combo object and empty input', () => {
+    const combo = identifyCombo([c('S', '3'), c('H', '3')])
+    assert.ok(combo)
+    assert.equal(comboTypeLabel(combo), '对子')
+    assert.equal(comboTypeLabel(null), '')
+    assert.equal(comboTypeLabel(undefined), '')
   })
 })

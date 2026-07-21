@@ -279,6 +279,17 @@ console.log('[斗地主] core loaded');
 
   var RANK_LABEL = { '3':'3','4':'4','5':'5','6':'6','7':'7','8':'8','9':'9','10':'10','J':'J','Q':'Q','K':'K','A':'A','2':'2','SJ':'小王','BJ':'大王' };
   var SUIT_LABEL = { S:'♠', H:'♥', D:'♦', C:'♣', J:'' };
+  var COMBO_LABELS = {
+    single: '单张', pair: '对子', triple: '三张', triple_one: '三带一', triple_two: '三带二',
+    straight: '顺子', pair_seq: '连对', airplane: '飞机', airplane_singles: '飞机带单',
+    airplane_pairs: '飞机带对', bomb: '炸弹', rocket: '王炸'
+  };
+
+  function comboTypeLabel(typeOrCombo) {
+    if (!typeOrCombo) return '';
+    var type = typeof typeOrCombo === 'string' ? typeOrCombo : typeOrCombo.type;
+    return COMBO_LABELS[type] || type || '';
+  }
 
   function cardLabel(card) {
     if (card.rank === 'SJ' || card.rank === 'BJ') return RANK_LABEL[card.rank];
@@ -287,25 +298,65 @@ console.log('[斗地主] core loaded');
   function isRed(card) {
     return card.suit === 'H' || card.suit === 'D' || card.rank === 'BJ';
   }
+  function isJoker(card) {
+    return card.rank === 'SJ' || card.rank === 'BJ';
+  }
+  function initialOf(name) {
+    var s = String(name || '?').trim();
+    return s ? s.charAt(0).toUpperCase() : '?';
+  }
+  function setRoleBadge(el, seat) {
+    if (!el) return;
+    el.classList.remove('is-landlord', 'is-farmer');
+    var label = roleLabel(seat);
+    setText(el, label);
+    if (label === '地主') el.classList.add('is-landlord');
+    else if (label === '农民') el.classList.add('is-farmer');
+  }
   function renderCards(container, cards, opts) {
     opts = opts || {};
     if (!container) return;
     container.textContent = '';
-    (cards || []).forEach(function (card) {
-      var el = document.createElement('div');
+    (cards || []).forEach(function (card, idx) {
+      var el = document.createElement(opts.selectable ? 'button' : 'div');
+      if (opts.selectable) {
+        el.type = 'button';
+        el.setAttribute('role', 'option');
+        el.setAttribute('aria-selected', opts.selectedIds && opts.selectedIds[card.id] ? 'true' : 'false');
+      }
       var cls = 'ddz-card';
-      if (card.rank === 'SJ' || card.rank === 'BJ') cls += ' joker';
-      else if (isRed(card)) cls += ' red';
+      if (opts.mini) cls += ' mini';
+      if (opts.backs) {
+        cls = 'ddz-card back' + (opts.mini ? ' mini' : '');
+      } else if (isJoker(card)) {
+        cls += ' joker';
+      } else if (isRed(card)) {
+        cls += ' red';
+      } else {
+        cls += ' black';
+      }
       if (opts.selectable) cls += ' btnlike';
       if (opts.selectedIds && opts.selectedIds[card.id]) cls += ' selected';
-      if (opts.backs) cls = 'ddz-card back';
       el.className = cls;
-      el.textContent = opts.backs ? '🂠' : cardLabel(card);
+      el.title = opts.backs ? '牌背' : cardLabel(card);
+      if (opts.backs) {
+        el.textContent = '🂠';
+      } else {
+        var rankEl = document.createElement('span');
+        rankEl.className = 'ddz-card-rank';
+        rankEl.textContent = RANK_LABEL[card.rank] || card.rank;
+        var suitEl = document.createElement('span');
+        suitEl.className = 'ddz-card-suit';
+        suitEl.textContent = isJoker(card) ? (card.rank === 'BJ' ? '🃏' : '🃏') : (SUIT_LABEL[card.suit] || '');
+        el.appendChild(rankEl);
+        if (suitEl.textContent) el.appendChild(suitEl);
+      }
       if (opts.selectable) {
         el.addEventListener('click', function () {
           if (opts.onToggle) opts.onToggle(card);
         });
       }
+      el.style.zIndex = String(idx + 1);
       container.appendChild(el);
     });
   }
@@ -321,6 +372,7 @@ console.log('[斗地主] core loaded');
   var lastSeq = 0;
   var game = null;
   var selected = {};
+  var lastPlaySeat = null;
   var unsubMessage = null;
   var isHost = false;
   var botTimers = [];
@@ -332,7 +384,11 @@ console.log('[斗地主] core loaded');
 
   function status(msg) { setText($('ddz-status'), msg); }
   function lobbyMsg(msg) { setText($('ddz-lobby-msg'), msg); }
-  function tableMsg(msg) { setText($('ddz-table-msg'), msg); }
+  function tableMsg(msg) {
+    var el = $('ddz-table-msg');
+    setText(el, msg);
+    if (el) el.classList.toggle('is-error', !!(msg && msg.length));
+  }
 
   function mySeat() {
     if (myActorId && seats[myActorId] !== undefined) return seats[myActorId];
@@ -375,33 +431,64 @@ console.log('[斗地主] core loaded');
     for (var seat = 0; seat < N; seat++) {
       var actor = null;
       Object.keys(seats).forEach(function (a) { if (seats[a] === seat) actor = a; });
+      var isReady = !!(actor && readyMap[actor]);
+      var isSeatHost = !!(actor && actor === hostActor);
+      var isMe = !!(actor && actor === myActorId);
       var div = document.createElement('div');
-      div.className = 'ddz-seat-card' + (actor ? (readyMap[actor] ? ' ready' : '') : ' empty');
+      div.className = 'ddz-seat-card'
+        + (actor ? '' : ' empty')
+        + (isReady ? ' ready' : '')
+        + (isSeatHost ? ' host' : '')
+        + (isMe ? ' me' : '');
+      div.setAttribute('role', 'listitem');
       var title = actor ? shortName(actor) : '空位';
-      var sub = actor ? (readyMap[actor] ? '已准备' : '未准备') : '等待加入';
-      if (actor === hostActor) sub += ' · 房主';
-      if (actor === myActorId) sub += ' · 我';
+
       var line1 = document.createElement('div');
+      line1.className = 'ddz-seat-card-title';
       var strong = document.createElement('strong');
-      strong.textContent = '座位 ' + seat;
+      strong.textContent = '座位 ' + (seat + 1);
       line1.appendChild(strong);
+      if (isSeatHost) {
+        var hostPill = document.createElement('span');
+        hostPill.className = 'ddz-pill ddz-pill-host';
+        hostPill.textContent = '房主';
+        line1.appendChild(hostPill);
+      }
+
       var line2 = document.createElement('div');
-      line2.textContent = title;
+      line2.className = 'ddz-seat-card-name';
+      line2.textContent = title + (isMe ? '（我）' : '');
+
       var line3 = document.createElement('div');
-      line3.className = 'ddz-muted';
-      line3.textContent = sub;
+      line3.className = 'ddz-seat-card-sub';
+      if (!actor) {
+        line3.textContent = '等待加入';
+      } else {
+        var readyPill = document.createElement('span');
+        readyPill.className = 'ddz-pill ' + (isReady ? 'ddz-pill-ready' : 'ddz-pill-wait');
+        readyPill.textContent = isReady ? '已准备' : '未准备';
+        line3.appendChild(readyPill);
+      }
+
       div.appendChild(line1);
       div.appendChild(line2);
       div.appendChild(line3);
       box.appendChild(div);
     }
     var inRoom = !!roomId;
-    $('ddz-ready').disabled = !inRoom || mode === 'solo';
+    var readyBtn = $('ddz-ready');
+    if (readyBtn) {
+      readyBtn.disabled = !inRoom || mode === 'solo';
+      setText(readyBtn, readyMap[myActorId] ? '取消准备' : '准备');
+    }
     $('ddz-start').disabled = !inRoom || !isHost || !canStartMatch(seats, readyMap);
     $('ddz-leave').disabled = !inRoom && mode !== 'solo';
     $('ddz-invite').disabled = !inRoom || !isHost;
     setText($('ddz-room-label'), roomId ? ('房间 ' + roomId) : '');
     setText($('ddz-phase'), mode === 'solo' ? '单机' : (game ? phaseLabel(game.phase) : '大厅'));
+    show($('ddz-bid-chip'), false);
+    var root = document.querySelector('.ddz-root');
+    if (root) root.setAttribute('data-phase', game ? game.phase : 'lobby');
   }
 
   function phaseLabel(p) {
@@ -417,6 +504,10 @@ console.log('[斗地主] core loaded');
     var me = mySeat();
     var left = viewSeat('left');
     var right = viewSeat('right');
+    var myTurn = game.turn === me;
+
+    var root = document.querySelector('.ddz-root');
+    if (root) root.setAttribute('data-phase', game.phase);
 
     setText($('ddz-name-me'), shortName(actorAtSeat(me)) + '（我）');
     setText($('ddz-name-left'), shortName(actorAtSeat(left)));
@@ -424,32 +515,69 @@ console.log('[斗地主] core loaded');
     setText($('ddz-count-me'), game.hands[me].length);
     setText($('ddz-count-left'), game.hands[left].length);
     setText($('ddz-count-right'), game.hands[right].length);
-    setText($('ddz-role-me'), roleLabel(me));
-    setText($('ddz-role-left'), roleLabel(left));
-    setText($('ddz-role-right'), roleLabel(right));
+    setRoleBadge($('ddz-role-me'), me);
+    setRoleBadge($('ddz-role-left'), left);
+    setRoleBadge($('ddz-role-right'), right);
 
-    var showBottom = game.landlord !== null || game.phase === 'playing' || game.phase === 'finished';
-    renderCards($('ddz-bottom'), showBottom ? game.bottom : game.bottom.map(function () {
-      return { id: '?', suit: 'J', rank: 'SJ' };
-    }), { backs: !showBottom && game.phase === 'auction' });
+    setText($('ddz-avatar-me'), initialOf(shortName(actorAtSeat(me))));
+    setText($('ddz-avatar-left'), initialOf(shortName(actorAtSeat(left))));
+    setText($('ddz-avatar-right'), initialOf(shortName(actorAtSeat(right))));
 
-    if (game.lastCombo) {
-      renderCards($('ddz-last'), game.lastCombo.cards);
+    var seatMe = document.querySelector('.ddz-me');
+    var seatLeft = document.querySelector('.ddz-seat-left');
+    var seatRight = document.querySelector('.ddz-seat-right');
+    if (seatMe) seatMe.classList.toggle('is-turn', game.phase !== 'finished' && game.turn === me);
+    if (seatLeft) seatLeft.classList.toggle('is-turn', game.phase !== 'finished' && game.turn === left);
+    if (seatRight) seatRight.classList.toggle('is-turn', game.phase !== 'finished' && game.turn === right);
+
+    // Bid score surface during auction
+    var inAuction = game.phase === 'auction';
+    show($('ddz-auction-score'), inAuction);
+    show($('ddz-bid-chip'), inAuction || game.bidScore > 0);
+    setText($('ddz-bid-score'), game.bidScore);
+    setText($('ddz-bid-chip'), '叫分 ' + (game.bidScore || 0));
+
+    // Bottom cards: hidden (backs) during auction until landlord is set
+    var showBottomFaces = game.landlord !== null || game.phase === 'playing' || game.phase === 'finished';
+    var bottomCards = showBottomFaces
+      ? game.bottom
+      : game.bottom.map(function (_, i) { return { id: 'bottom-back-' + i, suit: 'S', rank: '3' }; });
+    renderCards($('ddz-bottom'), bottomCards, {
+      backs: !showBottomFaces,
+      mini: true
+    });
+
+    // Last play: cards + human-readable combo type + who played
+    var lastMeta = $('ddz-last-meta');
+    if (game.lastCombo && game.lastCombo.cards && game.lastCombo.cards.length) {
+      renderCards($('ddz-last'), game.lastCombo.cards, { mini: true });
+      var who = lastPlaySeat != null ? shortName(actorAtSeat(lastPlaySeat)) : '';
+      var comboName = comboTypeLabel(game.lastCombo);
+      setText(lastMeta, (comboName ? comboName : '') + (who ? ' · ' + who : ''));
     } else {
-      setText($('ddz-last'), '');
-      $('ddz-last').textContent = '';
+      if ($('ddz-last')) $('ddz-last').textContent = '';
+      setText(lastMeta, game.phase === 'playing' ? '自由出牌' : '');
     }
 
-    // Opponent "played" area shows card backs for count visual
-    renderCards($('ddz-played-left'), game.hands[left].slice(0, Math.min(8, game.hands[left].length)).map(function (_, i) {
-      return { id: 'b' + i, suit: 'S', rank: '3' };
-    }), { backs: true });
-    renderCards($('ddz-played-right'), game.hands[right].slice(0, Math.min(8, game.hands[right].length)).map(function (_, i) {
-      return { id: 'b' + i, suit: 'S', rank: '3' };
-    }), { backs: true });
+    // Clear per-seat local play slots (center last-play is canonical)
+    ['ddz-local-left', 'ddz-local-right', 'ddz-local-me'].forEach(function (id) {
+      var el = $(id);
+      if (el) el.textContent = '';
+    });
 
+    // Opponent hand-count visual (card backs, capped)
+    var leftBacks = Math.min(10, game.hands[left].length);
+    var rightBacks = Math.min(10, game.hands[right].length);
+    var leftBackCards = [];
+    var rightBackCards = [];
+    for (var bi = 0; bi < leftBacks; bi++) leftBackCards.push({ id: 'bl' + bi, suit: 'S', rank: '3' });
+    for (var bj = 0; bj < rightBacks; bj++) rightBackCards.push({ id: 'br' + bj, suit: 'S', rank: '3' });
+    renderCards($('ddz-played-left'), leftBackCards, { backs: true });
+    renderCards($('ddz-played-right'), rightBackCards, { backs: true });
+
+    var canSelect = game.phase === 'playing' && myTurn;
     renderCards($('ddz-hand'), game.hands[me], {
-      selectable: game.phase === 'playing' && game.turn === me,
+      selectable: canSelect,
       selectedIds: selected,
       onToggle: function (card) {
         if (selected[card.id]) delete selected[card.id];
@@ -458,23 +586,51 @@ console.log('[斗地主] core loaded');
       }
     });
 
-    var myTurn = game.turn === me;
+    // Phase / turn gated controls
     show($('ddz-auction-btns'), game.phase === 'auction' && myTurn);
     show($('ddz-play-btns'), game.phase === 'playing' && myTurn);
     show($('ddz-end-btns'), game.phase === 'finished');
 
+    // Disable bid buttons that are not higher than current bid
+    Array.prototype.forEach.call(document.querySelectorAll('[data-bid]'), function (btn) {
+      var score = Number(btn.getAttribute('data-bid'));
+      btn.disabled = !(game.phase === 'auction' && myTurn && score > game.bidScore);
+    });
+    var passBtn = $('ddz-pass');
+    if (passBtn) {
+      passBtn.disabled = !(game.phase === 'playing' && myTurn && game.lastCombo);
+    }
+    var playBtn = $('ddz-play');
+    if (playBtn) playBtn.disabled = !(game.phase === 'playing' && myTurn);
+
     var hint = '';
     if (game.phase === 'auction') {
-      hint = myTurn ? '轮到你叫分（当前 ' + game.bidScore + ' 分）' : ('等待 ' + shortName(actorAtSeat(game.turn)) + ' 叫分');
+      hint = myTurn
+        ? ('轮到你叫分 · 当前 ' + game.bidScore + ' 分')
+        : ('等待 ' + shortName(actorAtSeat(game.turn)) + ' 叫分 · 当前 ' + game.bidScore + ' 分');
     } else if (game.phase === 'playing') {
       hint = myTurn
-        ? (game.lastCombo ? '请压牌或过牌' : '请出牌（首家）')
+        ? (game.lastCombo ? ('请压牌或过牌 · ' + comboTypeLabel(game.lastCombo)) : '请出牌（首家）')
         : ('等待 ' + shortName(actorAtSeat(game.turn)) + ' 出牌');
     } else if (game.phase === 'finished') {
       var wname = shortName(actorAtSeat(game.winner));
-      hint = (game.winningSide === 'landlord' ? '地主胜 · ' : '农民胜 · ') + wname + ' 出完';
+      var side = game.winningSide === 'landlord' ? '地主胜' : '农民胜';
+      hint = side + ' · ' + wname + ' 出完';
+      var summary = $('ddz-end-summary');
+      if (summary) {
+        summary.textContent = '';
+        var main = document.createElement('div');
+        main.textContent = '本局结束 · ' + wname + ' 获胜';
+        var sub = document.createElement('span');
+        sub.className = 'ddz-end-side';
+        sub.textContent = side + ' · 座位 ' + ((game.winner != null ? game.winner : 0) + 1)
+          + (game.bidScore ? ' · 叫分 ' + game.bidScore : '');
+        summary.appendChild(main);
+        summary.appendChild(sub);
+      }
     }
     setText($('ddz-turn-hint'), hint);
+    setText($('ddz-room-label'), roomId ? (mode === 'solo' ? '单机' : ('房间 ' + roomId)) : '');
   }
 
   function showLobby() {
@@ -652,7 +808,9 @@ console.log('[斗地主] core loaded');
         winningSide: null
       };
       selected = {};
+      lastPlaySeat = null;
       mode = mode === 'solo' ? 'solo' : 'multi';
+      tableMsg('');
       updateLobbyUI();
       updateTableUI();
       scheduleBots();
@@ -661,8 +819,11 @@ console.log('[斗地主] core loaded');
     if (!game) return;
     if (msg.type === 'bid') {
       var br = applyBid(game, { kind: 'bid', seat: msg.seat, score: msg.score });
-      if (br.ok) { game = br.state; if (br.redeal) hostRedeal(); }
-      else tableMsg(br.error || '叫分失败');
+      if (br.ok) {
+        game = br.state;
+        tableMsg('');
+        if (br.redeal) hostRedeal();
+      } else tableMsg(br.error || '叫分失败');
     } else if (msg.type === 'bid_pass') {
       var pr = applyBid(game, { kind: 'pass', seat: msg.seat });
       if (pr.ok) {
@@ -671,13 +832,21 @@ console.log('[斗地主] core loaded');
       } else tableMsg(pr.error || '操作失败');
     } else if (msg.type === 'play') {
       var pl = applyPlay(game, { kind: 'play', seat: msg.seat, cards: msg.cards });
-      if (pl.ok) game = pl.state;
-      else tableMsg(pl.error || '出牌失败');
+      if (pl.ok) {
+        game = pl.state;
+        lastPlaySeat = msg.seat;
+        tableMsg('');
+      } else tableMsg(pl.error || '出牌失败');
       selected = {};
     } else if (msg.type === 'pass') {
+      var prevLast = game.lastCombo;
       var pa = applyPlay(game, { kind: 'pass', seat: msg.seat });
-      if (pa.ok) game = pa.state;
-      else tableMsg(pa.error || '过牌失败');
+      if (pa.ok) {
+        game = pa.state;
+        // Trick cleared → no active last play seat for table meta
+        if (prevLast && !game.lastCombo) lastPlaySeat = null;
+        tableMsg('');
+      } else tableMsg(pa.error || '过牌失败');
     }
     updateTableUI();
     scheduleBots();
@@ -1127,6 +1296,17 @@ console.log('[斗地主] core loaded');
     }
   });
 
+  function applyThemeClass(theme) {
+    try {
+      var dark = theme === 'dark' || theme === 'Dark' || theme === true;
+      var roots = [document.documentElement, document.body, document.querySelector('.ddz-root')];
+      for (var i = 0; i < roots.length; i++) {
+        if (!roots[i]) continue;
+        roots[i].classList.toggle('dark', !!dark);
+      }
+    } catch (e) { /* theme optional */ }
+  }
+
   Tapp.lifecycle.onReady(async function () {
     await ensureIdentity();
     wireMessageHandler();
@@ -1136,5 +1316,21 @@ console.log('[斗地主] core loaded');
     if (!hasFed) {
       lobbyMsg('联邦 API 不可用时仍可「单机练习」。安装运行并授予 federation 权限后可联机。');
     }
+    // Product theme: follow host light/dark when available
+    try {
+      if (Tapp.ui && typeof Tapp.ui.onThemeChange === 'function') {
+        Tapp.ui.onThemeChange(function (theme) { applyThemeClass(theme); });
+      } else if (Tapp.ui && typeof Tapp.ui.getTheme === 'function') {
+        var t = Tapp.ui.getTheme();
+        if (t && typeof t.then === 'function') t.then(applyThemeClass);
+        else applyThemeClass(t);
+      } else if (window.matchMedia) {
+        var mq = window.matchMedia('(prefers-color-scheme: dark)');
+        applyThemeClass(mq.matches ? 'dark' : 'light');
+        if (mq.addEventListener) mq.addEventListener('change', function (ev) {
+          applyThemeClass(ev.matches ? 'dark' : 'light');
+        });
+      }
+    } catch (themeErr) { /* ignore */ }
   });
 })();
