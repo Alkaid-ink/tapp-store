@@ -1,7 +1,6 @@
     var d = $('ring-create-dialog');
     if (d) {
-      d.classList.remove('aro-leaving');
-      d.style.display = 'flex';
+      showAroOverlay(d);
     }
     if (typeof updateRingCreateCategoryVisibility === 'function') updateRingCreateCategoryVisibility();
   });

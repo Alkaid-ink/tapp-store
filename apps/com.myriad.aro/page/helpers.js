@@ -85,6 +85,21 @@ function aroPlayEnter(el, className) {
 }
 
 /**
+ * Show a create-overlay (or any fixed modal overlay) after dismiss/forceHide.
+ * Restores the full open triad: clear hidden, pointer-events auto, display flex.
+ * Required because .create-overlay[hidden]{display:none!important} beats style.display=flex alone.
+ * @param {HTMLElement|null|undefined} el
+ */
+function showAroOverlay(el) {
+  if (!el) return;
+  el.classList.remove('aro-leaving');
+  el.hidden = false;
+  try { el.removeAttribute('hidden'); } catch (e) { /* ignore */ }
+  el.style.pointerEvents = 'auto';
+  el.style.display = 'flex';
+}
+
+/**
  * Immediately stop an overlay/menu from receiving clicks (safe even mid-animation).
  * Use when a stuck layer would dead-lock the messenger UI.
  */

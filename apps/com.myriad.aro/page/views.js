@@ -821,9 +821,7 @@ function openQuoteRepostModal(objectId) {
   }
   applyQuoteRepostLabels();
   if (dlg) {
-    dlg.hidden = false;
-    dlg.classList.remove('aro-leaving');
-    dlg.style.display = 'flex';
+    showAroOverlay(dlg);
   }
   if (ta) {
     try { ta.focus(); } catch (e) {}
@@ -1802,8 +1800,7 @@ function openFollowDialog() {
   if (!canFollowFromFeed()) return;
   var d = $('feed-follow-dialog');
   if (!d) return;
-  d.classList.remove('aro-leaving');
-  d.style.display = 'flex';
+  showAroOverlay(d);
   var input = $('feed-follow-input');
   if (input) {
     try { input.focus(); } catch (e) { /* ignore */ }
@@ -1829,8 +1826,7 @@ function openComposer() {
     }
     return;
   }
-  d.classList.remove('aro-leaving');
-  d.style.display = 'flex';
+  showAroOverlay(d);
   // Restore draft (storage or in-session), then focus.
   Promise.resolve(restoreComposeDraft()).then(function () {
     var ta = $('feed-compose-text');
