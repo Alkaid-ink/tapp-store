@@ -58,10 +58,9 @@ async function openConversation(kind, id) {
   // Stop poll immediately so a prior interval cannot write into the new shell.
   stopPolling();
 
-  // Drop previous realtime subscription before switching
-  await unsubscribeRealtime();
-  if (!isOpenGenCurrent(gen)) return;
-
+  // ---- Synchronous shell update FIRST (must not await before this) ----
+  // Clicks on 最近/list must paint active chat immediately; network teardown
+  // (unsubscribeRealtime) and message loads happen after first paint.
   if (typeof resetHistoryOnConversationChange === 'function') resetHistoryOnConversationChange();
   if (typeof resetRoomFilesOnConversationChange === 'function') resetRoomFilesOnConversationChange();
 
@@ -97,6 +96,11 @@ async function openConversation(kind, id) {
   renderChatHeader();
   // Refresh active highlight without waiting for network
   renderConvList();
+
+  // ---- Async work after first paint (stale-guarded with openGen) ----
+  // Never block UI open on realtime unsubscribe.
+  await unsubscribeRealtime();
+  if (!isOpenGenCurrent(gen)) return;
 
   try {
     if (kind === 'channel') {

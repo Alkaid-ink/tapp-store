@@ -29,10 +29,8 @@ var state = {
   isAdmin: false,
   // Attachment
   pendingAttach: null, // { type, file?, data?, name, size, mime, ... }
-  /** Messenger sidebar type tab: recent | dm | room */
+  /** Messenger sidebar type tab: recent | dm | room (closed chats never listed). */
   convTab: 'recent',
-  /** When true, list shows only closed conversations (overrides type tab filter). */
-  showClosed: false,
   /**
    * Monotonic generation for openConversation / poll / realtime apply.
    * Bumped on every open or leave so stale awaits cannot flashback UI.

@@ -38,7 +38,6 @@
             <button type="button" class="conv-tab" data-conv-tab="dm" role="tab" aria-selected="false" id="conv-tab-dm">私信</button>
             <button type="button" class="conv-tab" data-conv-tab="room" role="tab" aria-selected="false" id="conv-tab-room">群聊</button>
           </div>
-          <button type="button" class="conv-closed-chip" id="conv-closed-toggle" aria-pressed="false" title="已关闭" aria-label="已关闭">已关闭</button>
         </div>
         <div class="aro-search-bar">
           <span class="aro-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
@@ -84,85 +83,86 @@
           <input id="attach-file-input" type="file" style="display:none" />
           <input id="attach-image-input" type="file" accept="image/*" style="display:none" />
         </div>
+
+        <!-- Overlays scoped to #chat-main only so a stuck panel cannot block the sidebar list -->
+        <!-- 群文件面板（仅群聊；覆盖聊天区，复用 history 侧栏壳） -->
+        <div id="room-files-overlay" class="history-overlay" style="display:none;pointer-events:none" role="dialog" aria-modal="true" aria-labelledby="room-files-title" hidden>
+          <div class="history-sheet" role="document">
+            <div class="history-grab" aria-hidden="true"><span class="history-grab-bar"></span></div>
+            <div class="history-header">
+              <div class="history-header-leading">
+                <div class="history-header-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                </div>
+                <div class="history-header-text">
+                  <h3 id="room-files-title" class="history-title">群文件</h3>
+                  <div id="room-files-subtitle" class="history-subtitle"></div>
+                </div>
+              </div>
+              <button type="button" id="room-files-close" class="history-close" aria-label="Close">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <div class="history-toolbar">
+              <div class="aro-search-bar history-search-bar">
+                <span class="aro-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+                <input id="room-files-search" class="aro-search-input" type="search" autocomplete="off" enterkeyhint="search" placeholder="搜索文件名…" />
+              </div>
+              <div id="room-files-filters" class="history-filters" role="tablist" aria-label="Filter">
+                <button type="button" class="history-filter history-filter-active" data-room-files-filter="all" role="tab" aria-selected="true">全部</button>
+                <button type="button" class="history-filter" data-room-files-filter="image" role="tab" aria-selected="false">图片</button>
+                <button type="button" class="history-filter" data-room-files-filter="file" role="tab" aria-selected="false">文件</button>
+              </div>
+            </div>
+            <div id="room-files-list" class="history-list"></div>
+            <div class="history-footer">
+              <div id="room-files-meta" class="history-meta"></div>
+              <button type="button" id="room-files-load-more" class="history-load-more" hidden>加载更多</button>
+              <p id="room-files-hint" class="room-files-hint"></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 聊天记录面板（覆盖聊天区，不覆盖会话列表） -->
+        <div id="chat-history-overlay" class="history-overlay" style="display:none;pointer-events:none" role="dialog" aria-modal="true" aria-labelledby="history-title" hidden>
+          <div class="history-sheet" role="document">
+            <div class="history-grab" aria-hidden="true"><span class="history-grab-bar"></span></div>
+            <div class="history-header">
+              <div class="history-header-leading">
+                <div class="history-header-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                </div>
+                <div class="history-header-text">
+                  <h3 id="history-title" class="history-title">聊天记录</h3>
+                  <div id="history-subtitle" class="history-subtitle"></div>
+                </div>
+              </div>
+              <button type="button" id="history-close" class="history-close" aria-label="Close">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <div class="history-toolbar">
+              <div class="aro-search-bar history-search-bar">
+                <span class="aro-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+                <input id="history-search" class="aro-search-input" type="search" autocomplete="off" enterkeyhint="search" placeholder="搜索聊天记录…" />
+              </div>
+              <div id="history-filters" class="history-filters" role="tablist" aria-label="Filter">
+                <button type="button" class="history-filter history-filter-active" data-history-filter="all" role="tab" aria-selected="true">全部</button>
+                <button type="button" class="history-filter" data-history-filter="text" role="tab" aria-selected="false">文字</button>
+                <button type="button" class="history-filter" data-history-filter="image" role="tab" aria-selected="false">图片</button>
+                <button type="button" class="history-filter" data-history-filter="file" role="tab" aria-selected="false">文件</button>
+                <button type="button" class="history-filter" data-history-filter="share" role="tab" aria-selected="false">分享</button>
+                <button type="button" class="history-filter" data-history-filter="pinned" role="tab" aria-selected="false">置顶</button>
+              </div>
+            </div>
+            <div id="history-list" class="history-list"></div>
+            <div class="history-footer">
+              <div id="history-meta" class="history-meta"></div>
+              <button type="button" id="history-load-more" class="history-load-more" hidden>加载更早消息</button>
+            </div>
+          </div>
+        </div>
       </main>
-
-      <!-- 群文件面板（仅群聊；覆盖在消息视图上，复用 history 侧栏壳） -->
-      <div id="room-files-overlay" class="history-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="room-files-title" hidden>
-        <div class="history-sheet" role="document">
-          <div class="history-grab" aria-hidden="true"><span class="history-grab-bar"></span></div>
-          <div class="history-header">
-            <div class="history-header-leading">
-              <div class="history-header-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-              </div>
-              <div class="history-header-text">
-                <h3 id="room-files-title" class="history-title">群文件</h3>
-                <div id="room-files-subtitle" class="history-subtitle"></div>
-              </div>
-            </div>
-            <button type="button" id="room-files-close" class="history-close" aria-label="Close">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-            </button>
-          </div>
-          <div class="history-toolbar">
-            <div class="aro-search-bar history-search-bar">
-              <span class="aro-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
-              <input id="room-files-search" class="aro-search-input" type="search" autocomplete="off" enterkeyhint="search" placeholder="搜索文件名…" />
-            </div>
-            <div id="room-files-filters" class="history-filters" role="tablist" aria-label="Filter">
-              <button type="button" class="history-filter history-filter-active" data-room-files-filter="all" role="tab" aria-selected="true">全部</button>
-              <button type="button" class="history-filter" data-room-files-filter="image" role="tab" aria-selected="false">图片</button>
-              <button type="button" class="history-filter" data-room-files-filter="file" role="tab" aria-selected="false">文件</button>
-            </div>
-          </div>
-          <div id="room-files-list" class="history-list"></div>
-          <div class="history-footer">
-            <div id="room-files-meta" class="history-meta"></div>
-            <button type="button" id="room-files-load-more" class="history-load-more" hidden>加载更多</button>
-            <p id="room-files-hint" class="room-files-hint"></p>
-          </div>
-        </div>
-      </div>
-
-      <!-- 聊天记录面板（覆盖在消息视图上） -->
-      <div id="chat-history-overlay" class="history-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="history-title" hidden>
-        <div class="history-sheet" role="document">
-          <div class="history-grab" aria-hidden="true"><span class="history-grab-bar"></span></div>
-          <div class="history-header">
-            <div class="history-header-leading">
-              <div class="history-header-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-              </div>
-              <div class="history-header-text">
-                <h3 id="history-title" class="history-title">聊天记录</h3>
-                <div id="history-subtitle" class="history-subtitle"></div>
-              </div>
-            </div>
-            <button type="button" id="history-close" class="history-close" aria-label="Close">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-            </button>
-          </div>
-          <div class="history-toolbar">
-            <div class="aro-search-bar history-search-bar">
-              <span class="aro-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
-              <input id="history-search" class="aro-search-input" type="search" autocomplete="off" enterkeyhint="search" placeholder="搜索聊天记录…" />
-            </div>
-            <div id="history-filters" class="history-filters" role="tablist" aria-label="Filter">
-              <button type="button" class="history-filter history-filter-active" data-history-filter="all" role="tab" aria-selected="true">全部</button>
-              <button type="button" class="history-filter" data-history-filter="text" role="tab" aria-selected="false">文字</button>
-              <button type="button" class="history-filter" data-history-filter="image" role="tab" aria-selected="false">图片</button>
-              <button type="button" class="history-filter" data-history-filter="file" role="tab" aria-selected="false">文件</button>
-              <button type="button" class="history-filter" data-history-filter="share" role="tab" aria-selected="false">分享</button>
-              <button type="button" class="history-filter" data-history-filter="pinned" role="tab" aria-selected="false">置顶</button>
-            </div>
-          </div>
-          <div id="history-list" class="history-list"></div>
-          <div class="history-footer">
-            <div id="history-meta" class="history-meta"></div>
-            <button type="button" id="history-load-more" class="history-load-more" hidden>加载更早消息</button>
-          </div>
-        </div>
-      </div>
 
       <!-- 右侧：成员面板 -->
       <aside id="member-panel" class="member-panel" style="display:none">

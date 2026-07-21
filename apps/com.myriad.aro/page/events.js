@@ -78,7 +78,7 @@
   document.querySelectorAll('.feed-mobile-tab').forEach(function (btn) {
     btn.addEventListener('click', function () { switchFeedSubTab(btn.dataset.sub); });
   });
-  // Messenger sidebar: 最近 / 私信 / 群聊 + 已关闭 chip
+  // Messenger sidebar: 最近 / 私信 / 群聊 (no closed tab/chip)
   // Prefer bar-level delegation so re-renders / i18n text swaps never drop handlers.
   var convTabsBar = $('conv-tabs-bar') || document.querySelector('.conv-tabs-bar');
   if (convTabsBar && convTabsBar.dataset.convTabsBound !== '1') {
@@ -90,12 +90,6 @@
         if (typeof setConvTab === 'function') {
           setConvTab(tabBtn.getAttribute('data-conv-tab') || 'recent');
         }
-        return;
-      }
-      var chip = e.target && e.target.closest ? e.target.closest('#conv-closed-toggle, .conv-closed-chip') : null;
-      if (chip && convTabsBar.contains(chip)) {
-        e.preventDefault();
-        if (typeof toggleShowClosed === 'function') toggleShowClosed();
       }
     });
   } else {
@@ -104,12 +98,6 @@
         if (typeof setConvTab === 'function') setConvTab(btn.getAttribute('data-conv-tab') || 'recent');
       });
     });
-    var closedToggle = $('conv-closed-toggle');
-    if (closedToggle) {
-      closedToggle.addEventListener('click', function () {
-        if (typeof toggleShowClosed === 'function') toggleShowClosed();
-      });
-    }
   }
   // Conversation list: stable delegation (also re-asserted in renderConvList)
   if (typeof bindConvListClicks === 'function') bindConvListClicks();

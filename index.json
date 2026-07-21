@@ -4,7 +4,7 @@
   "version": "1.8.8",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-07-20T12:35:43Z",
+  "updated_at": "2026-07-21T12:36:36Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.app",
@@ -245,7 +245,7 @@
     {
       "id": "com.myriad.aro",
       "name": "Aro",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "description": "社交中心，统一管理消息、时间线、环网与个人资料",
       "long_description": "社交中心：统一管理联邦消息（Channel/Room）、时间线、环网与个人资料。支持后台新消息通知、附件与多语言（中/英/日）。",
       "locales": {
