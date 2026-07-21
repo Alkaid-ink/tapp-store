@@ -1326,6 +1326,9 @@ function createDetailOverlay(title, opts) {
   var overlay = document.createElement('div');
   overlay.className = 'picker-overlay';
   overlay.dataset.aroDismissable = '1';
+  // Closed CSS default is display:none + PE none — open triad after append.
+  overlay.style.display = 'none';
+  overlay.style.pointerEvents = 'none';
   var visual = sheetVisual(opts);
   applySheetAccent(overlay, visual.accent);
   overlay.innerHTML =
@@ -1351,6 +1354,13 @@ function createDetailOverlay(title, opts) {
   document.addEventListener('keydown', onKey);
 
   document.body.appendChild(overlay);
+  // Match createPickerOverlay: CSS defaults to closed; must open explicitly.
+  if (typeof showAroOverlay === 'function') showAroOverlay(overlay);
+  else {
+    overlay.hidden = false;
+    overlay.style.pointerEvents = 'auto';
+    overlay.style.display = 'flex';
+  }
   return overlay;
 }
 
