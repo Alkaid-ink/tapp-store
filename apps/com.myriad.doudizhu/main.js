@@ -400,6 +400,125 @@ console.log('[斗地主] core loaded');
     return actors.every(function (a) { return ready[a] === true; });
   }
 
+  // ─── Texture catalog (package assets/) ──────────────────────
+  // Paths must match manifest.assets; loaded via Tapp.assets.getUrl when available.
+  var TEXTURE_MAP = {
+    felt: 'assets/felt/table_felt.png',
+    feltDark: 'assets/felt/table_felt_dark.png',
+    scene: 'assets/felt/scene_bg.png',
+    feltTile: 'assets/felt/felt_tile.png',
+    centerVelvet: 'assets/felt/center_velvet.png',
+    cardBack: 'assets/cards/card_back.png',
+    cardBackSm: 'assets/cards/card_back_sm.png',
+    cardFace: 'assets/cards/card_face.png',
+    cardFaceSm: 'assets/cards/card_face_sm.png',
+    paper: 'assets/cards/paper_texture.png',
+    suitS: 'assets/cards/suit_S.png',
+    suitH: 'assets/cards/suit_H.png',
+    suitD: 'assets/cards/suit_D.png',
+    suitC: 'assets/cards/suit_C.png',
+    jokerSj: 'assets/cards/joker_sj.png',
+    jokerBj: 'assets/cards/joker_bj.png',
+    btnPlay: 'assets/ui/btn_play.png',
+    btnPass: 'assets/ui/btn_pass.png',
+    btnHint: 'assets/ui/btn_hint.png',
+    btnBid: 'assets/ui/btn_bid.png',
+    btnPrimary: 'assets/ui/btn_primary.png',
+    btnGhost: 'assets/ui/btn_ghost.png',
+    bubbleDark: 'assets/ui/bubble_dark.png',
+    bubbleGold: 'assets/ui/bubble_gold.png',
+    turnRing: 'assets/ui/turn_ring.png',
+    badgeLandlord: 'assets/badges/badge_landlord.png',
+    badgeFarmer: 'assets/badges/badge_farmer.png',
+    badgeAlarm: 'assets/badges/badge_alarm.png',
+    woodPanel: 'assets/chrome/wood_panel.png',
+    seatFrame: 'assets/chrome/seat_frame.png',
+    bottomTray: 'assets/chrome/bottom_tray.png',
+    lastTray: 'assets/chrome/last_tray.png',
+    avatarRing: 'assets/chrome/avatar_ring.png',
+    logoPlate: 'assets/chrome/logo_plate.png',
+    ornament: 'assets/chrome/ornament_strip.png',
+    coin: 'assets/chrome/coin.png',
+    endRibbon: 'assets/chrome/end_ribbon.png',
+    crown: 'assets/chrome/crown.png',
+    readyCheck: 'assets/chrome/ready_check.png'
+  };
+  var textureUrls = {};
+  var texturesReady = false;
+
+  function cssUrl(pathOrUrl) {
+    if (!pathOrUrl) return 'none';
+    return 'url("' + String(pathOrUrl).replace(/"/g, '\\"') + '")';
+  }
+
+  function applyTextureCssVars(root) {
+    if (!root) return;
+    var set = function (name, key) {
+      var u = textureUrls[key];
+      if (u) root.style.setProperty(name, cssUrl(u));
+    };
+    set('--ddz-tex-scene', 'scene');
+    set('--ddz-tex-felt', 'felt');
+    set('--ddz-tex-felt-dark', 'feltDark');
+    set('--ddz-tex-felt-tile', 'feltTile');
+    set('--ddz-tex-velvet', 'centerVelvet');
+    set('--ddz-tex-wood', 'woodPanel');
+    set('--ddz-tex-card-back', 'cardBack');
+    set('--ddz-tex-card-face', 'cardFace');
+    set('--ddz-tex-paper', 'paper');
+    set('--ddz-tex-suit-S', 'suitS');
+    set('--ddz-tex-suit-H', 'suitH');
+    set('--ddz-tex-suit-D', 'suitD');
+    set('--ddz-tex-suit-C', 'suitC');
+    set('--ddz-tex-joker-sj', 'jokerSj');
+    set('--ddz-tex-joker-bj', 'jokerBj');
+    set('--ddz-tex-seat-frame', 'seatFrame');
+    set('--ddz-tex-bottom-tray', 'bottomTray');
+    set('--ddz-tex-last-tray', 'lastTray');
+    set('--ddz-tex-avatar-ring', 'avatarRing');
+    set('--ddz-tex-logo', 'logoPlate');
+    set('--ddz-tex-btn-play', 'btnPlay');
+    set('--ddz-tex-btn-pass', 'btnPass');
+    set('--ddz-tex-btn-hint', 'btnHint');
+    set('--ddz-tex-btn-bid', 'btnBid');
+    set('--ddz-tex-btn-primary', 'btnPrimary');
+    set('--ddz-tex-btn-ghost', 'btnGhost');
+    set('--ddz-tex-badge-landlord', 'badgeLandlord');
+    set('--ddz-tex-badge-farmer', 'badgeFarmer');
+    set('--ddz-tex-badge-alarm', 'badgeAlarm');
+    set('--ddz-tex-end-ribbon', 'endRibbon');
+    set('--ddz-tex-ornament', 'ornament');
+    set('--ddz-tex-bubble', 'bubbleDark');
+    set('--ddz-tex-turn-ring', 'turnRing');
+    set('--ddz-tex-coin', 'coin');
+    set('--ddz-tex-crown', 'crown');
+    set('--ddz-tex-ready', 'readyCheck');
+    root.classList.add('ddz-textures-ready');
+    texturesReady = true;
+  }
+
+  async function loadTextures() {
+    var keys = Object.keys(TEXTURE_MAP);
+    var hasApi = typeof Tapp !== 'undefined' && Tapp.assets && typeof Tapp.assets.getUrl === 'function';
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      var path = TEXTURE_MAP[k];
+      if (hasApi) {
+        try {
+          var info = await Tapp.assets.getUrl(path);
+          textureUrls[k] = (info && info.url) ? info.url : path;
+        } catch (e) {
+          textureUrls[k] = path; // relative fallback
+        }
+      } else {
+        textureUrls[k] = path;
+      }
+    }
+    var root = document.querySelector('.ddz-root') || document.documentElement;
+    applyTextureCssVars(root);
+    return textureUrls;
+  }
+
   // ─── UI helpers ─────────────────────────────────────────────
   function $(id) { return document.getElementById(id); }
   function setText(el, t) { if (el) el.textContent = t == null ? '' : String(t); }
@@ -465,19 +584,24 @@ console.log('[斗地主] core loaded');
       }
       if (opts.selectable) cls += ' btnlike';
       if (opts.selectedIds && opts.selectedIds[card.id]) cls += ' selected';
+      if (isJoker(card) && card.rank === 'SJ') cls += ' is-sj';
       el.className = cls;
       el.title = opts.backs ? '牌背' : cardLabel(card);
       if (opts.backs) {
-        el.textContent = '🂠';
+        el.setAttribute('aria-label', '牌背');
       } else {
         var rankEl = document.createElement('span');
         rankEl.className = 'ddz-card-rank';
         rankEl.textContent = RANK_LABEL[card.rank] || card.rank;
-        var suitEl = document.createElement('span');
-        suitEl.className = 'ddz-card-suit';
-        suitEl.textContent = isJoker(card) ? (card.rank === 'BJ' ? '🃏' : '🃏') : (SUIT_LABEL[card.suit] || '');
         el.appendChild(rankEl);
-        if (suitEl.textContent) el.appendChild(suitEl);
+        if (!isJoker(card)) {
+          var suitEl = document.createElement('span');
+          suitEl.className = 'ddz-card-suit is-' + (card.suit || 'S');
+          suitEl.setAttribute('aria-hidden', 'true');
+          // Fallback glyph if texture not yet applied
+          suitEl.textContent = SUIT_LABEL[card.suit] || '';
+          el.appendChild(suitEl);
+        }
       }
       if (opts.selectable) {
         el.addEventListener('click', function () {
@@ -1576,6 +1700,18 @@ console.log('[斗地主] core loaded');
 
   Tapp.lifecycle.onReady(async function () {
     await ensureIdentity();
+    // Load commercial texture pack before first paint of table chrome
+    try {
+      await loadTextures();
+    } catch (texErr) {
+      console.warn('[斗地主] texture load', texErr);
+      // still apply relative-path fallbacks
+      try {
+        var keys = Object.keys(TEXTURE_MAP);
+        for (var ti = 0; ti < keys.length; ti++) textureUrls[keys[ti]] = TEXTURE_MAP[keys[ti]];
+        applyTextureCssVars(document.querySelector('.ddz-root') || document.documentElement);
+      } catch (e2) { /* ignore */ }
+    }
     wireMessageHandler();
     showLobby();
     status('身份: ' + shortName(myActorId));
