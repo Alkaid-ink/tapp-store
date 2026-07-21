@@ -94,7 +94,9 @@ function syncConvTabsUi() {
 function setConvTab(tab) {
   if (tab !== 'recent' && tab !== 'dm' && tab !== 'room') tab = 'recent';
   state.convTab = tab;
-  // Switching type tab keeps showClosed as-is (list still closed-only while toggle on)
+  // Leaving closed mode when user picks a type tab so tabs feel immediately clickable
+  // (closed chip stays available; list returns to the selected type filter).
+  if (state.showClosed) state.showClosed = false;
   syncConvTabsUi();
   renderConvList();
 }
@@ -109,10 +111,31 @@ function toggleShowClosed() {
   setShowClosed(!state.showClosed);
 }
 
+/**
+ * Stable click handler for #conv-list (event delegation).
+ * Per-item listeners are dropped whenever renderConvList replaces innerHTML
+ * (poll / open / realtime), which made rapid list clicks appear dead.
+ */
+function bindConvListClicks() {
+  var list = $('conv-list');
+  if (!list || list.dataset.convClickBound === '1') return;
+  list.dataset.convClickBound = '1';
+  list.addEventListener('click', function (e) {
+    var item = e.target && e.target.closest ? e.target.closest('.conv-item') : null;
+    if (!item || !list.contains(item)) return;
+    var kind = item.getAttribute('data-kind') || item.dataset.kind;
+    var id = item.getAttribute('data-id') || item.dataset.id;
+    if (!kind || !id) return;
+    e.preventDefault();
+    if (typeof openConversation === 'function') openConversation(kind, id);
+  });
+}
+
 function renderConvList() {
   var list = $('conv-list');
   if (!list) return;
 
+  bindConvListClicks();
   syncConvTabsUi();
 
   var allItems = buildConversationItems();
@@ -152,7 +175,8 @@ function renderConvList() {
     var isActive = item.id === state.activeId;
     var avatarClass = item.kind === 'channel' ? 'avatar-channel' : 'avatar-room';
     var rel = item.sortTime ? relTimeStr(item.sortTime) : '';
-    html += '<button class="conv-item' + (isActive ? ' conv-active' : '') + (item.unread > 0 ? ' conv-unread' : '') + '" data-kind="' + item.kind + '" data-id="' + esc(item.id) + '">'
+    // type=button avoids accidental form submit if host wraps page content
+    html += '<button type="button" class="conv-item' + (isActive ? ' conv-active' : '') + (item.unread > 0 ? ' conv-unread' : '') + '" data-kind="' + item.kind + '" data-id="' + esc(item.id) + '">'
       + '<span class="conv-accent" aria-hidden="true"></span>'
       + '<div class="conv-avatar ' + avatarClass + '">' + avatarContentHtml(item.avatar || '', item.name) + '</div>'
       + '<div class="conv-info">'
@@ -165,7 +189,8 @@ function renderConvList() {
     if (item.unread > 0) {
       html += '<span class="conv-badge">' + (item.unread > 9 ? '9+' : item.unread) + '</span>';
     }
-    if (item.status === 'closed') {
+    // Closed badge only in closed filter (never on recent/dm/room rows)
+    if (state.showClosed && item.status === 'closed') {
       html += '<span class="conv-closed">' + esc(lang.closed) + '</span>';
     }
     if (item.status === 'pending' && item.initiatedBy === 'remote') {
@@ -174,12 +199,6 @@ function renderConvList() {
     html += '</div></div></button>';
   });
   list.innerHTML = html;
-
-  list.querySelectorAll('.conv-item').forEach(function (el) {
-    el.addEventListener('click', function () {
-      openConversation(el.dataset.kind, el.dataset.id);
-    });
-  });
 }
 
 // ==================== Render: Pinned Bar ====================

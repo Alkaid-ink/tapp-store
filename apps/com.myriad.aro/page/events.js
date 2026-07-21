@@ -79,17 +79,40 @@
     btn.addEventListener('click', function () { switchFeedSubTab(btn.dataset.sub); });
   });
   // Messenger sidebar: 最近 / 私信 / 群聊 + 已关闭 chip
-  document.querySelectorAll('.conv-tab').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      if (typeof setConvTab === 'function') setConvTab(btn.getAttribute('data-conv-tab') || 'recent');
+  // Prefer bar-level delegation so re-renders / i18n text swaps never drop handlers.
+  var convTabsBar = $('conv-tabs-bar') || document.querySelector('.conv-tabs-bar');
+  if (convTabsBar && convTabsBar.dataset.convTabsBound !== '1') {
+    convTabsBar.dataset.convTabsBound = '1';
+    convTabsBar.addEventListener('click', function (e) {
+      var tabBtn = e.target && e.target.closest ? e.target.closest('.conv-tab') : null;
+      if (tabBtn && convTabsBar.contains(tabBtn)) {
+        e.preventDefault();
+        if (typeof setConvTab === 'function') {
+          setConvTab(tabBtn.getAttribute('data-conv-tab') || 'recent');
+        }
+        return;
+      }
+      var chip = e.target && e.target.closest ? e.target.closest('#conv-closed-toggle, .conv-closed-chip') : null;
+      if (chip && convTabsBar.contains(chip)) {
+        e.preventDefault();
+        if (typeof toggleShowClosed === 'function') toggleShowClosed();
+      }
     });
-  });
-  var closedToggle = $('conv-closed-toggle');
-  if (closedToggle) {
-    closedToggle.addEventListener('click', function () {
-      if (typeof toggleShowClosed === 'function') toggleShowClosed();
+  } else {
+    document.querySelectorAll('.conv-tab').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (typeof setConvTab === 'function') setConvTab(btn.getAttribute('data-conv-tab') || 'recent');
+      });
     });
+    var closedToggle = $('conv-closed-toggle');
+    if (closedToggle) {
+      closedToggle.addEventListener('click', function () {
+        if (typeof toggleShowClosed === 'function') toggleShowClosed();
+      });
+    }
   }
+  // Conversation list: stable delegation (also re-asserted in renderConvList)
+  if (typeof bindConvListClicks === 'function') bindConvListClicks();
   var feedFollowBtn = $('feed-follow-btn');
   if (feedFollowBtn) feedFollowBtn.addEventListener('click', doFollow);
   var feedFollowInput = $('feed-follow-input');
@@ -273,6 +296,8 @@
   var backBtn = $('back-btn');
   if (backBtn) {
     backBtn.addEventListener('click', function () {
+      // Invalidate in-flight open/poll so leaving chat cannot flash stale messages.
+      state.openGen = (state.openGen || 0) + 1;
       var sidebar = $('sidebar');
       var chat = $('chat-container');
       var members = $('member-panel');
@@ -308,6 +333,7 @@
       state.channelDetail = null;
       state.roomDetail = null;
       state.members = [];
+      state.chatLoadError = null;
       renderConvList();
       updateSendState();
     });
