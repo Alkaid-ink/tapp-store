@@ -63,6 +63,14 @@ function isRoomFilesOpen() {
   return !!(overlay && overlay.style.display !== 'none' && !overlay.hidden);
 }
 
+function sealRoomFilesOverlay(overlay) {
+  if (!overlay) return;
+  overlay.classList.remove('aro-history-enter', 'aro-leaving');
+  overlay.style.display = 'none';
+  overlay.hidden = true;
+  overlay.style.pointerEvents = 'none';
+}
+
 function closeRoomFiles() {
   var rf = ensureRoomFilesState();
   rf.open = false;
@@ -71,16 +79,21 @@ function closeRoomFiles() {
     rf.searchTimer = null;
   }
   var overlay = $('room-files-overlay');
-  if (!overlay || overlay.style.display === 'none') return;
+  if (!overlay) return;
+  // Always seal pointer-events so a stuck flex overlay cannot block the list
+  if (overlay.style.display === 'none' || overlay.hidden) {
+    sealRoomFilesOverlay(overlay);
+    return;
+  }
   overlay.classList.remove('aro-history-enter');
+  overlay.style.pointerEvents = 'none';
   if (typeof aroDismiss === 'function') {
     aroDismiss(overlay, {
       ms: 160,
-      onDone: function () { overlay.hidden = true; },
+      onDone: function () { sealRoomFilesOverlay(overlay); },
     });
   } else {
-    overlay.style.display = 'none';
-    overlay.hidden = true;
+    sealRoomFilesOverlay(overlay);
   }
 }
 
@@ -395,6 +408,7 @@ async function openRoomFiles() {
   if (!overlay) return;
   overlay.hidden = false;
   overlay.style.display = 'flex';
+  overlay.style.pointerEvents = 'auto';
   overlay.classList.remove('aro-leaving', 'aro-history-enter');
   try { void overlay.offsetWidth; } catch (eAnim) { /* ignore */ }
   if (!(typeof prefersReducedMotion === 'function' && prefersReducedMotion())) {

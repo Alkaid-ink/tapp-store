@@ -43,72 +43,36 @@ function filterConversationItems(items, query) {
 }
 
 /**
- * Apply messenger list filter.
- * - showClosed on: only closed conversations (covers type tab; type selection kept).
- * - showClosed off: recent | dm | room type tabs (non-closed only).
+ * Apply messenger list filter: recent | dm | room only.
+ * Closed conversations are always excluded from the main list
+ * (no UI to browse closed; composer lock for closed detail can remain).
  * recent = open DMs + rooms, sorted by existing last-activity order.
  */
 function filterConversationByTab(items) {
-  if (state.showClosed) {
-    return items.filter(function (item) {
-      // Closed channels; rooms with closed membership if that ever appears
-      if (item.kind === 'channel') return item.status === 'closed';
-      if (item.kind === 'room') return item.status === 'closed';
-      return false;
-    });
-  }
   var tab = state.convTab || 'recent';
   return items.filter(function (item) {
-    if (tab === 'dm') {
-      return item.kind === 'channel' && item.status !== 'closed';
-    }
-    if (tab === 'room') {
-      return item.kind === 'room' && item.status !== 'closed';
-    }
+    if (item.status === 'closed') return false;
+    if (tab === 'dm') return item.kind === 'channel';
+    if (tab === 'room') return item.kind === 'room';
     // recent (default): non-closed DMs + rooms
-    if (item.kind === 'channel') return item.status !== 'closed';
-    if (item.kind === 'room') return item.status !== 'closed';
-    return false;
+    return item.kind === 'channel' || item.kind === 'room';
   });
 }
 
 function syncConvTabsUi() {
   var tab = state.convTab || 'recent';
-  var closedOn = !!state.showClosed;
   document.querySelectorAll('.conv-tab').forEach(function (btn) {
     var on = btn.getAttribute('data-conv-tab') === tab;
     btn.classList.toggle('conv-tab-active', on);
     if (btn.setAttribute) btn.setAttribute('aria-selected', on ? 'true' : 'false');
   });
-  var bar = $('conv-tabs-bar') || document.querySelector('.conv-tabs-bar');
-  if (bar) bar.classList.toggle('conv-tabs-closed-mode', closedOn);
-  var tabs = $('conv-tabs');
-  if (tabs) tabs.classList.toggle('conv-tabs-dimmed', closedOn);
-  var chip = $('conv-closed-toggle');
-  if (chip) {
-    chip.classList.toggle('conv-closed-chip-active', closedOn);
-    chip.setAttribute('aria-pressed', closedOn ? 'true' : 'false');
-  }
 }
 
 function setConvTab(tab) {
   if (tab !== 'recent' && tab !== 'dm' && tab !== 'room') tab = 'recent';
   state.convTab = tab;
-  // Leaving closed mode when user picks a type tab so tabs feel immediately clickable
-  // (closed chip stays available; list returns to the selected type filter).
-  if (state.showClosed) state.showClosed = false;
   syncConvTabsUi();
   renderConvList();
-}
-
-function setShowClosed(on) {
-  state.showClosed = !!on;
-  syncConvTabsUi();
-  renderConvList();
-}
-
-function toggleShowClosed() {
-  setShowClosed(!state.showClosed);
 }
 
 /**
@@ -146,10 +110,7 @@ function renderConvList() {
   if (tabItems.length === 0 && !q) {
     var emptyTitle = lang.noConv || lang.title || 'Messenger';
     var emptyHint = lang.noConvHint || lang.selectHint || 'Start a chat with +';
-    if (state.showClosed) {
-      emptyTitle = lang.convTabClosedEmpty || lang.closed || 'Closed';
-      emptyHint = lang.convTabClosedEmptyHint || 'No closed chats';
-    } else if ((state.convTab || 'recent') === 'room') {
+    if ((state.convTab || 'recent') === 'room') {
       emptyTitle = lang.convTabRoomEmpty || lang.rooms || lang.convTabRoom || 'Groups';
       emptyHint = lang.convTabRoomEmptyHint || lang.noRoomsHint || lang.noConvHint || emptyHint;
     } else if ((state.convTab || 'recent') === 'dm') {
@@ -188,10 +149,6 @@ function renderConvList() {
       + '<span class="conv-preview">' + esc(item.preview) + '</span>';
     if (item.unread > 0) {
       html += '<span class="conv-badge">' + (item.unread > 9 ? '9+' : item.unread) + '</span>';
-    }
-    // Closed badge only in closed filter (never on recent/dm/room rows)
-    if (state.showClosed && item.status === 'closed') {
-      html += '<span class="conv-closed">' + esc(lang.closed) + '</span>';
     }
     if (item.status === 'pending' && item.initiatedBy === 'remote') {
       html += '<span class="conv-pending">' + esc(lang.pending) + '</span>';

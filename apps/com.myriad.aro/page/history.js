@@ -229,6 +229,7 @@ function openChatHistory() {
   if (!overlay) return;
   overlay.hidden = false;
   overlay.style.display = 'flex';
+  overlay.style.pointerEvents = 'auto';
   overlay.classList.remove('aro-leaving', 'aro-history-enter');
   // Restart enter animation
   try { void overlay.offsetWidth; } catch (eAnim) { /* ignore */ }
@@ -261,22 +262,36 @@ function openChatHistory() {
   }
 }
 
+function sealHistoryOverlay(overlay) {
+  if (!overlay) return;
+  overlay.classList.remove('aro-history-enter', 'aro-leaving');
+  overlay.style.display = 'none';
+  overlay.hidden = true;
+  overlay.style.pointerEvents = 'none';
+}
+
 function closeChatHistory() {
   ensureHistoryState();
   state.history.open = false;
   var overlay = $('chat-history-overlay');
-  if (!overlay || overlay.style.display === 'none') return;
+  if (!overlay) return;
+  // Always seal pointer-events so a stuck flex overlay cannot block the list
+  if (overlay.style.display === 'none' || overlay.hidden) {
+    sealHistoryOverlay(overlay);
+    return;
+  }
   overlay.classList.remove('aro-history-enter');
+  // Block hits immediately while exit animation runs
+  overlay.style.pointerEvents = 'none';
   if (typeof aroDismiss === 'function') {
     aroDismiss(overlay, {
       ms: 160,
       onDone: function () {
-        overlay.hidden = true;
+        sealHistoryOverlay(overlay);
       },
     });
   } else {
-    overlay.style.display = 'none';
-    overlay.hidden = true;
+    sealHistoryOverlay(overlay);
   }
 }
 
