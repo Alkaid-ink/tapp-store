@@ -33,6 +33,11 @@ var state = {
   convTab: 'recent',
   /** When true, list shows only closed conversations (overrides type tab filter). */
   showClosed: false,
+  /**
+   * Monotonic generation for openConversation / poll / realtime apply.
+   * Bumped on every open or leave so stale awaits cannot flashback UI.
+   */
+  openGen: 0,
   // Aro views
   currentView: 'feed',
   // Feed (merged timeline + profile)

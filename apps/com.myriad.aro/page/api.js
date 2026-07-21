@@ -36,9 +36,32 @@ async function loadConversations() {
   }
 }
 
+/**
+ * True if this openGeneration is still the latest conversation open.
+ * Used after every await so rapid A→B switches cannot flashback A.
+ */
+function isOpenGenCurrent(gen) {
+  return gen != null && gen === state.openGen;
+}
+
+/** True if UI is still showing this conversation (kind+id) for gen. */
+function isConversationCurrent(kind, id, gen) {
+  if (gen != null && gen !== state.openGen) return false;
+  return state.activeKind === kind && state.activeId === id;
+}
+
 async function openConversation(kind, id) {
+  if (!kind || !id) return;
+  // Invalidate any in-flight open/poll/realtime apply for the previous target.
+  var gen = (state.openGen = (state.openGen || 0) + 1);
+
+  // Stop poll immediately so a prior interval cannot write into the new shell.
+  stopPolling();
+
   // Drop previous realtime subscription before switching
   await unsubscribeRealtime();
+  if (!isOpenGenCurrent(gen)) return;
+
   if (typeof resetHistoryOnConversationChange === 'function') resetHistoryOnConversationChange();
   if (typeof resetRoomFilesOnConversationChange === 'function') resetRoomFilesOnConversationChange();
 
@@ -57,16 +80,23 @@ async function openConversation(kind, id) {
   if (typeof closeAttachMenu === 'function') closeAttachMenu();
   if (typeof updateSendState === 'function') updateSendState();
 
-  $('empty-state').style.display = 'none';
+  var emptyEl = $('empty-state');
+  if (emptyEl) emptyEl.style.display = 'none';
   var chatEl = $('chat-container');
   if (chatEl) {
     chatEl.style.display = '';
-    aroPlayEnter(chatEl, 'aro-panel-enter');
+    // Only animate enter when this open is still current (avoids double-play on rapid switch)
+    if (isOpenGenCurrent(gen) && typeof aroPlayEnter === 'function') {
+      aroPlayEnter(chatEl, 'aro-panel-enter');
+    }
   }
-  $('sidebar').classList.add('sidebar-hidden-mobile');
+  var sideEl = $('sidebar');
+  if (sideEl) sideEl.classList.add('sidebar-hidden-mobile');
 
   renderMessages();
   renderChatHeader();
+  // Refresh active highlight without waiting for network
+  renderConvList();
 
   try {
     if (kind === 'channel') {
@@ -74,6 +104,7 @@ async function openConversation(kind, id) {
         Tapp.federation.getChannel(id),
         Tapp.federation.getMessages(id, undefined, 200),
       ]);
+      if (!isConversationCurrent(kind, id, gen)) return;
       if (results[0]) {
         state.channelDetail = results[0];
         // Derive local actor URL: find a message sender that is NOT the remote actor
@@ -99,6 +130,7 @@ async function openConversation(kind, id) {
         Tapp.federation.getRoomMembers(id),
         Tapp.federation.getRoomMessages(id, undefined, 200),
       ]);
+      if (!isConversationCurrent(kind, id, gen)) return;
       if (roomParts[0].status === 'fulfilled' && roomParts[0].value) {
         state.roomDetail = roomParts[0].value;
       } else if (roomParts[0].status === 'rejected') {
@@ -124,10 +156,13 @@ async function openConversation(kind, id) {
       }
     }
   } catch (e) {
+    if (!isConversationCurrent(kind, id, gen)) return;
     console.error('[Aro] openConversation failed:', e);
     state.chatLoadError = (e && (e.message || e.error || String(e))) || (lang.loadFail || 'Load failed');
     notifyError(lang.loadFail || lang.sendFail || 'Load failed', e);
   }
+
+  if (!isConversationCurrent(kind, id, gen)) return;
 
   renderChatHeader();
   renderMessages();
@@ -136,9 +171,10 @@ async function openConversation(kind, id) {
   updateSendState();
   startPolling();
   subscribeRealtime();
-  // Best-effort E2E key publish after open (non-blocking)
+  // Best-effort E2E key publish after open (non-blocking); ignore if user already left
   if (typeof maybePublishE2eKeys === 'function') {
     maybePublishE2eKeys().then(function () {
+      if (!isConversationCurrent(kind, id, gen)) return;
       if (typeof maybeAnnounceE2eEstablished === 'function') maybeAnnounceE2eEstablished();
     }).catch(function () {});
   } else if (typeof maybeAnnounceE2eEstablished === 'function') {
@@ -714,6 +750,8 @@ function messagesFingerprint(msgs) {
 
 function mergeIncomingMessage(msg) {
   if (!msg || !msg.message_id) return false;
+  // Realtime can race a conversation switch; never mutate without an active chat.
+  if (!state.activeId || !state.activeKind) return false;
   for (var i = 0; i < state.messages.length; i++) {
     if (state.messages[i].message_id === msg.message_id) {
       state.messages[i] = Object.assign({}, state.messages[i], msg);
@@ -730,13 +768,18 @@ function mergeIncomingMessage(msg) {
 
 async function pollMessages(force) {
   if (!state.activeId || !state.activeKind) return;
+  // Snapshot target so a mid-flight conversation switch cannot apply wrong msgs.
+  var kind = state.activeKind;
+  var id = state.activeId;
+  var gen = state.openGen;
   try {
     var res;
-    if (state.activeKind === 'channel') {
-      res = await Tapp.federation.getMessages(state.activeId, undefined, 200);
+    if (kind === 'channel') {
+      res = await Tapp.federation.getMessages(id, undefined, 200);
     } else {
-      res = await Tapp.federation.getRoomMessages(state.activeId, undefined, 200);
+      res = await Tapp.federation.getRoomMessages(id, undefined, 200);
     }
+    if (!isConversationCurrent(kind, id, gen)) return;
     if (res) {
       var msgs = res.messages || [];
       var fp = messagesFingerprint(msgs);
@@ -770,18 +813,39 @@ function stopPolling() {
 
 async function subscribeRealtime() {
   if (!state.activeId || !state.activeKind || !Tapp.federation) return;
+  var kind = state.activeKind;
+  var id = state.activeId;
+  var gen = state.openGen;
   // Already subscribed to this conversation
-  if (state.subscribedKind === state.activeKind && state.subscribedId === state.activeId) return;
+  if (state.subscribedKind === kind && state.subscribedId === id) return;
   await unsubscribeRealtime();
+  if (!isConversationCurrent(kind, id, gen)) return;
   try {
-    if (state.activeKind === 'channel' && typeof Tapp.federation.subscribeChannel === 'function') {
-      await Tapp.federation.subscribeChannel(state.activeId);
+    if (kind === 'channel' && typeof Tapp.federation.subscribeChannel === 'function') {
+      await Tapp.federation.subscribeChannel(id);
+      if (!isConversationCurrent(kind, id, gen)) {
+        // User already left — best-effort drop this sub
+        try {
+          if (typeof Tapp.federation.unsubscribeChannel === 'function') {
+            await Tapp.federation.unsubscribeChannel(id);
+          }
+        } catch (eUn) { /* ignore */ }
+        return;
+      }
       state.subscribedKind = 'channel';
-      state.subscribedId = state.activeId;
-    } else if (state.activeKind === 'room' && typeof Tapp.federation.subscribeRoom === 'function') {
-      await Tapp.federation.subscribeRoom(state.activeId);
+      state.subscribedId = id;
+    } else if (kind === 'room' && typeof Tapp.federation.subscribeRoom === 'function') {
+      await Tapp.federation.subscribeRoom(id);
+      if (!isConversationCurrent(kind, id, gen)) {
+        try {
+          if (typeof Tapp.federation.unsubscribeRoom === 'function') {
+            await Tapp.federation.unsubscribeRoom(id);
+          }
+        } catch (eUn2) { /* ignore */ }
+        return;
+      }
       state.subscribedKind = 'room';
-      state.subscribedId = state.activeId;
+      state.subscribedId = id;
     }
   } catch (e) {
     console.warn('[Aro] realtime subscribe failed, falling back to poll:', e);
@@ -810,10 +874,14 @@ function handleRealtimeMessage(ev) {
   var data = ev.data || {};
   var scope = ev.scope;
   var scopeId = scope === 'channel' ? ev.channelId : scope === 'room' ? ev.roomId : null;
+  // Snapshot active target — ignore if user already switched mid-handler chain.
+  var activeKind = state.activeKind;
+  var activeId = state.activeId;
+  var openGen = state.openGen;
   var inScope = false;
-  if (scope === 'channel' && state.activeKind === 'channel' && ev.channelId === state.activeId) {
+  if (scope === 'channel' && activeKind === 'channel' && ev.channelId === activeId) {
     inScope = true;
-  } else if (scope === 'room' && state.activeKind === 'room' && ev.roomId === state.activeId) {
+  } else if (scope === 'room' && activeKind === 'room' && ev.roomId === activeId) {
     inScope = true;
   }
 
@@ -827,12 +895,14 @@ function handleRealtimeMessage(ev) {
   }
 
   if (data.type === 'message' && data.message) {
+    if (!isConversationCurrent(activeKind, activeId, openGen)) return;
     mergeIncomingMessage(data.message);
     // 当前会话但页面在后台时仍提示
     maybeNotifyIncomingMessage(scope, scopeId, data.message);
     return;
   }
   if (data.type === 'room_message_pinned' && data.message_id) {
+    if (!isConversationCurrent(activeKind, activeId, openGen)) return;
     for (var i = 0; i < state.messages.length; i++) {
       if (state.messages[i].message_id === data.message_id) {
         state.messages[i].is_pinned = !!data.is_pinned;
@@ -908,7 +978,10 @@ function handleRealtimeMessage(ev) {
       exitActiveConversationUi(lang.kicked || lang.leave || 'You left the group', true);
       return;
     }
-    Tapp.federation.getRoomMembers(state.activeId).then(function (res) {
+    var roomIdForMembers = state.activeId;
+    var genForMembers = state.openGen;
+    Tapp.federation.getRoomMembers(roomIdForMembers).then(function (res) {
+      if (!isConversationCurrent('room', roomIdForMembers, genForMembers)) return;
       state.members = unwrapRoomMembers(res);
       renderMembers();
       renderChatHeader();
@@ -918,8 +991,8 @@ function handleRealtimeMessage(ev) {
     }
     return;
   }
-  // Unknown event — force a full refresh
-  pollMessages(true);
+  // Unknown event — force a full refresh (pollMessages itself is gen-guarded)
+  if (isConversationCurrent(activeKind, activeId, openGen)) pollMessages(true);
 }
 
 function bindRealtimeListeners() {
@@ -930,15 +1003,22 @@ function bindRealtimeListeners() {
   }
   if (typeof Tapp.federation.onChannelUpdate === 'function') {
     Tapp.federation.onChannelUpdate(function (ev) {
-      if (!ev || ev.channelId !== state.activeId || state.activeKind !== 'channel') return;
-      if (ev.event === 'closed') {
-        if (state.channelDetail) state.channelDetail.status = 'closed';
-        for (var i = 0; i < state.channels.length; i++) {
-          if (state.channels[i].channel_id === state.activeId) {
-            state.channels[i].status = 'closed';
+      if (!ev || !ev.channelId) return;
+      // List-level status can update even when another chat is open
+      if (ev.event === 'closed' || ev.event === 'accepted') {
+        for (var ci = 0; ci < state.channels.length; ci++) {
+          if (state.channels[ci].channel_id === ev.channelId) {
+            state.channels[ci].status = ev.event === 'closed' ? 'closed' : 'accepted';
             break;
           }
         }
+      }
+      if (ev.channelId !== state.activeId || state.activeKind !== 'channel') {
+        if (ev.event === 'closed' || ev.event === 'accepted') renderConvList();
+        return;
+      }
+      if (ev.event === 'closed') {
+        if (state.channelDetail) state.channelDetail.status = 'closed';
         clearPendingAttach();
         if (typeof clearQuote === 'function') clearQuote();
         closeAttachMenu();
@@ -948,12 +1028,6 @@ function bindRealtimeListeners() {
       } else if (ev.event === 'accepted') {
         // Remote accepted our pending open — unlock composer (backend status is accepted).
         if (state.channelDetail) state.channelDetail.status = 'accepted';
-        for (var j = 0; j < state.channels.length; j++) {
-          if (state.channels[j].channel_id === state.activeId) {
-            state.channels[j].status = 'accepted';
-            break;
-          }
-        }
         renderChatHeader();
         renderConvList();
         updateSendState();
@@ -975,14 +1049,16 @@ function bindRealtimeListeners() {
         return;
       }
       if (ev.roomId !== state.activeId || state.activeKind !== 'room') return;
+      var roomId = ev.roomId;
+      var gen = state.openGen;
       if (ev.event === 'disconnected') pollMessages(true);
       else if (ev.event === 'governance_changed') {
-        Tapp.federation.getRoom(state.activeId).then(function (detail) {
-          if (!detail) return;
+        Tapp.federation.getRoom(roomId).then(function (detail) {
+          if (!detail || !isConversationCurrent('room', roomId, gen)) return;
           state.roomDetail = detail;
           // Keep conv list in sync with federated renames (not only header).
           for (var gi = 0; gi < state.rooms.length; gi++) {
-            if (state.rooms[gi].room_id === state.activeId) {
+            if (state.rooms[gi].room_id === roomId) {
               if (detail.name) state.rooms[gi].name = detail.name;
               if (detail.description !== undefined) state.rooms[gi].description = detail.description;
               if (detail.avatar_url !== undefined) state.rooms[gi].avatar_url = detail.avatar_url;
@@ -998,7 +1074,8 @@ function bindRealtimeListeners() {
         || ev.event === 'member_removed'
         || ev.event === 'member_invited'
       ) {
-        Tapp.federation.getRoomMembers(state.activeId).then(function (res) {
+        Tapp.federation.getRoomMembers(roomId).then(function (res) {
+          if (!isConversationCurrent('room', roomId, gen)) return;
           state.members = unwrapRoomMembers(res);
           renderMembers();
           renderChatHeader();
@@ -1371,6 +1448,8 @@ async function doKickMember(actorUrl) {
  * @param {boolean} [asError]
  */
 function exitActiveConversationUi(toastTitle, asError) {
+  // Invalidate in-flight open/poll so they cannot resurrect this chat UI.
+  state.openGen = (state.openGen || 0) + 1;
   try {
     if (typeof unsubscribeRealtime === 'function') unsubscribeRealtime();
   } catch (e0) { /* ignore */ }
@@ -1732,6 +1811,7 @@ async function doJoinRoomById() {
 function switchView(view) {
   if (state.isGuest && view !== 'feed') view = 'feed';
   var prev = state.currentView;
+  if (prev === view) return;
   state.currentView = view;
   var views = ['messages', 'feed', 'rings'];
   views.forEach(function (v) {
@@ -1752,7 +1832,8 @@ function switchView(view) {
   document.querySelectorAll('.aro-nav-item').forEach(function (btn) {
     btn.classList.toggle('aro-nav-active', btn.dataset.view === view);
   });
-  // Pause chat poll when not on messages; keep WS for quick resume
+  // Pause chat poll when not on messages; keep WS for quick resume.
+  // Do not bump openGen here — active conversation should survive nav away/back.
   if (view === 'messages') {
     if (state.activeId) startPolling();
   } else {

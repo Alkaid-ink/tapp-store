@@ -1839,8 +1839,9 @@ function applyLabels() {
   el = $('conv-tab-recent'); if (el) el.textContent = lang.convTabRecent || 'Recent';
   el = $('conv-tab-dm'); if (el) el.textContent = lang.convTabDm || lang.dm || 'DMs';
   el = $('conv-tab-room'); if (el) el.textContent = lang.convTabRoom || lang.rooms || 'Groups';
+  // Closed chip only — never inject into #conv-tabs or empty-state nodes
   el = $('conv-closed-toggle');
-  if (el) {
+  if (el && el.classList && el.classList.contains('conv-closed-chip')) {
     var closedLabel = lang.convTabClosed || lang.closed || 'Closed';
     el.textContent = closedLabel;
     el.setAttribute('title', closedLabel);
