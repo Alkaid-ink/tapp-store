@@ -1,8 +1,8 @@
 <div id="tapp-background">
-  <div class="ddz-bg" aria-hidden="true">
-    <div class="ddz-bg-glow ddz-bg-glow-a"></div>
-    <div class="ddz-bg-glow ddz-bg-glow-b"></div>
+  <div class="ddz-bg" aria-hidden="true" data-texture-layers="scene,felt">
+    <div class="ddz-bg-scene"></div>
     <div class="ddz-bg-felt"></div>
+    <div class="ddz-bg-vignette"></div>
   </div>
 </div>
 
@@ -169,7 +169,7 @@
       <div id="ddz-play-btns" class="ddz-control-group hidden" role="group" aria-label="出牌">
         <button type="button" class="ddz-btn ddz-btn-hint" id="ddz-hint" title="提示可出牌型，再次点击切换">提示</button>
         <button type="button" class="ddz-btn ddz-btn-accent" id="ddz-play">出牌</button>
-        <button type="button" class="ddz-btn ddz-btn-ghost" id="ddz-pass">过牌</button>
+        <button type="button" class="ddz-btn ddz-btn-pass" id="ddz-pass">过牌</button>
         <button type="button" class="ddz-btn ddz-btn-ghost" id="ddz-clear">取消选择</button>
       </div>
       <div id="ddz-end-btns" class="ddz-control-group hidden" role="group" aria-label="终局">
