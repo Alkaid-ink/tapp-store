@@ -1213,7 +1213,15 @@ html, body {
 
 .playlist-scroll {
   flex: 1;
+  /* flex 默认 min-height:auto 会按内容撑开，导致自身 scrollHeight==clientHeight、
+     实际无法滚动，移动端只能橡皮筋回弹。必须允许在面板内收缩。 */
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  /* 明确允许纵向平移手势，避免子项 touch-action 干扰原生滚动 */
+  touch-action: pan-y;
   padding: 12px 8px 16px;
 }
 
@@ -1243,7 +1251,9 @@ html, body {
   position: relative;
   transition: background var(--transition-fast);
   -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
+  /* pan-y：列表项上的触摸可交给父级 .playlist-scroll 做纵向滚动；
+     manipulation 在部分 WebView 会干扰嵌套滚动手势 */
+  touch-action: pan-y;
 }
 
 .playlist-item:hover {
