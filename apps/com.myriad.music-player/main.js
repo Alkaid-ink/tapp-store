@@ -366,6 +366,7 @@ var lyricFx = {
   total: 0,
   viewH: 0,
   measured: false,
+  measuredWithTrans: false, // 本次测量时 show-trans 是否开启（行高与翻译显隐绑定）
   targetS: 0,         // 虚拟滚动位置
   minS: 0,
   maxS: 0,
@@ -377,6 +378,9 @@ var lyricFx = {
   touchT: 0,
   touchV: 0,
   manualBound: false,
+  layoutGen: 0,       // 布局代数：重建/作废时递增，丢弃过期 deferred remeasure
+  songId: null,       // 当前 lyricFx 对应的歌词歌曲 id
+  remeasureRaf: null, // 双 rAF 延迟重测句柄
 };
 var lyricResumeTimer = null;
 
@@ -393,12 +397,39 @@ function stopLyricWave() {
   lyricFx.momentumV = 0;
 }
 
-// 测量行高并建立静态布局（行高与激活态无关——scale 不改布局，只需测一次）
+// 作废测量缓存（切歌/重建/翻译开关），防止沿用上一首歌的 y/h/targetS
+function resetLyricFxLayoutCache(opts) {
+  opts = opts || {};
+  lyricFx.measured = false;
+  lyricFx.measuredWithTrans = false;
+  lyricFx.focusK = -1;
+  lyricFx.momentumV = 0;
+  if (opts.clearScroll !== false) {
+    lyricFx.targetS = 0;
+    lyricFx.minS = 0;
+    lyricFx.maxS = 0;
+    lyricFx.total = 0;
+    lyricFx.viewH = 0;
+  }
+  if (opts.bumpGen !== false) {
+    lyricFx.layoutGen++;
+  }
+  if (lyricFx.remeasureRaf) {
+    cancelAnimationFrame(lyricFx.remeasureRaf);
+    lyricFx.remeasureRaf = null;
+  }
+}
+
+// 测量行高并建立静态布局（行高与激活态无关——scale 不改布局；
+// 但翻译副行 display 会改变行高，故 must 与 show-trans 状态一致后测）
 function measureLyricLayout() {
   var container = $('lyrics-container');
   if (!container || !lyricFx.inner || lyricFx.items.length === 0) return false;
   var h = container.clientHeight;
   if (h === 0) return false; // 面板隐藏，待可见后重测
+  // 强制样式刷盘：保证 show-trans 的 display:block/none 已生效再读 offsetHeight
+  void container.offsetHeight;
+  var showingTrans = container.classList.contains('show-trans');
   var y = 0;
   for (var k = 0; k < lyricFx.items.length; k++) {
     var it = lyricFx.items[k];
@@ -413,7 +444,56 @@ function measureLyricLayout() {
   lyricFx.minS = first.y - h * LYRIC_FOCAL + first.h / 2;
   lyricFx.maxS = last.y - h * LYRIC_FOCAL + last.h / 2;
   lyricFx.measured = true;
+  lyricFx.measuredWithTrans = showingTrans;
   return true;
+}
+
+// 测量是否与当前 show-trans / 容器高度一致；不一致则重测。
+// 连续切歌时若 show-trans 在「无翻译清空 → 新歌有翻译」之间翻转，旧 y/h 会整体错位。
+function ensureLyricLayoutReady() {
+  if (lyricFx.items.length === 0 || !lyricFx.inner) return false;
+  var container = $('lyrics-container');
+  if (!container) return false;
+  var h = container.clientHeight;
+  if (h === 0) return false;
+  var showingTrans = container.classList.contains('show-trans');
+  if (lyricFx.measured &&
+      lyricFx.measuredWithTrans === showingTrans &&
+      Math.abs(h - lyricFx.viewH) <= 4) {
+    return true;
+  }
+  lyricFx.measured = false;
+  return measureLyricLayout();
+}
+
+// 布局稳定后再测一次（字体/换行/show-trans 首帧偶发未就绪）。
+// 用 layoutGen + lyricsSongId 丢弃过期回调，避免快切污染当前布局。
+function scheduleLyricLayoutRemeasure() {
+  if (lyricFx.items.length === 0) return;
+  var gen = lyricFx.layoutGen;
+  var songId = pageState.lyricsSongId;
+  if (lyricFx.remeasureRaf) {
+    cancelAnimationFrame(lyricFx.remeasureRaf);
+    lyricFx.remeasureRaf = null;
+  }
+  lyricFx.remeasureRaf = requestAnimationFrame(function() {
+    lyricFx.remeasureRaf = requestAnimationFrame(function() {
+      lyricFx.remeasureRaf = null;
+      if (gen !== lyricFx.layoutGen) return;
+      if (songId != null && pageState.lyricsSongId !== songId) return;
+      if (lyricFx.items.length === 0) return;
+      lyricFx.measured = false;
+      if (!measureLyricLayout()) return;
+      lyricFx.focusK = -1;
+      if (pageState.autoScrollEnabled) {
+        var idx = pageState.currentLyricIndex >= 0 ? pageState.currentLyricIndex : 0;
+        focusLyricLine(idx, true);
+      } else {
+        lyricFx.targetS = clampLyricS(lyricFx.targetS);
+        snapLyricItems();
+      }
+    });
+  });
 }
 
 function clampLyricS(s) {
@@ -446,7 +526,8 @@ function snapLyricItems() {
 // 否则「先聚焦、后激活」的句子会卡在非激活缩放（歌曲第一句/间奏后第一句）。
 function focusLyricItemK(k, instant) {
   if (k < 0 || k >= lyricFx.items.length) return;
-  if (!lyricFx.measured && !measureLyricLayout()) return;
+  // 翻译显隐/容器高度变化时必须用最新行高，否则 focus 位置偏高/偏低
+  if (!ensureLyricLayoutReady()) return;
   var it = lyricFx.items[k];
   var desiredS = it.y - lyricFx.viewH * LYRIC_FOCAL + it.h / 2;
   // 已聚焦且位置未变：只跳过波浪错峰重置，scale 目标仍要刷新
@@ -485,8 +566,8 @@ function focusLyricLine(lineIdx, instant) {
   if (k >= 0) focusLyricItemK(k, instant);
 }
 
-// 布局自愈：容器高度和上次测量不一致（入场时机早于布局稳定/iframe 尺寸变化/
-// 横竖屏）就重测并回焦——与 tab 切换路径同逻辑。measured 一旦锁定不会自动
+// 布局自愈：容器高度 / show-trans 与上次测量不一致（入场时机早于布局稳定/iframe
+// 尺寸变化/横竖屏/切歌后翻译类翻转）就重测并回焦。measured 一旦锁定不会自动
 // 失效，没有这层守卫，入场早测的错误布局会一直持续
 // allowUnmeasured=true 时对「从未测量成功」（如面板此前隐藏）也重测——tab 切换路径用
 function relayoutLyricsIfNeeded(allowUnmeasured) {
@@ -495,13 +576,18 @@ function relayoutLyricsIfNeeded(allowUnmeasured) {
   var c = $('lyrics-container');
   if (!c) return;
   var h = c.clientHeight;
-  if (h > 0 && (!lyricFx.measured || Math.abs(h - lyricFx.viewH) > 4)) {
-    lyricFx.measured = false;
-    if (measureLyricLayout()) {
-      lyricFx.focusK = -1;
-      var idx = pageState.currentLyricIndex >= 0 ? pageState.currentLyricIndex : 0;
-      focusLyricLine(idx, true);
-    }
+  if (h <= 0) return;
+  var showingTrans = c.classList.contains('show-trans');
+  var need =
+    !lyricFx.measured ||
+    Math.abs(h - lyricFx.viewH) > 4 ||
+    lyricFx.measuredWithTrans !== showingTrans;
+  if (!need) return;
+  lyricFx.measured = false;
+  if (measureLyricLayout()) {
+    lyricFx.focusK = -1;
+    var idx = pageState.currentLyricIndex >= 0 ? pageState.currentLyricIndex : 0;
+    focusLyricLine(idx, true);
   }
 }
 
@@ -518,11 +604,17 @@ function transUsable() {
 }
 
 // 同步翻译容器类 + 开关按钮（可见性/高亮/无障碍文案）
+// 返回 { showing, changed }：changed 表示 show-trans 类是否翻转（调用方需重测布局）
 function syncLyricTransUI() {
   var usable = transUsable();
   var showing = usable && pageState.transOn;
   var container = $('lyrics-container');
-  if (container) container.classList.toggle('show-trans', showing);
+  var changed = false;
+  if (container) {
+    var was = container.classList.contains('show-trans');
+    container.classList.toggle('show-trans', showing);
+    changed = was !== showing;
+  }
   var btn = $('lyric-trans-btn');
   if (btn) {
     btn.hidden = !usable;
@@ -531,6 +623,12 @@ function syncLyricTransUI() {
     btn.setAttribute('aria-label', t('translate'));
     btn.setAttribute('aria-pressed', showing ? 'true' : 'false');
   }
+  // 类翻转立刻作废测量：否则后续 focus 会用旧行高
+  if (changed) {
+    lyricFx.measured = false;
+    lyricFx.measuredWithTrans = false;
+  }
+  return { showing: showing, changed: changed };
 }
 
 // 切换翻译显隐：行高改变 → 重测量布局，波浪引擎把所有行弹到新位置。
@@ -739,7 +837,7 @@ function bindLyricManualScroll(container) {
   lyricFx.manualBound = true;
 
   container.addEventListener('wheel', function(e) {
-    if (!lyricFx.measured) return;
+    if (!ensureLyricLayoutReady()) return;
     e.preventDefault();
     userLyricScrollBegin();
     lyricFx.momentumV = 0;
@@ -757,7 +855,7 @@ function bindLyricManualScroll(container) {
   }, { passive: true });
 
   container.addEventListener('touchmove', function(e) {
-    if (lyricFx.touchY === null || !lyricFx.measured) return;
+    if (lyricFx.touchY === null || !ensureLyricLayoutReady()) return;
     var yNow = e.touches[0].clientY;
     var dy = lyricFx.touchY - yNow;
     lyricFx.touchY = yNow;
@@ -788,6 +886,7 @@ function bindLyricManualScroll(container) {
     if (resizeTimer) clearTimeout(resizeTimer);
     resizeTimer = setTimeout(function() {
       lyricFx.measured = false;
+      lyricFx.measuredWithTrans = false;
       if (measureLyricLayout()) {
         lyricFx.focusK = -1;
         if (pageState.currentLyricIndex >= 0) {
@@ -975,8 +1074,9 @@ function renderLyrics(lyrics, currentIndex) {
   if (!lyrics || lyrics.length === 0) {
     lyricFx.items = [];
     lyricFx.inner = null;
-    lyricFx.measured = false;
-    lyricFx.focusK = -1;
+    lyricFx.dotsItems = [];
+    lyricFx.songId = null;
+    resetLyricFxLayoutCache();
     stopLyricWave();
     container.innerHTML = '<div class="lyrics-empty">' + t('noLyrics') + '</div>';
     return;
@@ -1037,7 +1137,7 @@ function renderLyrics(lyrics, currentIndex) {
     }
   }
 
-  // 焦点跟随：波浪滚动到当前行
+  // 焦点跟随：波浪滚动到当前行（ensureLyricLayoutReady 保证翻译显隐与测量一致）
   if (pageState.autoScrollEnabled && currentIndex >= 0) {
     focusLyricLine(currentIndex);
   }
@@ -1101,11 +1201,16 @@ function buildLyricDom(container, lyrics, currentIndex, isKaraoke) {
     }
   }
 
+  // 重建前作废旧布局缓存（含 targetS / 过期 deferred remeasure），避免快切沿用上首歌 y/h
+  stopLyricWave();
+  resetLyricFxLayoutCache();
+
   container.innerHTML = '';
   container.appendChild(inner);
   container.scrollTop = 0; // 清除旧原生滚动残留偏移（overflow:hidden 仍会保留 scrollTop）
   lyricFx.inner = inner;
   lyricFx.items = items;
+  lyricFx.songId = pageState.lyricsSongId;
   // 间奏点子集缓存（含 items 索引）：15fps 热路径无需全量扫描
   lyricFx.dotsItems = [];
   for (var di = 0; di < items.length; di++) {
@@ -1114,10 +1219,7 @@ function buildLyricDom(container, lyrics, currentIndex, isKaraoke) {
       lyricFx.dotsItems.push(items[di]);
     }
   }
-  lyricFx.measured = false;
-  lyricFx.focusK = -1;
   pageState.lastKaraokeLine = -1;
-  stopLyricWave();
 
   bindLyricClickEvents(container);
   bindLyricManualScroll(container);
@@ -1127,6 +1229,10 @@ function buildLyricDom(container, lyrics, currentIndex, isKaraoke) {
     var k = findLyricItemK(currentIndex >= 0 ? currentIndex : 0);
     if (k < 0) k = 0;
     focusLyricItemK(k, true);
+  }
+  // 翻译开启时：布局稳定后再测一次（连续切歌/字体未就绪时首帧 offsetHeight 常偏小）
+  if (container.classList.contains('show-trans')) {
+    scheduleLyricLayoutRemeasure();
   }
 }
 
@@ -1781,9 +1887,10 @@ function loadLyricsForTrack(track) {
     pageState.lyricsSongId = trackId;
 
     // 翻译可用性（各行 translation 已由桥接层按时间对齐嵌入）
+    // 必须先同步 show-trans，再 render/measure，否则会用「无翻译」行高定位
     pageState.hasTranslation = !!res.hasTranslation;
     pageState.transLang = res.translationLang || '';
-    syncLyricTransUI();
+    var transUi = syncLyricTransUI();
 
     var st = pageState.status || {};
     var pos = st.position || (st.progress ? st.progress.current : 0) || 0;
@@ -1791,6 +1898,10 @@ function loadLyricsForTrack(track) {
     pageState.currentLyricIndex = idx;
     pageState.lastKaraokeLine = -1;
     renderLyrics(pageState.lyrics, idx);
+    // 翻译类刚打开且可能走了增量更新（未 rebuild）：强制按可见行高重测再 focus
+    if (transUi.showing) {
+      scheduleLyricLayoutRemeasure();
+    }
     if (pageState.verbatimLyrics.length > 0) {
       setLyricClock(pos, st.isPlaying);
       updateWordHighlight(pos);
@@ -1823,13 +1934,86 @@ var virtualList = {
   currentTrackId: null,
   searchQuery: '',
   scrollHandler: null,
-  pendingScrollToCurrent: false, // 面板首次可见时滚动到当前歌曲
+  pendingScrollToCurrent: false, // 面板首次可见/列表切换时滚动到当前歌曲
+  // 用户正在手势滚动：禁止 auto-center 抢 scrollTop（移动端回弹根因之一）
+  userScrolling: false,
+  userScrollTimer: null,
+  // 程序化改 scrollTop 时置位，避免 scroll 事件被误判为用户手势
+  programmaticScroll: false,
   // DOM缓存池
   itemPool: [],
   activeItems: new Map(), // index -> DOM element
   lastTotalHeight: 0,
   isRendering: false
 };
+
+// 标记用户在播放列表内滚动；结束后短延迟才允许自动居中
+function markPlaylistUserScroll() {
+  virtualList.userScrolling = true;
+  if (virtualList.userScrollTimer) clearTimeout(virtualList.userScrollTimer);
+  virtualList.userScrollTimer = setTimeout(function() {
+    virtualList.userScrollTimer = null;
+    virtualList.userScrolling = false;
+  }, 180);
+}
+
+// 程序化滚动：短暂屏蔽「用户滚动」判定
+function withProgrammaticPlaylistScroll(fn) {
+  virtualList.programmaticScroll = true;
+  try {
+    fn();
+  } finally {
+    // scroll 事件多在同步路径触发；下一帧再清，覆盖 smooth scroll 起始事件
+    requestAnimationFrame(function() {
+      virtualList.programmaticScroll = false;
+    });
+  }
+}
+
+// 仅在合理时机把当前曲滚到视口中部；用户手势中绝不改 scrollTop
+function scrollPlaylistToCurrent(opts) {
+  opts = opts || {};
+  if (virtualList.userScrolling && !opts.force) return;
+  var scroller = virtualList.scrollContainer || document.querySelector('.playlist-scroll');
+  if (!scroller) return;
+  var trackId = virtualList.currentTrackId ||
+    (pageState.status && pageState.status.currentTrack && pageState.status.currentTrack.id);
+  if (!trackId) return;
+
+  // 虚拟列表：按 itemHeight 算目标
+  if (virtualList.contentWrapper && virtualList.data.length > 0) {
+    var curIdx = -1;
+    for (var k = 0; k < virtualList.data.length; k++) {
+      if (virtualList.data[k].id === trackId) { curIdx = k; break; }
+    }
+    if (curIdx < 0 || scroller.clientHeight <= 0) return;
+    var target = Math.max(0, curIdx * virtualList.itemHeight -
+      scroller.clientHeight / 2 + virtualList.itemHeight / 2);
+    if (Math.abs(scroller.scrollTop - target) <= 1) return;
+    withProgrammaticPlaylistScroll(function() {
+      if (opts.smooth && shouldAnimate() && typeof scroller.scrollTo === 'function') {
+        scroller.scrollTo({ top: target, behavior: 'smooth' });
+      } else {
+        scroller.scrollTop = target;
+      }
+    });
+    return;
+  }
+
+  // 整表模式
+  var active = scroller.querySelector('.playlist-item.active');
+  if (!active) {
+    active = scroller.querySelector('.playlist-item[data-id="' + trackId + '"]');
+  }
+  if (!active) return;
+  withProgrammaticPlaylistScroll(function() {
+    if (opts.smooth && shouldAnimate()) {
+      active.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+      active.scrollIntoView({ behavior: 'auto', block: 'center' });
+    }
+  });
+}
 
 // 初始化虚拟列表
 function initVirtualList() {
@@ -1861,9 +2045,13 @@ function initVirtualList() {
     virtualList.scrollContainer.removeEventListener('scroll', virtualList.scrollHandler);
   }
   
-  // 添加滚动监听（使用节流）
+  // 添加滚动监听（使用节流）；用户滚动时标记，避免 auto-center 回弹
   var lastScrollTime = 0;
   virtualList.scrollHandler = function() {
+    // 程序化 scrollTop/scrollIntoView 也会触发 scroll，不能标成用户手势
+    if (!virtualList.programmaticScroll) {
+      markPlaylistUserScroll();
+    }
     var now = Date.now();
     if (now - lastScrollTime < 16) return; // ~60fps
     lastScrollTime = now;
@@ -2061,24 +2249,33 @@ function renderVisibleItems() {
     }
   }
 
-  // 面板首次可见时，滚动到当前播放歌曲附近
+  // 面板首次可见 / 列表数据切换：滚到当前曲（用户手势中跳过，防回弹）
   if (virtualList.pendingScrollToCurrent && virtualList.currentTrackId &&
       virtualList.scrollContainer.clientHeight > 0) {
-    var curIdx = -1;
-    for (var k = 0; k < dataLen; k++) {
-      if (virtualList.data[k].id === virtualList.currentTrackId) { curIdx = k; break; }
-    }
-    if (curIdx >= 0) {
+    if (virtualList.userScrolling) {
+      // 用户正在滚：丢弃本次自动居中，不要与手势抢 scrollTop
       virtualList.pendingScrollToCurrent = false;
-      var target = Math.max(0, curIdx * virtualList.itemHeight -
-        virtualList.scrollContainer.clientHeight / 2 + virtualList.itemHeight / 2);
-      if (Math.abs(virtualList.scrollContainer.scrollTop - target) > 1) {
-        virtualList.scrollContainer.scrollTop = target;
-        virtualList.visibleStart = -1; // 新位置需重渲，避免空白
-        virtualList.visibleEnd = -1;
-        virtualList.isRendering = false;
-        renderVisibleItems();
-        return;
+    } else {
+      var curIdx = -1;
+      for (var k = 0; k < dataLen; k++) {
+        if (virtualList.data[k].id === virtualList.currentTrackId) { curIdx = k; break; }
+      }
+      if (curIdx >= 0) {
+        virtualList.pendingScrollToCurrent = false;
+        var target = Math.max(0, curIdx * virtualList.itemHeight -
+          virtualList.scrollContainer.clientHeight / 2 + virtualList.itemHeight / 2);
+        if (Math.abs(virtualList.scrollContainer.scrollTop - target) > 1) {
+          withProgrammaticPlaylistScroll(function() {
+            virtualList.scrollContainer.scrollTop = target;
+          });
+          virtualList.visibleStart = -1; // 新位置需重渲，避免空白
+          virtualList.visibleEnd = -1;
+          virtualList.isRendering = false;
+          renderVisibleItems();
+          return;
+        }
+      } else {
+        virtualList.pendingScrollToCurrent = false;
       }
     }
   }
@@ -2097,6 +2294,7 @@ function refreshPlaylistView() {
 
 // 播放列表点击/触摸委托 —— 绑定一次到常驻容器
 // 用 touchend + click 双通道，兼容 webview 里 click 事件不稳定的情况（切歌失效根因）
+// 滚动与点击分离：移动超过阈值不触发选歌；绝不 preventDefault touchmove（否则无法滚）
 var playlistActivationBound = false;
 function bindPlaylistActivation() {
   var container = $('playlist-container');
@@ -2111,27 +2309,46 @@ function bindPlaylistActivation() {
   }
 
   var startX = 0, startY = 0, moved = false;
+  // 阈值略大：拇指滚动时微小抖动不应被当成点击
+  var MOVE_THRESHOLD = 12;
   container.addEventListener('touchstart', function(e) {
     var tt = e.touches[0];
     startX = tt.clientX; startY = tt.clientY; moved = false;
   }, { passive: true });
   container.addEventListener('touchmove', function(e) {
     var tt = e.touches[0];
-    if (Math.abs(tt.clientX - startX) > 10 || Math.abs(tt.clientY - startY) > 10) moved = true;
+    if (Math.abs(tt.clientX - startX) > MOVE_THRESHOLD ||
+        Math.abs(tt.clientY - startY) > MOVE_THRESHOLD) {
+      moved = true;
+      markPlaylistUserScroll();
+    }
+    // 注意：不 preventDefault，保持原生 overflow 滚动
   }, { passive: true });
   container.addEventListener('touchend', function(e) {
     if (moved) return;
     var tt = e.changedTouches[0];
     var el = tt ? document.elementFromPoint(tt.clientX, tt.clientY) : null;
-    if (el) { e.preventDefault(); activate(el); } // preventDefault 抑制随后合成的 click，避免双触发
+    if (el) {
+      // 仅在确认是点击时 suppress 合成 click，避免双触发；滚动路径绝不拦截
+      e.preventDefault();
+      activate(el);
+    }
   }, { passive: false });
   container.addEventListener('click', function(e) {
+    // 桌面端主路径；移动端 touchend 已 preventDefault 抑制合成 click
+    if (moved) return;
     activate(e.target);
   });
 }
 
 // 打开播放列表面板：此刻才有真实高度，填满可见项并滚到当前歌曲
 function revealPlaylist() {
+  // 用户刚打开面板：允许强制居中（force 覆盖 userScrolling）
+  virtualList.userScrolling = false;
+  if (virtualList.userScrollTimer) {
+    clearTimeout(virtualList.userScrollTimer);
+    virtualList.userScrollTimer = null;
+  }
   if (virtualList.contentWrapper && virtualList.data.length > 0) {
     // 一次全量重渲：重测高度 + 滚到当前歌曲（由 renderVisibleItems 内统一处理）
     virtualList.measured = false;
@@ -2140,10 +2357,7 @@ function revealPlaylist() {
     virtualList.visibleEnd = -1;
     renderVisibleItems();
   } else {
-    // 整表模式：滚动当前歌曲到中间
-    var scroller = document.querySelector('.playlist-scroll');
-    var active = scroller && scroller.querySelector('.playlist-item.active');
-    if (active) active.scrollIntoView({ block: 'center' });
+    scrollPlaylistToCurrent({ force: true });
   }
 }
 
@@ -2211,11 +2425,14 @@ function renderPlaylist(playlist, currentTrack, searchQuery) {
   }
   
   var newTrackId = currentTrack ? currentTrack.id : null;
+  // shouldScrollToCurrent：仅列表数据/搜索变化时居中；纯切曲只更新 active，不抢滚动
+  var shouldScrollToCurrent = false;
 
   // 中小列表直接整表渲染（图片懒加载，性能足够，且保证全部歌曲可见）；
   // 仅超大列表才用虚拟滚动
   if (filteredList.length <= 200) {
-    renderPlaylistSimple(filteredList, currentTrack);
+    shouldScrollToCurrent = !searchQuery;
+    renderPlaylistSimple(filteredList, currentTrack, shouldScrollToCurrent);
   } else {
     // 检查是否只是currentTrack变化
     var onlyTrackChanged = virtualList.data === filteredList &&
@@ -2230,38 +2447,31 @@ function renderPlaylist(playlist, currentTrack, searchQuery) {
       virtualList.searchQuery = searchQuery;
       virtualList.visibleStart = -1; // 强制重新渲染
       virtualList.visibleEnd = -1;
-      // 数据变化：面板下次可见时滚动到当前歌曲
-      if (!searchQuery) virtualList.pendingScrollToCurrent = true;
+      // 数据变化：滚到当前歌曲（用户手势中由 renderVisibleItems 丢弃）
+      if (!searchQuery) {
+        virtualList.pendingScrollToCurrent = true;
+        shouldScrollToCurrent = true;
+      }
     }
     
     renderVisibleItems();
     
-    // 滚动到当前播放
-    if (!searchQuery && currentTrack && !onlyTrackChanged) {
-      var activeIndex = -1;
-      for (var j = 0; j < filteredList.length; j++) {
-        if (filteredList[j].id === currentTrack.id) {
-          activeIndex = j;
-          break;
+    // 列表数据刚变：一次居中即可（pendingScroll 已在 render 内处理；
+    // 此处不再 setTimeout 二次 scrollTop，避免与用户手势/首次居中打架回弹）
+    if (shouldScrollToCurrent && currentTrack && !virtualList.userScrolling) {
+      // renderVisibleItems 可能因 clientHeight=0 未完成居中，下一帧再试一次
+      requestAnimationFrame(function() {
+        if (virtualList.pendingScrollToCurrent) {
+          renderVisibleItems();
         }
-      }
-      if (activeIndex >= 0) {
-        setTimeout(function() {
-          var scrollTop = activeIndex * virtualList.itemHeight - virtualList.scrollContainer.clientHeight / 2 + virtualList.itemHeight / 2;
-          // 根据动画配置决定滚动行为
-          if (shouldAnimate()) {
-            virtualList.scrollContainer.scrollTo({ top: Math.max(0, scrollTop), behavior: 'smooth' });
-          } else {
-            virtualList.scrollContainer.scrollTop = Math.max(0, scrollTop);
-          }
-        }, shouldAnimate() ? 100 : 0);
-      }
+      });
     }
   }
 }
 
 // 简单渲染（小列表）
-function renderPlaylistSimple(filteredList, currentTrack) {
+// scrollToCurrent：是否滚到当前曲。搜索/用户滚动中应传 false，避免列表一滚就弹回
+function renderPlaylistSimple(filteredList, currentTrack, scrollToCurrent) {
   var container = $('playlist-container');
   if (!container) return;
   
@@ -2271,6 +2481,7 @@ function renderPlaylistSimple(filteredList, currentTrack) {
   virtualList.activeItems.clear();
   virtualList.visibleStart = -1;
   virtualList.visibleEnd = -1;
+  virtualList.currentTrackId = currentTrack ? currentTrack.id : null;
   
   var currentTrackId = currentTrack ? currentTrack.id : null;
   var fragment = document.createDocumentFragment();
@@ -2288,24 +2499,24 @@ function renderPlaylistSimple(filteredList, currentTrack) {
     fragment.appendChild(el);
   }
   
+  // 保留滚动位置：整表重建时浏览器会把 scrollTop 清零，先记下再恢复
+  var prevScrollTop = container.scrollTop;
   container.innerHTML = '';
   container.appendChild(fragment);
 
   // 点击/触摸委托绑定在常驻容器上（幂等）
   bindPlaylistActivation();
 
-  // 滚动到当前播放
-  if (currentTrack) {
-    var activeItem = container.querySelector('.playlist-item.active');
-    if (activeItem) {
-      requestAnimationFrame(function() {
-        if (shouldAnimate()) {
-          activeItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        } else {
-          activeItem.scrollIntoView({ behavior: 'auto', block: 'center' });
-        }
-      });
-    }
+  if (scrollToCurrent && currentTrack && !virtualList.userScrolling) {
+    requestAnimationFrame(function() {
+      if (virtualList.userScrolling) return;
+      scrollPlaylistToCurrent({ smooth: true });
+    });
+  } else if (!scrollToCurrent && prevScrollTop > 0) {
+    // 重建后恢复用户滚动位置，避免「一滚就回弹/跳顶」
+    withProgrammaticPlaylistScroll(function() {
+      container.scrollTop = prevScrollTop;
+    });
   }
 }
 
@@ -3035,6 +3246,8 @@ async function initPage() {
       if (pageState.lyricsSongId == null ||
           String(pageState.lyricsSongId) !== String(nextTrackId || '')) {
         pageState.lyricsSongId = null;
+        // 先关掉 show-trans 再渲染：避免沿用上一首「翻译开」时测得的行高
+        syncLyricTransUI();
         // 宿主若已带来新曲歌词则用它，否则清空等待 getLyrics
         if (state.lyrics && state.lyrics.length > 0) {
           pageState.lyrics = state.lyrics;
@@ -3045,7 +3258,6 @@ async function initPage() {
           pageState.currentLyricIndex = -1;
         }
         renderLyrics(pageState.lyrics, pageState.currentLyricIndex);
-        syncLyricTransUI();
       }
     }
 
