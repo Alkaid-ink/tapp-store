@@ -1,7 +1,7 @@
 {
   "id": "com.myriad.quick-notes",
   "name": "便携便签",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minSystemVersion": "0.2.1",
   "description": "快速记录想法，支持搜索与主页小组件",
   "locales": {
@@ -24,7 +24,8 @@
     "storage",
     "ui:notification",
     "ui:theme",
-    "ui:confirm"
+    "ui:confirm",
+    "widget:register"
   ],
   "iconSvg": "<svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M8 2v3M16 2v3M3 9h18M21 8.5V17c0 3-1.5 5-5 5H8c-3.5 0-5-2-5-5V8.5c0-3 1.5-5 5-5h8c3.5 0 5 2 5 5z' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/><path d='M8 14h4M8 18h8' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg>",
   "themeColor": "#FFA726",
