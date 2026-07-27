@@ -114,6 +114,7 @@ async function openConversation(kind, id) {
   }
   if (typeof resetHistoryOnConversationChange === 'function') resetHistoryOnConversationChange();
   if (typeof resetRoomFilesOnConversationChange === 'function') resetRoomFilesOnConversationChange();
+  if (typeof resetStickersOnConversationChange === 'function') resetStickersOnConversationChange();
 
   state.activeKind = kind;
   state.activeId = id;
@@ -665,6 +666,7 @@ async function doSend() {
   state.sending = true;
   updateSendState();
   closeAttachMenu();
+  if (typeof closeStickerPanel === 'function') closeStickerPanel();
   closeMsgMenu();
 
   var sendReq = null;
@@ -1632,6 +1634,14 @@ function bindRealtimeListeners() {
           renderChatHeader();
           renderConvList();
         }).catch(function () {});
+      } else if (ev.event === 'stickers_changed') {
+        if (typeof handleStickersChangedEvent === 'function') {
+          handleStickersChangedEvent(ev);
+        } else if (Array.isArray(ev.stickers) && state.roomDetail) {
+          var sdc = state.roomDetail.shared_data_config || {};
+          sdc.stickers = ev.stickers;
+          state.roomDetail.shared_data_config = sdc;
+        }
       } else if (
         ev.event === 'member_joined'
         || ev.event === 'member_left'
@@ -2079,6 +2089,7 @@ function exitActiveConversationUi(toastTitle, asError) {
   if (typeof closeInvitePopover === 'function') closeInvitePopover();
   if (typeof resetHistoryOnConversationChange === 'function') resetHistoryOnConversationChange();
   if (typeof resetRoomFilesOnConversationChange === 'function') resetRoomFilesOnConversationChange();
+  if (typeof resetStickersOnConversationChange === 'function') resetStickersOnConversationChange();
   var chat = $('chat-container');
   if (chat) chat.style.display = 'none';
   var panel = $('member-panel');

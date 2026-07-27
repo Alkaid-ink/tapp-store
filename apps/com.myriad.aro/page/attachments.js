@@ -18,6 +18,7 @@ function toggleAttachMenu() {
     || (typeof isRoomComposerLocked === 'function' && isRoomComposerLocked())
     || !!(state.activeKind === 'channel' && state.channelDetail && state.channelDetail.status === 'closed');
   if (!state.activeId || locked || state.sending) return;
+  try { if (typeof closeStickerPanel === 'function') closeStickerPanel(); } catch (eSt) { /* ignore */ }
   wrap.style.position = 'relative';
   if (btn) btn.classList.add('attach-btn-active');
 

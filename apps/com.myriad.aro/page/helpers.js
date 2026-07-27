@@ -471,6 +471,8 @@ function dismissTransientUi(opts) {
   opts = opts || {};
   try { if (typeof closeMsgMenu === 'function') closeMsgMenu(); } catch (e0) { /* ignore */ }
   try { if (typeof closeAttachMenu === 'function') closeAttachMenu(); } catch (e1) { /* ignore */ }
+  try { if (typeof closeStickerPanel === 'function') closeStickerPanel(); } catch (e1s) { /* ignore */ }
+  try { if (typeof closeStickerCtxMenu === 'function') closeStickerCtxMenu(); } catch (e1c) { /* ignore */ }
   try { if (typeof closeInvitePopover === 'function') closeInvitePopover(); } catch (e2) { /* ignore */ }
   try { if (typeof closeManageDropdown === 'function') closeManageDropdown(); } catch (e3) { /* ignore */ }
   try {
@@ -513,7 +515,7 @@ function dismissTransientUi(opts) {
   } catch (e5) { /* ignore */ }
   // Dynamically created portals (do NOT kill .confirm-overlay — mid-confirm would hang).
   try {
-    document.querySelectorAll('.forward-overlay, .picker-overlay, .img-viewer').forEach(function (el) {
+    document.querySelectorAll('.forward-overlay, .picker-overlay, .img-viewer, .sticker-target-overlay, .sticker-ctx-menu').forEach(function (el) {
       forceHideInteractive(el);
       try { el.remove(); } catch (eR) { /* ignore */ }
     });
@@ -696,6 +698,17 @@ function updateSendState() {
     attach.disabled = blocked;
     attach.setAttribute('aria-disabled', blocked ? 'true' : 'false');
     attach.title = locked ? (lockMsg || lang.attach || '') : (lang.attach || '');
+  }
+  var stickerBtn = $('sticker-btn');
+  if (stickerBtn) {
+    stickerBtn.disabled = blocked;
+    stickerBtn.setAttribute('aria-disabled', blocked ? 'true' : 'false');
+    stickerBtn.title = locked
+      ? (lockMsg || lang.stickerBtn || lang.stickers || '')
+      : (lang.stickerBtn || lang.stickers || '');
+    if (blocked && typeof closeStickerPanel === 'function') {
+      try { closeStickerPanel(); } catch (eSt) { /* ignore */ }
+    }
   }
 
   if (!btn) return;
@@ -2716,6 +2729,12 @@ function applyLabels() {
   el = $('feed-empty-retry'); if (el) el.textContent = lang.feedRetry || 'Try again';
   el = $('msg-input'); if (el) el.placeholder = lang.typing;
   el = $('attach-btn'); if (el) { el.setAttribute('title', lang.attach || lang.attachFile); el.setAttribute('aria-label', lang.attach || lang.attachFile); }
+  el = $('sticker-btn'); if (el) {
+    var stTitle = lang.stickerBtn || lang.stickers || 'Stickers';
+    el.setAttribute('title', stTitle);
+    el.setAttribute('aria-label', stTitle);
+  }
+  if (typeof applyStickerLabels === 'function') applyStickerLabels();
   el = $('send-btn'); if (el) { el.setAttribute('title', lang.send); el.setAttribute('aria-label', lang.send); }
   el = $('back-btn'); if (el) el.setAttribute('aria-label', lang.back || 'Back');
   el = $('member-back-btn'); if (el) el.setAttribute('aria-label', lang.back || 'Back');

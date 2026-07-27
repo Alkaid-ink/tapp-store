@@ -263,6 +263,7 @@ function showMsgMenu(msgEl, x, y) {
   var quoteSvg = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V21z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3z"/></svg>';
   var forwardSvg = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/><path d="M14 9l3 3-3 3"/><path d="M17 12H9"/></svg>';
   var copySvg = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>';
+  var stickerSvg = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 10h.01M15.5 10h.01"/><path d="M8.2 14.2c1.1 1.3 2.5 2 3.8 2s2.7-.7 3.8-2"/></svg>';
 
   var menu = document.createElement('div');
   menu.className = 'msg-ctx-menu';
@@ -275,6 +276,14 @@ function showMsgMenu(msgEl, x, y) {
   html += '<button type="button" class="msg-ctx-item" data-action="quote" role="menuitem">' + quoteSvg + '<span>' + esc(lang.msgQuote) + '</span></button>'
     + '<button type="button" class="msg-ctx-item" data-action="forward" role="menuitem">' + forwardSvg + '<span>' + esc(lang.msgForward) + '</span></button>'
     + '<button type="button" class="msg-ctx-item" data-action="copy" role="menuitem">' + copySvg + '<span>' + esc(lang.msgCopy || lang.copy || 'Copy') + '</span></button>';
+  // Add image → sticker pack (inline data images)
+  var canSticker = typeof addStickerFromMessage === 'function'
+    && typeof getMessageImageDataUrl === 'function'
+    && !!getMessageImageDataUrl(msg);
+  if (canSticker) {
+    html += '<button type="button" class="msg-ctx-item" data-action="sticker" role="menuitem">'
+      + stickerSvg + '<span>' + esc(lang.stickerAddFromImage || lang.stickerAdd || 'Add as sticker') + '</span></button>';
+  }
   menu.innerHTML = html;
 
   document.body.appendChild(menu);
@@ -301,6 +310,9 @@ function showMsgMenu(msgEl, x, y) {
     else if (action === 'quote') doQuote(msg);
     else if (action === 'forward') doForward(msg);
     else if (action === 'copy') doCopyMsg(msg);
+    else if (action === 'sticker' && typeof addStickerFromMessage === 'function') {
+      addStickerFromMessage(msg, { target: 'ask' });
+    }
   });
 }
 
@@ -318,7 +330,8 @@ function bindMsgContextMenu(container) {
   container.addEventListener('touchstart', function (e) {
     var row = e.target.closest('.msg-row');
     if (!row) return;
-    if (e.target.closest('a, button, img')) return;
+    // Allow long-press on images (add sticker); still skip links/buttons.
+    if (e.target.closest('a, button') && !e.target.closest('.msg-media, .msg-image')) return;
     var touch = e.touches[0];
     if (!touch) return;
     var startX = touch.clientX;
@@ -1259,8 +1272,18 @@ function openImageViewer(src, name) {
   // Closed CSS default is display:none + PE none — open triad after append.
   overlay.style.display = 'none';
   overlay.style.pointerEvents = 'none';
+  var canAddSticker = typeof addImageDataAsSticker === 'function'
+    && String(src).indexOf('data:image/') === 0;
+  var stickerBtnHtml = canAddSticker
+    ? ('<button type="button" class="img-viewer-btn" data-act="sticker" title="'
+      + esc(lang.stickerAddFromImage || lang.stickerAdd || 'Add as sticker')
+      + '" aria-label="' + esc(lang.stickerAddFromImage || lang.stickerAdd || 'Add as sticker') + '">'
+      + '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 10h.01M15.5 10h.01"/><path d="M8.2 14.2c1.1 1.3 2.5 2 3.8 2s2.7-.7 3.8-2"/></svg>'
+      + '</button>')
+    : '';
   overlay.innerHTML = '<div class="img-viewer-bar">'
     + '<span class="img-viewer-name"></span>'
+    + stickerBtnHtml
     + '<button type="button" class="img-viewer-btn" data-act="save" title="' + esc(lang.downloadFile || 'Download') + '" aria-label="' + esc(lang.downloadFile || 'Download') + '">' + SVG_ICONS.download + '</button>'
     + '<button type="button" class="img-viewer-btn" data-act="close" title="' + esc(lang.dismiss || 'Close') + '" aria-label="' + esc(lang.dismiss || 'Close') + '">' + SVG_ICONS.close + '</button>'
     + '</div>'
@@ -1283,8 +1306,16 @@ function openImageViewer(src, name) {
       downloadMessageFile({ data: src, filename: name || 'image' });
       return;
     }
+    if (act && act.dataset.act === 'sticker' && typeof addImageDataAsSticker === 'function') {
+      e.stopPropagation();
+      addImageDataAsSticker(src, {
+        target: 'ask',
+        name: name || 'sticker',
+      });
+      return;
+    }
     if (act && act.dataset.act === 'close') { close(); return; }
-    if (!e.target.closest('.img-viewer-img')) close();
+    if (!e.target.closest('.img-viewer-img') && !e.target.closest('.img-viewer-btn')) close();
   });
   pageListen(document, 'keydown', onKey);
 

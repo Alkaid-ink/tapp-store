@@ -3642,6 +3642,8 @@ function bindEvents() {
   var attachBtn = $('attach-btn');
   if (attachBtn) attachBtn.addEventListener('click', function (e) { e.stopPropagation(); toggleAttachMenu(); });
 
+  if (typeof bindStickerUi === 'function') bindStickerUi();
+
   var attachImageInput = $('attach-image-input');
   if (attachImageInput) attachImageInput.addEventListener('change', function () { if (this.files[0]) handleFileSelect(this.files[0], 'image'); });
 

@@ -1366,9 +1366,54 @@ button.is-busy{opacity:.72;cursor:wait;pointer-events:none}
 .input-float-wrap{position:absolute;bottom:0;left:0;right:0;z-index:20;padding:8px 12px;padding-bottom:calc(8px + env(safe-area-inset-bottom,0px));background:linear-gradient(to top,var(--bg-primary,#fff) 70%,transparent);pointer-events:none}
 .input-float-wrap>*{pointer-events:auto}
 .input-bar{display:flex;align-items:flex-end;gap:8px;padding:8px 10px;background:var(--bg-primary,#fff);border:1px solid rgba(128,128,128,.12);border-radius:18px;box-shadow:0 2px 12px rgba(0,0,0,.06)}
-.attach-btn{width:36px;height:36px;border-radius:50%;border:none;background:transparent;color:var(--text-secondary,#999);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,color .15s;margin-bottom:1px}
-.attach-btn:hover{background:rgba(128,128,128,.08);color:var(--text-primary,#555)}
+.attach-btn,.sticker-btn{width:36px;height:36px;border-radius:50%;border:none;background:transparent;color:var(--text-secondary,#999);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,color .15s,transform .12s;margin-bottom:1px}
+.attach-btn:hover,.sticker-btn:hover{background:rgba(128,128,128,.08);color:var(--text-primary,#555)}
 .attach-btn.attach-btn-active{background:rgba(var(--tapp-primary-rgb,100,100,255),.1);color:var(--tapp-primary,#6366f1);transform:rotate(45deg)}
+.sticker-btn.sticker-btn-active{background:rgba(var(--tapp-primary-rgb,100,100,255),.1);color:var(--tapp-primary,#6366f1)}
+.sticker-btn:disabled,.attach-btn:disabled{opacity:.4;cursor:not-allowed;pointer-events:none}
+/* Sticker panel (above composer) */
+.sticker-panel{display:none;flex-direction:column;max-height:min(280px,42vh);margin:0 0 8px;padding:8px 10px 10px;background:var(--bg-primary,#fff);border:1px solid rgba(128,128,128,.12);border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,.06);overflow:hidden}
+.sticker-panel.aro-sticker-enter{animation:aroPopIn .16s var(--aro-ease) both}
+.sticker-panel.aro-leaving{animation:aroFadeOut .12s ease both;pointer-events:none!important}
+.sticker-panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-shrink:0}
+.sticker-tabs{display:flex;gap:4px;background:rgba(128,128,128,.08);border-radius:10px;padding:3px}
+.sticker-tab{border:none;background:transparent;color:var(--text-secondary,#888);font-size:12px;font-weight:600;padding:5px 12px;border-radius:8px;cursor:pointer;transition:background .12s,color .12s}
+.sticker-tab.sticker-tab-active{background:var(--bg-primary,#fff);color:var(--text-primary,#1a1a1a);box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.sticker-panel-actions{display:flex;align-items:center;gap:8px}
+.sticker-meta{font-size:11px;color:var(--text-secondary,#999);white-space:nowrap}
+.sticker-add-btn{border:none;background:rgba(var(--tapp-primary-rgb,99,102,241),.12);color:var(--tapp-primary,#6366f1);font-size:12px;font-weight:600;padding:5px 10px;border-radius:8px;cursor:pointer}
+.sticker-add-btn:hover{background:rgba(var(--tapp-primary-rgb,99,102,241),.18)}
+.sticker-add-btn:disabled{opacity:.45;cursor:not-allowed}
+.sticker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px;overflow-y:auto;flex:1;min-height:0;padding:2px;align-content:start}
+.sticker-cell{aspect-ratio:1;border:none;background:rgba(128,128,128,.05);border-radius:12px;padding:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,transform .1s}
+.sticker-cell:hover{background:rgba(128,128,128,.1)}
+.sticker-cell:active{transform:scale(.94)}
+.sticker-cell img{max-width:100%;max-height:100%;object-fit:contain;pointer-events:none;user-select:none}
+.sticker-empty{padding:28px 12px;text-align:center;font-size:13px;color:var(--text-secondary,#999);line-height:1.45}
+.sticker-ctx-menu{position:fixed;z-index:200;min-width:140px;background:var(--bg-primary,#fff);border:1px solid rgba(128,128,128,.12);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.14);padding:4px;display:flex;flex-direction:column}
+.sticker-ctx-item{border:none;background:none;text-align:left;padding:10px 12px;border-radius:8px;font-size:13px;cursor:pointer;color:var(--text-primary,#1a1a1a)}
+.sticker-ctx-item:hover{background:rgba(128,128,128,.08)}
+.sticker-ctx-danger{color:#dc2626}
+.dark .sticker-panel{background:var(--bg-primary,#1a1a1a);border-color:rgba(255,255,255,.1);box-shadow:0 2px 12px rgba(0,0,0,.25)}
+.dark .sticker-tabs{background:rgba(255,255,255,.06)}
+.dark .sticker-tab.sticker-tab-active{background:rgba(255,255,255,.1);color:#fff;box-shadow:none}
+.dark .sticker-cell{background:rgba(255,255,255,.04)}
+.dark .sticker-cell:hover{background:rgba(255,255,255,.08)}
+.dark .sticker-ctx-menu{background:#1a1a1a;border-color:rgba(255,255,255,.1);box-shadow:0 8px 24px rgba(0,0,0,.45)}
+.dark .sticker-ctx-item{color:rgba(255,255,255,.92)}
+.dark .sticker-btn:hover{background:rgba(255,255,255,.08);color:rgba(255,255,255,.85)}
+.composer-locked .sticker-btn{pointer-events:none}
+/* Pick mine vs group when adding from a chat image */
+.sticker-target-overlay{position:fixed;inset:0;z-index:220;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.35);padding:16px;box-sizing:border-box}
+.sticker-target-sheet{width:100%;max-width:360px;background:var(--bg-primary,#fff);border-radius:16px;padding:14px 12px 12px;box-shadow:0 12px 40px rgba(0,0,0,.2);display:flex;flex-direction:column;gap:6px}
+.sticker-target-title{font-size:14px;font-weight:650;padding:4px 8px 10px;color:var(--text-primary,#1a1a1a)}
+.sticker-target-item{border:none;background:rgba(128,128,128,.06);border-radius:12px;padding:12px 14px;text-align:left;font-size:14px;font-weight:600;cursor:pointer;color:var(--text-primary,#1a1a1a)}
+.sticker-target-item:hover{background:rgba(var(--tapp-primary-rgb,99,102,241),.12);color:var(--tapp-primary,#6366f1)}
+.sticker-target-cancel{border:none;background:transparent;padding:12px;font-size:13px;color:var(--text-secondary,#888);cursor:pointer;border-radius:10px}
+.sticker-target-cancel:hover{background:rgba(128,128,128,.06)}
+.dark .sticker-target-sheet{background:#1a1a1a;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+.dark .sticker-target-item{background:rgba(255,255,255,.06);color:#fff}
+.dark .sticker-target-item:hover{background:rgba(var(--tapp-primary-rgb,99,102,241),.2)}
 .msg-input{flex:1;min-height:22px;max-height:120px;padding:7px 0;border:none;background:transparent;color:var(--text-primary,#1a1a1a);font-size:14px;line-height:1.45;outline:none;resize:none;overflow-y:auto;font-family:inherit}
 .msg-input::placeholder{color:var(--text-secondary,#bbb)}
 .send-btn{width:36px;height:36px;border-radius:50%;border:none;background:transparent;color:var(--text-secondary,#aaa);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,color .15s,opacity .15s;margin-bottom:1px}
