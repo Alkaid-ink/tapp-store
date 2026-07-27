@@ -2398,6 +2398,29 @@ button.aro-select-trigger.create-input{
 .edit-room-id-box{display:flex;flex-direction:column;gap:6px}
 .edit-room-id-row{display:flex;align-items:center;gap:8px}
 .edit-room-id-value{flex:1;min-width:0;padding:8px 10px;border-radius:8px;background:rgba(128,128,128,.08);font-size:11.5px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-primary,#1a1a1a)}
+/* Soft federation delivery notice (not a blocking error toast) */
+.aro-delivery-banner{
+  display:none;position:absolute;left:12px;right:12px;bottom:calc(72px + env(safe-area-inset-bottom,0px));
+  z-index:35;align-items:flex-start;gap:8px;padding:10px 12px;border-radius:14px;
+  background:rgba(30,41,59,.92);color:#f8fafc;box-shadow:0 8px 28px rgba(0,0,0,.28);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);pointer-events:auto;
+  border:1px solid rgba(255,255,255,.08);
+}
+.aro-delivery-banner.is-warn{background:rgba(120,53,15,.94);border-color:rgba(251,191,36,.25)}
+.aro-delivery-banner.is-info{background:rgba(30,58,138,.94);border-color:rgba(147,197,253,.22)}
+.aro-delivery-banner-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:12.5px;line-height:1.4}
+.aro-delivery-banner-text strong{font-size:13px;font-weight:700}
+.aro-delivery-banner-text span{opacity:.9}
+.aro-delivery-banner-action{
+  flex-shrink:0;border:none;border-radius:999px;padding:6px 10px;font-size:11.5px;font-weight:700;
+  cursor:pointer;background:rgba(255,255,255,.14);color:#fff;touch-action:manipulation;
+}
+.aro-delivery-banner-action:hover{background:rgba(255,255,255,.22)}
+.aro-delivery-banner-dismiss{
+  flex-shrink:0;border:none;background:transparent;color:rgba(255,255,255,.75);font-size:18px;
+  line-height:1;cursor:pointer;padding:2px 4px;border-radius:6px;
+}
+.aro-delivery-banner-dismiss:hover{background:rgba(255,255,255,.1);color:#fff}
 /* Room avatar picker (create + edit) */
 .room-avatar-field{display:flex;align-items:center;gap:12px;margin:0 0 14px;padding:10px 12px;border-radius:14px;background:rgba(128,128,128,.05);border:1px solid rgba(128,128,128,.08)}
 .room-avatar-btn{position:relative;width:64px;height:64px;border-radius:18px;border:none;padding:0;cursor:pointer;flex-shrink:0;overflow:hidden;background:rgba(var(--tapp-primary-rgb,99,102,241),.1);color:var(--tapp-primary,#6366f1);touch-action:manipulation}

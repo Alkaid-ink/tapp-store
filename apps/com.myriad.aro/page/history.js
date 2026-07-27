@@ -140,10 +140,12 @@ function mergeMessageListsAsc(existing, incoming) {
   function push(msg) {
     if (!msg || !msg.message_id) return;
     if (map[msg.message_id]) {
-      // Prefer newer object fields
+      // Prefer newer object fields, but never let ciphertext stomp known plaintext
       for (var i = 0; i < out.length; i++) {
         if (out[i].message_id === msg.message_id) {
-          out[i] = Object.assign({}, out[i], msg);
+          out[i] = typeof preferDisplayPayload === 'function'
+            ? preferDisplayPayload(out[i], msg)
+            : Object.assign({}, out[i], msg);
           break;
         }
       }

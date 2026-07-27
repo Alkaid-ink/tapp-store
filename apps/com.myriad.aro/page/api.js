@@ -856,25 +856,97 @@ async function doSend() {
 
 /**
  * Surface outbound enqueue warnings (remote may not receive even though send returned 200).
- * Full dead-letter failures also land in the host notification center via the delivery worker.
+ * Soft notice: one peer flaking should not look like the whole send failed.
  */
 function noteDeliveryEnqueue(sendRes) {
   if (!sendRes) return;
   var d = sendRes.delivery || (sendRes.data && sendRes.data.delivery) || null;
   if (!d || !d.warning) return;
-  var title = lang.deliveryWarnTitle || 'Delivery notice';
-  var msg = lang.deliveryWarnBody || d.warning;
-  if (d.queued === 0 && d.remote_targets > 0) {
+  var partial = d.queued > 0 && d.remote_targets > d.queued;
+  var none = d.queued === 0 && d.remote_targets > 0;
+  var title = partial
+    ? (lang.deliveryPartialTitle || 'Some peers may be delayed')
+    : (lang.deliveryWarnTitle || 'Delivery notice');
+  var msg = d.warning;
+  if (none) {
     msg = lang.deliveryNotQueued
-      || 'Message saved locally but could not be queued for remote peers';
+      || 'Saved here, but could not queue for remote peers yet';
+  } else if (partial) {
+    msg = (lang.deliveryPartialBody
+      || 'Queued for {q}/{t} remote targets — others will retry in the background')
+      .replace('{q}', String(d.queued))
+      .replace('{t}', String(d.remote_targets));
+  } else if (lang.deliveryWarnBody) {
+    msg = lang.deliveryWarnBody;
   }
-  try {
-    Tapp.ui.showNotification({ title: title, message: msg, type: 'error' });
-  } catch (e) { /* ignore */ }
+  showDeliverySoftBanner(title, msg, partial || none ? 'warn' : 'info');
   console.warn('[Aro] delivery enqueue warning', d);
 }
 
-/** Soft check for dead letters (host notifications are primary; this is in-app). */
+/** Soft in-app banner (not a blocking error toast) for federation delivery issues. */
+function showDeliverySoftBanner(title, message, kind) {
+  kind = kind || 'info';
+  var host = document.querySelector('#chat-container') || document.body;
+  if (!host) {
+    try {
+      Tapp.ui.showNotification({ title: title, message: message, type: kind === 'warn' ? 'info' : 'info' });
+    } catch (e0) { /* ignore */ }
+    return;
+  }
+  var el = $('aro-delivery-banner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'aro-delivery-banner';
+    el.className = 'aro-delivery-banner';
+    el.setAttribute('role', 'status');
+    host.appendChild(el);
+  }
+  el.className = 'aro-delivery-banner is-' + kind;
+  el.innerHTML =
+    '<div class="aro-delivery-banner-text">'
+    + '<strong>' + esc(title || '') + '</strong>'
+    + (message ? '<span>' + esc(message) + '</span>' : '')
+    + '</div>'
+    + '<button type="button" class="aro-delivery-banner-action" id="aro-delivery-banner-open">'
+    + esc(lang.deliveryOpenSettings || lang.settingsDelivery || 'Delivery')
+    + '</button>'
+    + '<button type="button" class="aro-delivery-banner-dismiss" id="aro-delivery-banner-dismiss" aria-label="'
+    + esc(lang.dismiss || lang.close || 'Dismiss') + '">×</button>';
+  el.hidden = false;
+  el.style.display = 'flex';
+  var openBtn = $('aro-delivery-banner-open');
+  if (openBtn) {
+    openBtn.onclick = function () {
+      try {
+        if (typeof switchView === 'function') switchView('feed');
+        if (typeof switchFeedSubTab === 'function') switchFeedSubTab('settings');
+        setTimeout(function () {
+          var card = $('settings-delivery-card');
+          if (card && card.scrollIntoView) {
+            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }, 200);
+      } catch (e1) { /* ignore */ }
+    };
+  }
+  var dismissBtn = $('aro-delivery-banner-dismiss');
+  if (dismissBtn) {
+    dismissBtn.onclick = function () {
+      el.hidden = true;
+      el.style.display = 'none';
+    };
+  }
+  // Auto-hide soft notices
+  clearTimeout(showDeliverySoftBanner._t);
+  showDeliverySoftBanner._t = setTimeout(function () {
+    if (el) {
+      el.hidden = true;
+      el.style.display = 'none';
+    }
+  }, 12000);
+}
+
+/** Soft check for dead letters — quiet chip, not a scary error toast. */
 async function refreshDeliveryHealth() {
   if (typeof Tapp === 'undefined' || !Tapp.federation) return;
   if (typeof Tapp.federation.getDeliveryStats !== 'function') return;
@@ -885,46 +957,13 @@ async function refreshDeliveryHealth() {
     var dead = root.dead || root.failed || 0;
     if (dead > 0 && !refreshDeliveryHealth._warned) {
       refreshDeliveryHealth._warned = true;
-      try {
-        Tapp.ui.showNotification({
-          title: lang.deliveryDeadTitle || 'Federation delivery failed',
-          message: (lang.deliveryDeadBody || '{n} outbound messages could not be delivered')
-            .replace('{n}', String(dead)),
-          type: 'error',
-        });
-      } catch (e2) { /* ignore */ }
-      // Offer re-queue of dead letters (one-shot; cooldown 2 min)
-      if (
-        typeof Tapp.federation.retryAllDeadDelivery === 'function'
-        && !refreshDeliveryHealth._retryOffered
-        && typeof aroConfirm === 'function'
-      ) {
-        refreshDeliveryHealth._retryOffered = true;
-        try {
-          var ok = await aroConfirm(
-            (lang.deliveryRetryConfirm || 'Retry {n} failed deliveries?').replace('{n}', String(dead)),
-            false
-          );
-          if (ok) {
-            var retryRes = await Tapp.federation.retryAllDeadDelivery(Math.min(dead, 50));
-            var retried = 0;
-            if (retryRes) {
-              retried = retryRes.retried != null
-                ? retryRes.retried
-                : (retryRes.data && retryRes.data.retried) || 0;
-            }
-            try {
-              Tapp.ui.showNotification({
-                title: lang.deliveryRetryOk || 'Retry queued',
-                message: (lang.deliveryRetryBody || '{n} messages re-queued').replace('{n}', String(retried)),
-                type: 'success',
-              });
-            } catch (e3) { /* ignore */ }
-            refreshDeliveryHealth._warned = false;
-          }
-        } catch (e4) { /* ignore */ }
-        setTimeout(function () { refreshDeliveryHealth._retryOffered = false; }, 120000);
-      }
+      showDeliverySoftBanner(
+        lang.deliveryDeadTitleSoft || lang.deliveryDeadTitle || 'Some messages need retry',
+        (lang.deliveryDeadBodySoft
+          || '{n} outbound federation deliveries failed — open Delivery to retry')
+          .replace('{n}', String(dead)),
+        'warn'
+      );
     }
     if (dead === 0) {
       refreshDeliveryHealth._warned = false;
@@ -964,6 +1003,7 @@ function messagesFingerprint(msgs) {
  * Prefer decrypted/plain payloads over WS ciphertext envelopes.
  * Host WS often echoes storage form {algorithm,ciphertext,...} while GET history
  * returns decrypted JSON — a late WS event must not clobber good plaintext.
+ * Also: poll must not replace a good plain bubble with a failed-decrypt ciphertext.
  */
 function preferDisplayPayload(existingMsg, incomingMsg) {
   var out = Object.assign({}, existingMsg || {}, incomingMsg || {});
@@ -973,21 +1013,73 @@ function preferDisplayPayload(existingMsg, incomingMsg) {
   var newEnc = typeof isE2eCiphertextEnvelope === 'function' && isE2eCiphertextEnvelope(newP);
   if (newEnc && oldP && !oldEnc) {
     out.payload = oldP;
+    // Keep display flags consistent with retained plaintext
+    if (existingMsg && existingMsg.is_encrypted === false) out.is_encrypted = false;
   } else if (oldEnc && newP && !newEnc) {
     out.payload = newP;
+    out.is_encrypted = false;
+  } else if (!newEnc && newP) {
+    // Incoming is plain — clear stale encrypted flag from storage shape
+    if (out.is_encrypted && !isE2eCiphertextEnvelope(out.payload)) {
+      out.is_encrypted = false;
+    }
   }
   return out;
 }
 
-var _decryptRefreshTimer = null;
+/** Merge server/WS lists without letting ciphertext stomp known-good plaintext. */
+function mergeMessageLists(prev, next) {
+  prev = Array.isArray(prev) ? prev : [];
+  next = Array.isArray(next) ? next : [];
+  if (!prev.length) return next.slice();
+  var byId = {};
+  for (var i = 0; i < prev.length; i++) {
+    var p = prev[i];
+    if (p && p.message_id) byId[p.message_id] = p;
+  }
+  var out = [];
+  for (var j = 0; j < next.length; j++) {
+    var n = next[j];
+    if (!n) continue;
+    var old = n.message_id ? byId[n.message_id] : null;
+    out.push(old ? preferDisplayPayload(old, n) : n);
+  }
+  return out;
+}
+
+var _decryptRefreshTimers = [];
+var _decryptRefreshAttempts = 0;
 function scheduleDecryptRefresh() {
-  if (_decryptRefreshTimer) return;
-  _decryptRefreshTimer = setTimeout(function () {
-    _decryptRefreshTimer = null;
-    if (typeof pollMessages === 'function') {
-      pollMessages(true).catch(function () {});
-    }
-  }, 120);
+  // Burst retries: keys may land a moment after the first ciphertext WS event.
+  if (_decryptRefreshAttempts > 6) return;
+  _decryptRefreshAttempts += 1;
+  var delays = [100, 400, 1000, 2200];
+  delays.forEach(function (ms) {
+    var t = setTimeout(function () {
+      if (typeof pollMessages === 'function') {
+        pollMessages(true).catch(function () {});
+      }
+      // Reset attempt budget once we have no ciphertext left
+      if (typeof state !== 'undefined' && Array.isArray(state.messages)) {
+        var still = false;
+        for (var i = 0; i < state.messages.length; i++) {
+          if (typeof isE2eCiphertextEnvelope === 'function'
+            && isE2eCiphertextEnvelope(state.messages[i].payload)) {
+            still = true;
+            break;
+          }
+        }
+        if (!still) _decryptRefreshAttempts = 0;
+      }
+    }, ms);
+    _decryptRefreshTimers.push(t);
+  });
+  // Cap timer list
+  if (_decryptRefreshTimers.length > 16) {
+    _decryptRefreshTimers.splice(0, _decryptRefreshTimers.length - 16).forEach(function (id) {
+      try { clearTimeout(id); } catch (e) { /* ignore */ }
+    });
+  }
 }
 
 function mergeIncomingMessage(msg) {
@@ -1287,12 +1379,28 @@ async function pollMessages(force) {
       if (force || fp !== state.messagesFp || hadError) {
         var prevLen = state.messages.length;
         var prevLast = prevLen ? (state.messages[prevLen - 1].message_id || '') : '';
-        state.messages = msgs;
-        state.messagesFp = fp;
-        var grew = msgs.length > prevLen;
-        var tailChanged = msgs.length && (msgs[msgs.length - 1].message_id || '') !== prevLast;
+        // Prefer known plaintext over a poll that still only has ciphertext
+        // (decrypt race on host / late key material).
+        var mergedMsgs = typeof mergeMessageLists === 'function'
+          ? mergeMessageLists(state.messages, msgs)
+          : msgs;
+        state.messages = mergedMsgs;
+        state.messagesFp = messagesFingerprint(mergedMsgs);
+        var stillCipher = false;
+        for (var ci = 0; ci < mergedMsgs.length; ci++) {
+          if (typeof isE2eCiphertextEnvelope === 'function'
+            && isE2eCiphertextEnvelope(mergedMsgs[ci].payload)) {
+            stillCipher = true;
+            break;
+          }
+        }
+        if (stillCipher) scheduleDecryptRefresh();
+        else _decryptRefreshAttempts = 0;
+        var grew = mergedMsgs.length > prevLen;
+        var tailChanged = mergedMsgs.length
+          && (mergedMsgs[mergedMsgs.length - 1].message_id || '') !== prevLast;
         if (grew && tailChanged && !state.skipMsgAppear && !hadError) {
-          renderMessages({ animateNew: true, newCount: Math.min(msgs.length - prevLen, 3) });
+          renderMessages({ animateNew: true, newCount: Math.min(mergedMsgs.length - prevLen, 3) });
         } else {
           renderMessages();
         }

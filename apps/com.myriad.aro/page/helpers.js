@@ -763,14 +763,24 @@ function isE2eCiphertextEnvelope(payload) {
   if (isE2eKeyExchangeMessage(null, '', payload)) return false;
   var ct = payload.ciphertext || payload.cipher_text;
   if (!ct || typeof ct !== 'string') return false;
+  // Pairwise: algorithm + ephemeral_key + nonce
+  // Multi-recipient rooms: algorithm + nonce + key_wraps[]
   if (payload.algorithm || payload.ephemeral_key || payload.ephemeralKey || payload.nonce) {
     return true;
   }
+  if (Array.isArray(payload.key_wraps) && payload.key_wraps.length) return true;
+  if (Array.isArray(payload.keyWraps) && payload.keyWraps.length) return true;
   // bare ciphertext + high entropy base64
   return ct.length > 16 && !payload.text && !payload.title && !payload.data;
 }
 
-function e2eEncryptedPlaceholder() {
+function e2eEncryptedPlaceholder(opts) {
+  opts = opts || {};
+  if (opts.pending) {
+    return lang.e2eDecrypting
+      || lang.e2eEncryptedPending
+      || 'Encrypted message — decrypting…';
+  }
   return lang.e2eEncryptedMessage
     || lang.e2eEstablished
     || 'Encrypted message';
@@ -820,7 +830,7 @@ function getPayloadText(payload) {
   }
   // Ciphertext envelope first — do not prefer accidental nested fields
   if (isE2eCiphertextEnvelope(payload)) {
-    return e2eEncryptedPlaceholder();
+    return e2eEncryptedPlaceholder({ pending: true });
   }
   if (payload.text != null && payload.text !== '') return String(payload.text);
   if (typeof payload.content === 'string' && payload.content) return payload.content;
