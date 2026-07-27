@@ -164,7 +164,14 @@ async function openConversation(kind, id) {
         throw roomParts[0].reason;
       }
       if (roomParts[1].status === 'fulfilled' && roomParts[1].value) {
-        state.members = unwrapRoomMembers(roomParts[1].value);
+        // Claim rosterFetchSeq so a concurrent poll cannot stomp this open snapshot.
+        var openSeq = (state.rosterFetchSeq = (state.rosterFetchSeq || 0) + 1);
+        if (openSeq === state.rosterFetchSeq) {
+          state.members = unwrapRoomMembers(roomParts[1].value);
+          if (typeof activeMemberCountFromList === 'function' && typeof applyRoomMemberCount === 'function') {
+            applyRoomMemberCount(id, activeMemberCountFromList(state.members));
+          }
+        }
         // Extract local actor URL from members list
         if (!state.localActorUrl) {
           for (var i = 0; i < state.members.length; i++) {
@@ -541,13 +548,27 @@ async function doTransferOwnership() {
   }
   try {
     await Tapp.federation.transferRoomOwnership(state.activeId, target.actor_url);
-    var detail = await Tapp.federation.getRoom(state.activeId);
-    if (detail) state.roomDetail = detail.data || detail;
-    var membersRes = await Tapp.federation.getRoomMembers(state.activeId);
-    state.members = unwrapRoomMembers(membersRes);
-    renderMembers();
-    renderChatHeader();
-    if (typeof renderConvList === 'function') renderConvList();
+    // Ownership change reshuffles roles — confirm roster via seq-guarded path.
+    if (typeof confirmRoomMembers === 'function') {
+      confirmRoomMembers(state.activeId, state.openGen, {
+        delays: [0, 400, 1200, 3000],
+        boostMs: 12000,
+        refreshList: true,
+      });
+    } else if (typeof refreshRoomMembers === 'function') {
+      await refreshRoomMembers(state.activeId, state.openGen, {
+        fetchDetail: true,
+        forceRender: true,
+      });
+    } else {
+      var detail = await Tapp.federation.getRoom(state.activeId);
+      if (detail) state.roomDetail = detail.data || detail;
+      var membersRes = await Tapp.federation.getRoomMembers(state.activeId);
+      state.members = unwrapRoomMembers(membersRes);
+      renderMembers();
+      renderChatHeader();
+      if (typeof renderConvList === 'function') renderConvList();
+    }
     try {
       Tapp.ui.showNotification({
         title: lang.transferOwnerOk || 'Ownership transferred',
