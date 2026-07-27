@@ -100,6 +100,7 @@ async function openConversation(kind, id) {
   state.channelDetail = null;
   state.roomDetail = null;
   state.chatLoadError = null;
+  state.chatOpening = true;
   // Drop previous composer lock immediately; re-lock channels until detail proves writable.
   if (typeof clearPendingAttach === 'function') clearPendingAttach();
   if (typeof clearQuote === 'function') clearQuote();
@@ -204,6 +205,7 @@ async function openConversation(kind, id) {
 
   if (!isConversationCurrent(kind, id, gen)) return;
 
+  state.chatOpening = false;
   renderChatHeader();
   renderMessages();
   renderMembers();
@@ -1462,6 +1464,21 @@ function handleRealtimeMessage(ev) {
       expectAbsent: leaveActor || undefined,
       refreshList: true,
     });
+    // Subtle toast when someone else joins the open room (not self).
+    if (
+      joinActor
+      && typeof isLocalActor === 'function'
+      && !isLocalActor(joinActor)
+    ) {
+      var joinLabel = joinActor.split('/').pop() || joinActor;
+      try {
+        Tapp.ui.showNotification({
+          title: lang.memberJoined || lang.members || 'Member joined',
+          message: joinLabel,
+          type: 'info',
+        });
+      } catch (eJoinN) { /* ignore */ }
+    }
     return;
   }
   // Unknown event — force a full refresh (pollMessages itself is gen-guarded)
@@ -1984,6 +2001,8 @@ function exitActiveConversationUi(toastTitle, asError) {
   state.members = [];
   state.messages = [];
   state.messagesFp = '';
+  state.chatOpening = false;
+  state.chatLoadError = null;
   if (typeof stopPolling === 'function') stopPolling();
   if (typeof clearRosterConfirmTimers === 'function') clearRosterConfirmTimers();
   state.rosterConfirmToken = (state.rosterConfirmToken || 0) + 1;
@@ -2043,6 +2062,10 @@ async function doDissolveRoom() {
 
 async function doAcceptChannel() {
   if (!state.activeId || state.activeKind !== 'channel') return;
+  var busyBtn = $('pending-accept-channel');
+  if (typeof setActionBusy === 'function') {
+    setActionBusy(busyBtn, true, lang.joining || lang.accept || '…');
+  }
   try {
     await Tapp.federation.acceptChannel(state.activeId);
     // Backend sets status to 'accepted' (writable); 'active' after first message.
@@ -2062,6 +2085,7 @@ async function doAcceptChannel() {
     }
   } catch (e) {
     notifyError(lang.acceptFail, e);
+    if (typeof setActionBusy === 'function') setActionBusy(busyBtn, false);
   }
 }
 
@@ -2084,6 +2108,10 @@ async function doJoinOpenRoom() {
   if (!Tapp.federation || typeof Tapp.federation.joinRoom !== 'function') {
     notifyError(lang.joinRoomFail || lang.acceptFail || 'Join not available');
     return;
+  }
+  var busyBtn = $('pending-join-room');
+  if (typeof setActionBusy === 'function') {
+    setActionBusy(busyBtn, true, lang.joining || lang.creating || '…');
   }
   try {
     await Tapp.federation.joinRoom(state.activeId);
@@ -2113,6 +2141,7 @@ async function doJoinOpenRoom() {
     } catch (e3) { /* ignore */ }
   } catch (e) {
     notifyError(lang.joinRoomFail || lang.acceptFail || 'Join failed', e);
+    if (typeof setActionBusy === 'function') setActionBusy(busyBtn, false);
   }
 }
 
@@ -2121,6 +2150,10 @@ async function doAcceptRoomInvite() {
   if (!Tapp.federation || typeof Tapp.federation.acceptRoomInvite !== 'function') {
     notifyError(lang.acceptFail || 'Accept not available');
     return;
+  }
+  var busyBtn = $('pending-accept-room');
+  if (typeof setActionBusy === 'function') {
+    setActionBusy(busyBtn, true, lang.joining || lang.accept || '…');
   }
   try {
     await Tapp.federation.acceptRoomInvite(state.activeId);
@@ -2150,6 +2183,7 @@ async function doAcceptRoomInvite() {
     } catch (e3) { /* ignore */ }
   } catch (e) {
     notifyError(lang.acceptFail, e);
+    if (typeof setActionBusy === 'function') setActionBusy(busyBtn, false);
   }
 }
 
@@ -2258,7 +2292,8 @@ async function doCreateChannel() {
     return;
   }
   var btn = $('create-channel-btn');
-  if (btn) { btn.disabled = true; btn.textContent = lang.creating; }
+  if (typeof setActionBusy === 'function') setActionBusy(btn, true, lang.creating || '…');
+  else if (btn) { btn.disabled = true; btn.textContent = lang.creating; }
   try {
     var result = await Tapp.federation.createChannel({ remote_actor: remoteActor });
     hideCreateDialog();
@@ -2270,7 +2305,8 @@ async function doCreateChannel() {
     console.error('[Aro] createChannel error:', e);
     notifyError(lang.createFail, e);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = lang.createChannel; }
+    if (typeof setActionBusy === 'function') setActionBusy(btn, false);
+    else if (btn) { btn.disabled = false; btn.textContent = lang.createChannel; }
   }
 }
 
@@ -2286,7 +2322,8 @@ async function doCreateRoom() {
   var pubCb = $('create-room-public');
   var isPublic = !!(pubCb && pubCb.checked);
   var btn = $('create-room-btn');
-  if (btn) { btn.disabled = true; btn.textContent = lang.creating; }
+  if (typeof setActionBusy === 'function') setActionBusy(btn, true, lang.creating || '…');
+  else if (btn) { btn.disabled = true; btn.textContent = lang.creating; }
   try {
     var result = await Tapp.federation.createRoom({
       name: name,
@@ -2316,7 +2353,8 @@ async function doCreateRoom() {
     console.error('[Aro] createRoom error:', e);
     notifyError(lang.createFail, e);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = lang.createRoom; }
+    if (typeof setActionBusy === 'function') setActionBusy(btn, false);
+    else if (btn) { btn.disabled = false; btn.textContent = lang.createRoom; }
   }
 }
 
@@ -2343,7 +2381,12 @@ async function doJoinRoomById() {
     return;
   }
   var btn = $('join-room-id-btn');
-  if (btn) { btn.disabled = true; btn.textContent = lang.joining || lang.creating || '…'; }
+  if (typeof setActionBusy === 'function') {
+    setActionBusy(btn, true, lang.joining || lang.creating || '…');
+  } else if (btn) {
+    btn.disabled = true;
+    btn.textContent = lang.joining || lang.creating || '…';
+  }
   try {
     var joinArg = parsed.homeServer
       ? { home_server: parsed.homeServer }
@@ -2370,7 +2413,8 @@ async function doJoinRoomById() {
   } catch (e) {
     notifyError(lang.joinRoomFail || 'Join failed', e);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = lang.joinRoom || 'Join'; }
+    if (typeof setActionBusy === 'function') setActionBusy(btn, false);
+    else if (btn) { btn.disabled = false; btn.textContent = lang.joinRoom || 'Join'; }
   }
 }
 

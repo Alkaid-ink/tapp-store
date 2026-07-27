@@ -13,6 +13,8 @@ var state = {
   roomDetail: null,
   /** Sticky error when openConversation fails (shown instead of empty-chat copy). */
   chatLoadError: null,
+  /** True while openConversation is loading detail/messages (skeleton mid-pane). */
+  chatOpening: false,
   sending: false,
   pollTimer: null,
   pollInterval: 15000,

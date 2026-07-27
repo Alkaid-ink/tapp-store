@@ -3787,6 +3787,10 @@ function bindEvents() {
   // Create dialog events
   var createBtn = $('create-btn');
   if (createBtn) createBtn.addEventListener('click', showCreateDialog);
+  var emptyStartBtn = $('empty-start-btn');
+  if (emptyStartBtn) emptyStartBtn.addEventListener('click', function () {
+    if (typeof showCreateDialog === 'function') showCreateDialog();
+  });
 
   var overlay = $('create-dialog');
   if (overlay) overlay.addEventListener('click', function (e) {

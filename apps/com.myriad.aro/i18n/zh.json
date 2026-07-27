@@ -538,5 +538,10 @@
   "mediaPlay": "播放",
   "mediaPlayFail": "无法播放",
   "mediaPlayHint": "点击播放",
-  "shareNoAction": "无法打开"
+  "shareNoAction": "无法打开",
+  "openingChat": "正在打开会话…",
+  "joining": "加入中…",
+  "sending": "发送中…",
+  "startChat": "新建会话",
+  "memberJoined": "有人加入了群组"
 }

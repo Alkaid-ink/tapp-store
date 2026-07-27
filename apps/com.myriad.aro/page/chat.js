@@ -120,9 +120,25 @@ function renderConvList() {
       emptyTitle = lang.convTabRecentEmpty || lang.noConv || emptyTitle;
       emptyHint = lang.convTabRecentEmptyHint || lang.noConvHint || emptyHint;
     }
-    list.innerHTML = '<div class="conv-empty conv-empty-fill"><span style="display:flex;flex-direction:column;gap:6px;align-items:center;max-width:200px">'
-      + '<span style="font-weight:600;font-size:13px;color:var(--text-primary,#333)">' + esc(emptyTitle) + '</span>'
-      + '<span style="font-size:12px;line-height:1.45;opacity:.8">' + esc(emptyHint) + '</span></span></div>';
+    var ctaLabel = lang.startChat || lang.create || '+';
+    list.innerHTML = '<div class="conv-empty conv-empty-fill">'
+      + '<div class="conv-empty-inner">'
+      + '<span class="conv-empty-title">' + esc(emptyTitle) + '</span>'
+      + '<span class="conv-empty-hint">' + esc(emptyHint) + '</span>'
+      + '<button type="button" class="conv-empty-cta" id="conv-empty-cta">' + esc(ctaLabel) + '</button>'
+      + '</div></div>';
+    var cta = $('conv-empty-cta');
+    if (cta) {
+      cta.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof showCreateDialog === 'function') showCreateDialog();
+        else {
+          var createBtn = $('create-btn');
+          if (createBtn) createBtn.click();
+        }
+      });
+    }
     return;
   }
 
@@ -614,6 +630,15 @@ function renderMessages(opts) {
 
   // Pending channel/room invite or open-join: centered CTA card instead of transcript/header buttons.
   if (typeof renderPendingInviteBanner === 'function' && renderPendingInviteBanner()) {
+    state.chatOpening = false;
+    return;
+  }
+
+  if (state.chatOpening && state.messages.length === 0 && !state.chatLoadError) {
+    container.innerHTML = typeof chatOpeningHtml === 'function'
+      ? chatOpeningHtml()
+      : '<div class="messages-empty" role="status">' + esc(lang.feedLoading || 'Loading…') + '</div>';
+    var pbLoad = $('pinned-bar'); if (pbLoad) pbLoad.style.display = 'none';
     return;
   }
 

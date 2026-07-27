@@ -538,5 +538,10 @@
   "mediaPlay": "再生",
   "mediaPlayFail": "再生できません",
   "mediaPlayHint": "タップして再生",
-  "shareNoAction": "開けません"
+  "shareNoAction": "開けません",
+  "openingChat": "会話を開いています…",
+  "joining": "参加中…",
+  "sending": "送信中…",
+  "startChat": "新規チャット",
+  "memberJoined": "メンバーが参加しました"
 }

@@ -538,5 +538,10 @@
   "mediaPlay": "Play",
   "mediaPlayFail": "Playback failed",
   "mediaPlayHint": "Tap to play",
-  "shareNoAction": "Unavailable"
+  "shareNoAction": "Unavailable",
+  "openingChat": "Opening chat…",
+  "joining": "Joining…",
+  "sending": "Sending…",
+  "startChat": "New chat",
+  "memberJoined": "Someone joined the group"
 }

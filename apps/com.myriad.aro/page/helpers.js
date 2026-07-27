@@ -621,6 +621,44 @@ function roomComposerLockReason() {
   return lang.roomInvitePending || lang.channelNotAccepted || lang.pending || 'Accept the invite to chat';
 }
 
+/**
+ * Button busy affordance (join / accept / create). Stores original label once.
+ * @param {HTMLElement|null} btn
+ * @param {boolean} busy
+ * @param {string} [busyLabel]
+ */
+function setActionBusy(btn, busy, busyLabel) {
+  if (!btn) return;
+  if (busy) {
+    if (!btn.dataset.aroLabel) btn.dataset.aroLabel = btn.textContent || '';
+    btn.disabled = true;
+    btn.setAttribute('aria-busy', 'true');
+    btn.classList.add('is-busy');
+    if (busyLabel) btn.textContent = busyLabel;
+  } else {
+    btn.disabled = false;
+    btn.removeAttribute('aria-busy');
+    btn.classList.remove('is-busy');
+    if (btn.dataset.aroLabel != null) {
+      btn.textContent = btn.dataset.aroLabel;
+      delete btn.dataset.aroLabel;
+    }
+  }
+}
+
+/** Lightweight skeleton for mid-pane while openConversation loads. */
+function chatOpeningHtml() {
+  var label = lang.openingChat || lang.feedLoading || 'Loading…';
+  return '<div class="messages-empty messages-opening" role="status" aria-live="polite" aria-busy="true">'
+    + '<div class="chat-open-skeleton" aria-hidden="true">'
+    + '<div class="chat-skel-row chat-skel-remote"><span class="chat-skel-bubble"></span></div>'
+    + '<div class="chat-skel-row chat-skel-local"><span class="chat-skel-bubble chat-skel-short"></span></div>'
+    + '<div class="chat-skel-row chat-skel-remote"><span class="chat-skel-bubble chat-skel-mid"></span></div>'
+    + '</div>'
+    + '<p class="messages-opening-label">' + esc(label) + '</p>'
+    + '</div>';
+}
+
 /** 发送按钮/composer 状态：不可写会话、发送中、无内容时不可发送 */
 function updateSendState() {
   var btn = $('send-btn');
@@ -638,9 +676,10 @@ function updateSendState() {
   }
 
   if (input) {
-    input.disabled = locked || !state.activeId;
+    input.disabled = locked || !state.activeId || !!state.sending;
     input.setAttribute('aria-disabled', input.disabled ? 'true' : 'false');
     if (locked) input.placeholder = lockMsg || lang.typing || '';
+    else if (state.sending) input.placeholder = lang.attachSending || lang.sending || lang.typing || '';
     else if (lang.typing) input.placeholder = lang.typing;
   }
   if (attach) {
@@ -650,12 +689,24 @@ function updateSendState() {
   }
 
   if (!btn) return;
-  var hasContent = !!((input && !input.disabled && input.value.trim()) || (!locked && state.pendingAttach));
-  var ready = !blocked && hasContent;
-  btn.disabled = !ready;
-  btn.classList.toggle('send-ready', ready);
-  btn.setAttribute('aria-label', lang.send || 'Send');
-  btn.title = locked ? (lockMsg || lang.send || '') : (lang.send || 'Send');
+  var hasContent = !!((input && input.value.trim()) || (!locked && state.pendingAttach));
+  // While sending, keep button disabled but show ready styling + spinner class.
+  var ready = !locked && !!state.activeId && hasContent && !state.sending;
+  btn.disabled = !ready || !!state.sending || locked || !state.activeId;
+  if (state.sending) {
+    btn.disabled = true;
+    btn.classList.add('send-sending');
+    btn.classList.add('send-ready');
+    btn.setAttribute('aria-busy', 'true');
+    btn.setAttribute('aria-label', lang.attachSending || lang.sending || 'Sending…');
+    btn.title = lang.attachSending || lang.sending || 'Sending…';
+  } else {
+    btn.classList.remove('send-sending');
+    btn.removeAttribute('aria-busy');
+    btn.classList.toggle('send-ready', ready);
+    btn.setAttribute('aria-label', lang.send || 'Send');
+    btn.title = locked ? (lockMsg || lang.send || '') : (lang.send || 'Send');
+  }
 }
 function autoResizeInput(el) {
   el.style.height = 'auto';
@@ -2631,6 +2682,7 @@ function applyLabels() {
   // Messenger sidebar (not ring sidebar)
   el = document.querySelector('#view-messages .sidebar-title'); if (el) el.textContent = lang.title || 'Messenger';
   el = document.querySelector('#view-messages .empty-text'); if (el) el.textContent = lang.selectHint || 'Pick a conversation to start messaging';
+  el = $('empty-start-btn'); if (el) el.textContent = lang.startChat || lang.create || 'New chat';
   el = $('create-btn'); if (el) { el.setAttribute('title', lang.create); el.setAttribute('aria-label', lang.create); }
   el = $('conv-tab-recent'); if (el) el.textContent = lang.convTabRecent || 'Recent';
   el = $('conv-tab-dm'); if (el) el.textContent = lang.convTabDm || lang.dm || 'DMs';
