@@ -2854,8 +2854,22 @@ function applyDialogLabels() {
   el = $('edit-room-title'); if (el) el.textContent = lang.editRoom;
   el = $('edit-name-label'); if (el) el.textContent = lang.roomName;
   el = $('edit-desc-label'); if (el) el.textContent = lang.roomDesc;
+  el = $('edit-invite-policy-label'); if (el) el.textContent = lang.invitePolicy || 'Invite policy';
   el = $('edit-room-public-label'); if (el) el.textContent = lang.makePublic;
   el = $('edit-room-id-label'); if (el) el.textContent = lang.roomId || 'Room ID';
   el = $('edit-room-id-copy'); if (el) el.textContent = lang.copy || 'Copy';
   el = $('edit-room-save'); if (el) el.textContent = lang.save;
+  el = $('edit-room-avatar-title'); if (el) el.textContent = lang.roomAvatar || 'Group avatar';
+  el = $('edit-room-avatar-hint'); if (el) el.textContent = lang.roomAvatarHint || 'Tap to change';
+  el = $('edit-room-avatar-btn'); if (el) el.setAttribute('aria-label', lang.roomAvatar || 'Group avatar');
+  el = $('create-room-avatar-title'); if (el) el.textContent = lang.roomAvatar || 'Group avatar';
+  el = $('create-room-avatar-hint'); if (el) el.textContent = lang.roomAvatarHintCreate || lang.roomAvatarOptional || 'Optional · tap to upload';
+  el = $('create-room-avatar-btn'); if (el) el.setAttribute('aria-label', lang.roomAvatar || 'Group avatar');
+  el = $('create-room-desc'); if (el) el.placeholder = lang.roomDescPlaceholder || lang.roomDesc || 'Description (optional)';
+  el = $('edit-room-invite-policy');
+  if (el && el.options && el.options.length >= 3) {
+    el.options[0].text = lang.invitePolicyAdmin || 'Admins only';
+    el.options[1].text = lang.invitePolicyMember || 'Members can invite';
+    el.options[2].text = lang.invitePolicyOpen || 'Open join';
+  }
 }

@@ -601,7 +601,21 @@
         <button id="create-channel-btn" class="create-submit">创建通道</button>
       </div>
       <div id="create-form-room" class="create-form" style="display:none">
+        <div class="room-avatar-field" id="create-room-avatar-field">
+          <button type="button" id="create-room-avatar-btn" class="room-avatar-btn" aria-label="群头像">
+            <span id="create-room-avatar-preview" class="room-avatar-preview" aria-hidden="true"></span>
+            <span class="room-avatar-overlay" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            </span>
+          </button>
+          <div class="room-avatar-meta">
+            <div class="room-avatar-title" id="create-room-avatar-title">群头像</div>
+            <div class="room-avatar-hint" id="create-room-avatar-hint">可选 · 点击上传</div>
+          </div>
+          <input id="create-room-avatar-input" type="file" accept="image/*" hidden />
+        </div>
         <input id="create-room-input" class="create-input" type="text" placeholder="房间名称" />
+        <input id="create-room-desc" class="create-input" type="text" placeholder="简介（可选）" />
         <label class="edit-check-row" id="create-room-public-row">
           <input type="checkbox" id="create-room-public" />
           <span id="create-room-public-label">创建为公开群（可展示 ID，不可再私有）</span>
@@ -623,10 +637,29 @@
         <button id="edit-room-close" class="create-dialog-close">✕</button>
       </div>
       <div class="create-form">
+        <div class="room-avatar-field" id="edit-room-avatar-field">
+          <button type="button" id="edit-room-avatar-btn" class="room-avatar-btn" aria-label="群头像">
+            <span id="edit-room-avatar-preview" class="room-avatar-preview" aria-hidden="true"></span>
+            <span class="room-avatar-overlay" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            </span>
+          </button>
+          <div class="room-avatar-meta">
+            <div class="room-avatar-title" id="edit-room-avatar-title">群头像</div>
+            <div class="room-avatar-hint" id="edit-room-avatar-hint">点击更换图片</div>
+          </div>
+          <input id="edit-room-avatar-input" type="file" accept="image/*" hidden />
+        </div>
         <label class="edit-label" id="edit-name-label">房间名称</label>
         <input id="edit-room-name" class="create-input" type="text" />
         <label class="edit-label" id="edit-desc-label">房间描述</label>
         <input id="edit-room-desc" class="create-input" type="text" />
+        <label class="edit-label" id="edit-invite-policy-label">邀请策略</label>
+        <select id="edit-room-invite-policy" class="create-input create-select">
+          <option value="admin-only">仅管理员可邀请</option>
+          <option value="member-invite">成员可邀请</option>
+          <option value="open">开放加入</option>
+        </select>
         <label class="edit-check-row" id="edit-room-public-row">
           <input type="checkbox" id="edit-room-public" />
           <span id="edit-room-public-label">公开群组</span>

@@ -3828,6 +3828,7 @@ function bindEvents() {
   if (createRoomBtn) createRoomBtn.addEventListener('click', doCreateRoom);
   var joinRoomIdBtn = $('join-room-id-btn');
   if (joinRoomIdBtn) joinRoomIdBtn.addEventListener('click', doJoinRoomById);
+  if (typeof bindRoomAvatarUi === 'function') bindRoomAvatarUi();
 
   // Enter key in create inputs
   var channelInput = $('create-channel-input');

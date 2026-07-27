@@ -1930,13 +1930,184 @@ function renderInvitePopoverContacts() {
   });
 }
 
+// ==================== Room avatar (create / edit) ====================
+// Backend accepts data:image/* (≤ ~600KB) or https URL on create/updateRoom.
+var ROOM_AVATAR_DATA_MAX = 520000;
+var _editRoomAvatar = { dirty: false, dataUrl: '' };
+var _createRoomAvatar = { dirty: false, dataUrl: '' };
+
+function compressRoomAvatarDataUrl(dataUrl) {
+  return new Promise(function (resolve, reject) {
+    if (!dataUrl || typeof dataUrl !== 'string') {
+      reject(new Error('invalid image'));
+      return;
+    }
+    if (dataUrl.length <= ROOM_AVATAR_DATA_MAX && /^data:image\//i.test(dataUrl)) {
+      resolve(dataUrl);
+      return;
+    }
+    var img = new Image();
+    img.onload = function () {
+      try {
+        var maxSide = 512;
+        var w = img.naturalWidth || img.width || 1;
+        var h = img.naturalHeight || img.height || 1;
+        var scale = Math.min(1, maxSide / Math.max(w, h));
+        var cw = Math.max(1, Math.round(w * scale));
+        var ch = Math.max(1, Math.round(h * scale));
+        var canvas = document.createElement('canvas');
+        canvas.width = cw;
+        canvas.height = ch;
+        var ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('canvas'));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, cw, ch);
+        var out = '';
+        var qualities = [0.88, 0.75, 0.62, 0.5, 0.38, 0.28];
+        for (var i = 0; i < qualities.length; i++) {
+          out = canvas.toDataURL('image/jpeg', qualities[i]);
+          if (out.length <= ROOM_AVATAR_DATA_MAX) break;
+        }
+        var side = maxSide;
+        while (out.length > ROOM_AVATAR_DATA_MAX && side > 96) {
+          side = Math.floor(side * 0.75);
+          scale = Math.min(1, side / Math.max(w, h));
+          cw = Math.max(1, Math.round(w * scale));
+          ch = Math.max(1, Math.round(h * scale));
+          canvas.width = cw;
+          canvas.height = ch;
+          ctx.drawImage(img, 0, 0, cw, ch);
+          out = canvas.toDataURL('image/jpeg', 0.55);
+        }
+        if (out.length > ROOM_AVATAR_DATA_MAX) {
+          reject(new Error(lang.roomAvatarTooLarge || lang.stickerTooLarge || 'Image too large'));
+          return;
+        }
+        resolve(out);
+      } catch (e) {
+        reject(e);
+      }
+    };
+    img.onerror = function () { reject(new Error('image load failed')); };
+    img.src = dataUrl;
+  });
+}
+
+function paintRoomAvatarPreview(previewEl, url, name) {
+  if (!previewEl) return;
+  var safe = '';
+  if (url) {
+    if (typeof safeMessageImageUrl === 'function') safe = safeMessageImageUrl(url);
+    else if (typeof safeIconUrl === 'function') safe = safeIconUrl(url);
+    if (!safe && String(url).indexOf('data:image/') === 0 && url.length < ROOM_AVATAR_DATA_MAX + 20000) {
+      safe = url;
+    }
+    if (!safe && /^https?:\/\//i.test(String(url))) safe = String(url);
+  }
+  if (safe) {
+    previewEl.innerHTML = '<img src="' + esc(safe) + '" alt="" />';
+    previewEl.classList.add('has-image');
+  } else {
+    var initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
+    previewEl.textContent = initial;
+    previewEl.classList.remove('has-image');
+  }
+}
+
+async function handleRoomAvatarFile(file, which) {
+  if (!file || !file.type || file.type.indexOf('image/') !== 0) {
+    if (typeof notifyError === 'function') {
+      notifyError(lang.roomAvatarNeedImage || lang.stickerNeedImage || 'Please choose an image');
+    }
+    return;
+  }
+  if (file.size > 8 * 1024 * 1024) {
+    if (typeof notifyError === 'function') {
+      notifyError(lang.roomAvatarTooLarge || 'Image too large');
+    }
+    return;
+  }
+  try {
+    var dataUrl = typeof readFileAsDataURL === 'function'
+      ? await readFileAsDataURL(file)
+      : await new Promise(function (resolve, reject) {
+          var r = new FileReader();
+          r.onload = function () { resolve(r.result); };
+          r.onerror = function () { reject(r.error); };
+          r.readAsDataURL(file);
+        });
+    dataUrl = await compressRoomAvatarDataUrl(dataUrl);
+    if (which === 'create') {
+      _createRoomAvatar = { dirty: true, dataUrl: dataUrl };
+      paintRoomAvatarPreview($('create-room-avatar-preview'), dataUrl, ($('create-room-input') || {}).value);
+    } else {
+      _editRoomAvatar = { dirty: true, dataUrl: dataUrl };
+      paintRoomAvatarPreview(
+        $('edit-room-avatar-preview'),
+        dataUrl,
+        ($('edit-room-name') || {}).value || (state.roomDetail && state.roomDetail.name)
+      );
+    }
+  } catch (e) {
+    if (typeof notifyError === 'function') {
+      notifyError(lang.roomAvatarFail || lang.sendFail || 'Avatar failed', e);
+    }
+  }
+}
+
+function bindRoomAvatarUi() {
+  if (bindRoomAvatarUi._bound) return;
+  bindRoomAvatarUi._bound = true;
+  var editBtn = $('edit-room-avatar-btn');
+  var editInp = $('edit-room-avatar-input');
+  if (editBtn && editInp) {
+    editBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      editInp.value = '';
+      editInp.click();
+    });
+    editInp.addEventListener('change', function () {
+      if (this.files && this.files[0]) handleRoomAvatarFile(this.files[0], 'edit');
+    });
+  }
+  var createBtn = $('create-room-avatar-btn');
+  var createInp = $('create-room-avatar-input');
+  if (createBtn && createInp) {
+    createBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      createInp.value = '';
+      createInp.click();
+    });
+    createInp.addEventListener('change', function () {
+      if (this.files && this.files[0]) handleRoomAvatarFile(this.files[0], 'create');
+    });
+  }
+}
+
 // ==================== Edit Room ====================
 function showEditRoomDialog() {
   if (!state.roomDetail) return;
   var overlay = $('edit-room-dialog');
   if (!overlay) return;
+  bindRoomAvatarUi();
+  _editRoomAvatar = { dirty: false, dataUrl: '' };
   $('edit-room-name').value = state.roomDetail.name || '';
   $('edit-room-desc').value = state.roomDetail.description || '';
+  var policySel = $('edit-room-invite-policy');
+  if (policySel) {
+    var pol = state.roomDetail.invite_policy || 'member-invite';
+    if (['admin-only', 'member-invite', 'open'].indexOf(pol) < 0) pol = 'member-invite';
+    policySel.value = pol;
+  }
+  paintRoomAvatarPreview(
+    $('edit-room-avatar-preview'),
+    state.roomDetail.avatar_url || '',
+    state.roomDetail.name || ''
+  );
   var pubCb = $('edit-room-public');
   var pubHint = $('edit-room-public-hint');
   var idBox = $('edit-room-id-box');
@@ -1990,6 +2161,8 @@ async function doSaveRoom() {
   var pubCb = $('edit-room-public');
   var wantPublic = !!(pubCb && pubCb.checked);
   var alreadyPublic = !!state.roomDetail.is_public;
+  var policySel = $('edit-room-invite-policy');
+  var invitePolicy = policySel ? (policySel.value || '').trim() : '';
   var btn = $('edit-room-save');
   btn && (btn.disabled = true, btn.textContent = lang.saving);
   try {
@@ -1998,22 +2171,41 @@ async function doSaveRoom() {
     if (!alreadyPublic && wantPublic) {
       payload.is_public = true;
     }
+    if (invitePolicy && ['admin-only', 'member-invite', 'open'].indexOf(invitePolicy) >= 0) {
+      payload.invite_policy = invitePolicy;
+    }
+    if (_editRoomAvatar.dirty && _editRoomAvatar.dataUrl) {
+      payload.avatar_url = _editRoomAvatar.dataUrl;
+    }
     var updated = await Tapp.federation.updateRoom(state.activeId, payload);
-    if (updated) state.roomDetail = updated;
-    else {
+    var detail = updated && (updated.data || updated);
+    if (detail && (detail.room_id || detail.name || detail.avatar_url !== undefined)) {
+      state.roomDetail = detail;
+    } else {
       state.roomDetail.name = nameVal;
       state.roomDetail.description = descVal;
       if (!alreadyPublic && wantPublic) state.roomDetail.is_public = true;
+      if (invitePolicy) state.roomDetail.invite_policy = invitePolicy;
+      if (_editRoomAvatar.dirty && _editRoomAvatar.dataUrl) {
+        state.roomDetail.avatar_url = _editRoomAvatar.dataUrl;
+      }
     }
     // Sync to room list
     for (var i = 0; i < state.rooms.length; i++) {
       if (state.rooms[i].room_id === state.activeId) {
-        state.rooms[i].name = nameVal;
-        state.rooms[i].description = descVal;
+        state.rooms[i].name = state.roomDetail.name || nameVal;
+        state.rooms[i].description = state.roomDetail.description != null
+          ? state.roomDetail.description
+          : descVal;
+        if (state.roomDetail.avatar_url !== undefined) {
+          state.rooms[i].avatar_url = state.roomDetail.avatar_url;
+        }
         if (!alreadyPublic && wantPublic) state.rooms[i].is_public = true;
+        if (state.roomDetail.is_public != null) state.rooms[i].is_public = !!state.roomDetail.is_public;
         break;
       }
     }
+    _editRoomAvatar = { dirty: false, dataUrl: '' };
     hideEditRoomDialog();
     renderChatHeader();
     renderConvList();
@@ -2290,6 +2482,11 @@ async function doLeaveRoom() {
 
 // ==================== Create Dialog ====================
 function showCreateDialog() {
+  bindRoomAvatarUi();
+  _createRoomAvatar = { dirty: false, dataUrl: '' };
+  paintRoomAvatarPreview($('create-room-avatar-preview'), '', '');
+  var descCreate = $('create-room-desc');
+  if (descCreate) descCreate.value = '';
   var overlay = $('create-dialog');
   if (overlay) {
     showAroOverlay(overlay);
@@ -2302,8 +2499,12 @@ function hideCreateDialog() {
   var clearInputs = function () {
     var channelInput = $('create-channel-input');
     var roomInput = $('create-room-input');
+    var roomDesc = $('create-room-desc');
     if (channelInput) channelInput.value = '';
     if (roomInput) roomInput.value = '';
+    if (roomDesc) roomDesc.value = '';
+    _createRoomAvatar = { dirty: false, dataUrl: '' };
+    paintRoomAvatarPreview($('create-room-avatar-preview'), '', '');
   };
   if (!overlay || overlay.style.display === 'none' || overlay.hidden) {
     if (overlay) {
@@ -2392,20 +2593,31 @@ async function doCreateRoom() {
     try { Tapp.ui.showNotification({ title: lang.roomPlaceholder || lang.createFail, type: 'error' }); } catch (e0) {}
     return;
   }
+  var descInp = $('create-room-desc');
+  var desc = descInp ? (descInp.value || '').trim() : '';
   var pubCb = $('create-room-public');
   var isPublic = !!(pubCb && pubCb.checked);
   var btn = $('create-room-btn');
   if (typeof setActionBusy === 'function') setActionBusy(btn, true, lang.creating || '…');
   else if (btn) { btn.disabled = true; btn.textContent = lang.creating; }
   try {
-    var result = await Tapp.federation.createRoom({
+    var createReq = {
       name: name,
       is_public: isPublic,
       // Public rooms are joinable by id even if invite_policy stays default.
       invite_policy: isPublic ? 'open' : undefined,
-    });
+    };
+    if (desc) createReq.description = desc;
+    if (_createRoomAvatar.dirty && _createRoomAvatar.dataUrl) {
+      createReq.avatar_url = _createRoomAvatar.dataUrl;
+    }
+    var result = await Tapp.federation.createRoom(createReq);
+    if (result && result.data) result = result.data;
     hideCreateDialog();
     if (pubCb) pubCb.checked = false;
+    if (descInp) descInp.value = '';
+    _createRoomAvatar = { dirty: false, dataUrl: '' };
+    paintRoomAvatarPreview($('create-room-avatar-preview'), '', '');
     await loadConversations();
     if (result && result.room_id) {
       openConversation('room', result.room_id);
