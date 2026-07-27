@@ -1,5 +1,190 @@
 // ==================== Helpers ====================
-function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+
+/** SVG elements allowed when rendering untrusted remote icon markup (ARO-01). */
+var SAFE_SVG_TAGS = {
+  svg: 1, g: 1, path: 1, circle: 1, rect: 1, ellipse: 1, line: 1, polyline: 1,
+  polygon: 1, defs: 1, clippath: 1, lineargradient: 1, radialgradient: 1, stop: 1,
+  title: 1, desc: 1, use: 1,
+};
+
+/**
+ * Strip executable / remote content from untrusted SVG/HTML icon strings.
+ * Returns sanitized SVG markup or '' (caller should use a local glyph fallback).
+ */
+function sanitizeRemoteSvg(raw, maxLen) {
+  if (raw == null) return '';
+  var s = String(raw).trim();
+  if (!s) return '';
+  var limit = maxLen || 8192;
+  if (s.length > limit) return '';
+  // Reject obvious non-SVG payloads
+  if (s.indexOf('<') === -1) return '';
+  if (/<\s*script|<\s*foreignObject|<\s*iframe|<\s*object|<\s*embed|javascript:|data:text\/html/i.test(s)) {
+    return '';
+  }
+  try {
+    var parser = new DOMParser();
+    var wrapped = /<\s*svg[\s>]/i.test(s) ? s : ('<svg xmlns="http://www.w3.org/2000/svg">' + s + '</svg>');
+    var doc = parser.parseFromString(wrapped, 'image/svg+xml');
+    if (doc.querySelector('parsererror')) return '';
+    var root = doc.documentElement;
+    if (!root || String(root.nodeName).toLowerCase() !== 'svg') return '';
+
+    function scrub(node) {
+      if (!node || node.nodeType !== 1) return;
+      var tag = String(node.nodeName).toLowerCase().replace(/^.*:/, '');
+      if (!SAFE_SVG_TAGS[tag]) {
+        if (node.parentNode) node.parentNode.removeChild(node);
+        return;
+      }
+      // Drop event handlers and remote/href abuse
+      var attrs = Array.prototype.slice.call(node.attributes || []);
+      for (var i = 0; i < attrs.length; i++) {
+        var a = attrs[i];
+        var name = a.name;
+        var nLower = name.toLowerCase();
+        var val = a.value || '';
+        if (nLower.indexOf('on') === 0) {
+          node.removeAttribute(name);
+          continue;
+        }
+        if (nLower === 'style' || nLower === 'class') {
+          // style can embed url()/expression — drop entirely from untrusted SVG
+          node.removeAttribute(name);
+          continue;
+        }
+        if (nLower === 'href' || nLower === 'xlink:href' || nLower === 'src') {
+          var v = String(val).trim();
+          var vl = v.toLowerCase();
+          // allow only fragment refs on <use>
+          if (tag === 'use' && v.charAt(0) === '#') continue;
+          if (vl.indexOf('javascript:') === 0 || vl.indexOf('data:') === 0 || vl.indexOf('http:') === 0 || vl.indexOf('https:') === 0) {
+            node.removeAttribute(name);
+          } else if (v.charAt(0) !== '#') {
+            node.removeAttribute(name);
+          }
+          continue;
+        }
+      }
+      var kids = Array.prototype.slice.call(node.childNodes || []);
+      for (var k = 0; k < kids.length; k++) {
+        if (kids[k].nodeType === 1) scrub(kids[k]);
+        else if (kids[k].nodeType === 8) {
+          // strip comments
+          if (kids[k].parentNode) kids[k].parentNode.removeChild(kids[k]);
+        }
+      }
+    }
+    scrub(root);
+    // Cap complexity
+    if (root.querySelectorAll('*').length > 80) return '';
+    // Force safe xmlns
+    if (!root.getAttribute('xmlns')) root.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    root.removeAttribute('onload');
+    root.removeAttribute('onclick');
+    var out = new XMLSerializer().serializeToString(root);
+    if (out.length > limit) return '';
+    return out;
+  } catch (e) {
+    return '';
+  }
+}
+
+/**
+ * Safe href for external links (ARO-10). Only http(s), no credentials / javascript.
+ */
+function safeExternalHref(url) {
+  if (!url) return '';
+  var v = String(url).trim();
+  if (!v || v.length > 2048) return '';
+  var lower = v.toLowerCase();
+  if (lower.indexOf('javascript:') === 0 || lower.indexOf('vbscript:') === 0 || lower.indexOf('data:') === 0) {
+    return '';
+  }
+  try {
+    var u = new URL(v);
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return '';
+    if (u.username || u.password) return '';
+    return u.href;
+  } catch (e) {
+    return '';
+  }
+}
+
+/**
+ * Store catalog ref for SDK install (ARO-05).
+ * Accepts: numeric source id, or https URL (catalog / index.json).
+ * Rejects: empty, mode placeholders, non-https schemes.
+ */
+function isValidStoreSourceRef(ref) {
+  if (!ref || typeof ref !== 'string') return false;
+  var s = ref.trim();
+  if (!s || s.length > 2048) return false;
+  var lower = s.toLowerCase();
+  if (lower === 'store' || lower === 'direct') return false;
+  if (/^\d{1,12}$/.test(s)) return true;
+  try {
+    var u = new URL(s);
+    if (u.protocol !== 'https:') return false;
+    if (u.username || u.password) return false;
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Stable key for Tapp accept/reject state (ARO-08) — never array index.
+ * @param {object} msg message row
+ * @param {object} payload
+ */
+function tappAcceptStorageKey(msg, payload) {
+  var tappId = (payload && (payload.tapp_id || payload.tappId)) || '';
+  if (!tappId) return '';
+  var mid = (msg && (msg.message_id || msg.id)) || '';
+  var sender = (msg && (msg.sender_actor || msg.sender || msg.from)) || '';
+  var ver = (payload && (payload.tapp_version || payload.tappVersion)) || '';
+  var conv = (state.activeKind || '') + ':' + (state.activeId || '');
+  return ['tapp_accept', conv, mid || 'noid', sender || 'nosender', tappId, ver || 'v'].join('_');
+}
+
+/**
+ * Rebuild a controlled Blob URL from an untrusted data: payload (ARO-09).
+ * Returns { url, filename, revoke } or null.
+ */
+function safeInlineDownload(payload) {
+  if (!payload || !payload.data || typeof payload.data !== 'string') return null;
+  var data = payload.data.trim();
+  if (data.length > 8 * 1024 * 1024) return null; // ~6MiB raw after base64 overhead guard
+  var mime = '';
+  var b64 = '';
+  var m = /^data:([^;,]+)?(;base64)?,(.*)$/i.exec(data);
+  if (!m) return null;
+  mime = (m[1] || 'application/octet-stream').toLowerCase();
+  var isB64 = !!m[2];
+  b64 = m[3] || '';
+  // Whitelist common attachment types
+  var okMime = /^(image\/(png|jpe?g|gif|webp|avif)|application\/(pdf|zip|octet-stream)|text\/plain|audio\/|video\/)/i.test(mime);
+  if (!okMime) return null;
+  if (!isB64) return null;
+  try {
+    var bin = atob(b64);
+    if (bin.length > 6 * 1024 * 1024) return null;
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    var blob = new Blob([bytes], { type: mime });
+    var url = URL.createObjectURL(blob);
+    var name = String(payload.filename || 'file').replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').slice(0, 180) || 'file';
+    return {
+      url: url,
+      filename: name,
+      revoke: function () { try { URL.revokeObjectURL(url); } catch (e) { /* ignore */ } },
+    };
+  } catch (e) {
+    return null;
+  }
+}
 
 /** Normalize a search query for case-insensitive substring match. */
 function normalizeSearchQuery(q) {
@@ -587,9 +772,11 @@ function sheetVisual(opts) {
   var accent = null;
 
   if (opts.cover) {
-    icon = '<img src="' + esc(opts.cover) + '" alt="" />';
+    var coverUrl = safeIconUrl(opts.cover);
+    icon = coverUrl ? ('<img src="' + esc(coverUrl) + '" alt="" />') : (opts.fallback || SVG_ICONS.file);
   } else if (opts.rawSvg) {
-    icon = opts.rawSvg;
+    var cleanSvg = sanitizeRemoteSvg(opts.rawSvg);
+    icon = cleanSvg || opts.fallback || SVG_ICONS.file;
   } else if (favicon) {
     icon = '<img src="' + esc(favicon) + '" alt="" />';
     mark = 'img';
@@ -673,12 +860,29 @@ function applySheetAccent(el, accent) {
 /**
  * Keep only image URLs the sandbox CSP will actually load (img-src data: blob: https:).
  * Anything else would render as a broken tile, so callers fall back to a glyph.
+ * Rejects oversized data URLs and non-image schemes (ARO-10).
  */
 function safeIconUrl(url) {
   if (!url) return '';
   var v = String(url).trim();
+  if (!v || v.length > 512 * 1024) return '';
   var lower = v.toLowerCase();
-  if (lower.indexOf('https://') === 0 || lower.indexOf('data:image/') === 0) return v;
+  if (lower.indexOf('javascript:') === 0 || lower.indexOf('vbscript:') === 0) return '';
+  if (lower.indexOf('https://') === 0) {
+    try {
+      var u = new URL(v);
+      if (u.protocol !== 'https:' || u.username || u.password) return '';
+      return u.href;
+    } catch (e) {
+      return '';
+    }
+  }
+  if (lower.indexOf('data:image/') === 0) {
+    // only simple raster / svg+xml data images; no html
+    if (!/^data:image\/(png|jpe?g|gif|webp|avif|svg\+xml);base64,/i.test(v)) return '';
+    if (v.length > 256 * 1024) return '';
+    return v;
+  }
   return '';
 }
 

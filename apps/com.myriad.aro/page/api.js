@@ -496,6 +496,22 @@ async function doSend() {
     state.activeKind === 'channel' && state.channelDetail && state.channelDetail.status === 'closed'
   )) return;
 
+  // ARO-03: freeze destination + draft for entire async send chain
+  var ctx = {
+    kind: state.activeKind,
+    id: state.activeId,
+    generation: state.conversationGeneration,
+    text: text,
+    attach: attach,
+    quoteMsg: state.quoteMsg
+      ? {
+          message_id: state.quoteMsg.message_id,
+          sender: state.quoteMsg.sender,
+          text: state.quoteMsg.text,
+        }
+      : null,
+  };
+
   input.value = '';
   autoResizeInput(input);
   state.sending = true;
@@ -503,65 +519,77 @@ async function doSend() {
   closeAttachMenu();
   closeMsgMenu();
 
+  var sendReq = null;
   try {
     var msgPayload;
     var msgType;
 
-    // Attach quote info if replying to a message
-    var replyTo = null;
-    if (state.quoteMsg) {
-      replyTo = state.quoteMsg.message_id;
-    }
+    var replyTo = ctx.quoteMsg ? ctx.quoteMsg.message_id : null;
 
-    if (attach && (attach.type === 'image' || attach.type === 'file')) {
-      var useChunked = attach.size > INLINE_ATTACH_MAX;
+    if (ctx.attach && (ctx.attach.type === 'image' || ctx.attach.type === 'file')) {
+      var useChunked = ctx.attach.size > INLINE_ATTACH_MAX;
       if (useChunked) {
-        if (state.activeKind !== 'channel' && state.activeKind !== 'room') {
+        if (ctx.kind !== 'channel' && ctx.kind !== 'room') {
           throw new Error(lang.fileTooLarge || 'File too large');
         }
+        // Only clear UI draft after we know we're committing this transfer
         clearPendingAttach();
-        await sendChunkedFileTransfer(attach, text, replyTo);
         if (state.quoteMsg) clearQuote();
-        await pollMessages(true);
+        await sendChunkedFileTransfer(ctx.attach, ctx.text, replyTo, ctx);
+        // poll only if still on same conversation
+        if (state.activeKind === ctx.kind && state.activeId === ctx.id) {
+          await pollMessages(true);
+        }
         return;
       }
 
       // Small files: inline base64 under backend payload budget
-      var dataUrl = attach.data;
-      if (!dataUrl && attach.file) {
-        dataUrl = await readFileAsDataURL(attach.file);
+      var dataUrl = ctx.attach.data;
+      if (!dataUrl && ctx.attach.file) {
+        dataUrl = await readFileAsDataURL(ctx.attach.file);
       }
       if (!dataUrl) throw new Error('Failed to read file');
-      msgType = attach.type === 'image' ? 'image' : 'file';
-      msgPayload = { data: dataUrl, filename: attach.name, mime_type: attach.mime, size: attach.size, text: text || '' };
+      // Destination must not change mid-flight
+      if (state.conversationGeneration !== ctx.generation
+        && !(state.activeKind === ctx.kind && state.activeId === ctx.id)) {
+        throw new Error(lang.sendCancelled || 'Conversation changed; send cancelled');
+      }
+      msgType = ctx.attach.type === 'image' ? 'image' : 'file';
+      msgPayload = {
+        data: dataUrl,
+        filename: ctx.attach.name,
+        mime_type: ctx.attach.mime,
+        size: ctx.attach.size,
+        text: ctx.text || '',
+      };
       clearPendingAttach();
-    } else if (attach) {
+    } else if (ctx.attach) {
       // Federation content: tapp, brew, library, report — rich snapshot, never id-only.
+      var attach = ctx.attach;
       msgType = attach.type;
       msgPayload = {
         title: (attach.name || '').trim() || (lang.shareUntitled || 'Untitled'),
         description: attach.desc || '',
         content_type: attach.type,
+        // Prefer sanitized SVG only when local; receivers re-sanitize (ARO-01)
         icon: attach.icon || '',
-        text: text || '',
+        text: ctx.text || '',
       };
-      // Include resource IDs so the receiver can fetch detail
       if (attach.tappId) msgPayload.tapp_id = attach.tappId;
       if (attach.tappVersion) msgPayload.tapp_version = attach.tappVersion;
       if (attach.tappIcon) msgPayload.tapp_icon = attach.tappIcon;
       if (attach.name && attach.type === 'tapp') msgPayload.tapp_name = attach.name;
-      // P0 store install: portable catalog URL (never local DB id / mode "store")
-      if (attach.storeSource) msgPayload.store_source = attach.storeSource;
-      // Direct-install package fallback for offline/custom (optional)
+      // Only emit validated catalog refs (ARO-05)
+      if (attach.storeSource && isValidStoreSourceRef(attach.storeSource)) {
+        msgPayload.store_source = attach.storeSource.trim();
+      }
+      // Direct package remains optional but receivers must not auto-install as store fallback
       if (attach.installPackage) msgPayload.install_package = attach.installPackage;
       if (attach.installPackageOmitted) msgPayload.install_package_omitted = attach.installPackageOmitted;
       if (attach.brewId) msgPayload.brew_id = attach.brewId;
       if (attach.brewLink) msgPayload.brew_link = attach.brewLink;
-      // Source mark for the share card icon (favicon URL / brand slug).
       if (attach.sourceIcon) msgPayload.source_icon = attach.sourceIcon;
       if (attach.sourceName) msgPayload.source_name = attach.sourceName;
-      // Library share: title, description, platform_id, item_id, image, content_type (like report snapshot).
-      // content_type stays "library" (message kind); item kind goes in item_type / description.
       if (attach.type === 'library') {
         var libTitle = (attach.name || attach.summary || '').trim() || (lang.shareUntitled || 'Untitled');
         var libDesc = (attach.desc || '').trim();
@@ -578,8 +606,6 @@ async function doSend() {
         msgPayload.content_type = 'library';
         if (libItemType) msgPayload.item_type = libItemType;
         msgPayload.summary = libTitle;
-        // Structured sender stats for the media card (omit empties so old
-        // recipients ignore them and the card falls back cleanly).
         if (attach.playtimeMin != null) msgPayload.playtime_min = attach.playtimeMin;
         if (attach.rating != null) msgPayload.rating = attach.rating;
         if (attach.progressCur != null) msgPayload.progress_cur = attach.progressCur;
@@ -591,9 +617,6 @@ async function doSend() {
         if (attach.itemId) msgPayload.item_id = attach.itemId;
         if (attach.image) msgPayload.image = attach.image;
       }
-      // Report share: always wire snapshot fields (never id-only).
-      // Coordinated field names (Aro + federation Article): report_id, summary, platform, content_preview.
-      // Mirrored by wireReportSharePayload / REPORT_SHARE_SNAPSHOT_FIELDS in reportShareSnapshot.ts.
       if (attach.type === 'report') {
         var reportSummary = (attach.summary || attach.name || '').trim() || 'Report';
         var reportPlatform = (attach.platform || '').trim();
@@ -614,49 +637,47 @@ async function doSend() {
       clearPendingAttach();
     } else {
       msgType = 'text';
-      msgPayload = { text: text };
+      msgPayload = { text: ctx.text };
     }
 
-    if (state.quoteMsg) {
-      msgPayload.quote_sender = state.quoteMsg.sender;
-      msgPayload.quote_text = state.quoteMsg.text;
-      msgPayload.quote_id = state.quoteMsg.message_id;
+    if (ctx.quoteMsg) {
+      msgPayload.quote_sender = ctx.quoteMsg.sender;
+      msgPayload.quote_text = ctx.quoteMsg.text;
+      msgPayload.quote_id = ctx.quoteMsg.message_id;
       clearQuote();
     }
 
-    var sendReq = { payload: msgPayload, message_type: msgType };
+    sendReq = { payload: msgPayload, message_type: msgType };
     if (replyTo) sendReq.reply_to = replyTo;
-    // Prefer E2E only when session looks established. Backend also soft-falls
-    // back to plaintext if keys are incomplete (hard 400 used to fail every send).
+    // Prefer E2E only when session looks established. ARO-02: never auto-downgrade to plaintext.
     if (state.e2ePreferEncrypt !== false && isE2eReadyForActive()) {
       sendReq.encrypt = true;
     }
     var sendRes;
-    if (state.activeKind === 'channel') {
-      try {
-        sendRes = await Tapp.federation.sendMessage(state.activeId, sendReq);
-      } catch (eEnc) {
-        // Fallback plaintext if peer has no E2E session yet / encrypt rejected
-        if (sendReq.encrypt) {
-          delete sendReq.encrypt;
-          sendRes = await Tapp.federation.sendMessage(state.activeId, sendReq);
-        } else throw eEnc;
-      }
+    if (ctx.kind === 'channel') {
+      sendRes = await Tapp.federation.sendMessage(ctx.id, sendReq);
     } else {
-      try {
-        sendRes = await Tapp.federation.sendRoomMessage(state.activeId, sendReq);
-      } catch (eEnc2) {
-        if (sendReq.encrypt) {
-          delete sendReq.encrypt;
-          sendRes = await Tapp.federation.sendRoomMessage(state.activeId, sendReq);
-        } else throw eEnc2;
-      }
+      sendRes = await Tapp.federation.sendRoomMessage(ctx.id, sendReq);
     }
     if (typeof noteDeliveryEnqueue === 'function') noteDeliveryEnqueue(sendRes);
-    await pollMessages(true);
+    if (state.activeKind === ctx.kind && state.activeId === ctx.id) {
+      await pollMessages(true);
+    }
   } catch (e) {
-    if (text) input.value = text;
-    notifyError(lang.sendFail, e);
+    // Restore draft fully on failure (text; attachment already cleared only after successful read)
+    if (ctx.text) input.value = ctx.text;
+    if (ctx.attach && !state.pendingAttach) {
+      try { state.pendingAttach = ctx.attach; if (typeof renderAttachPreview === 'function') renderAttachPreview(); } catch (eRest) { /* ignore */ }
+    }
+    if (ctx.quoteMsg && !state.quoteMsg) {
+      try { state.quoteMsg = ctx.quoteMsg; if (typeof renderQuoteBar === 'function') renderQuoteBar(); } catch (eQ) { /* ignore */ }
+    }
+    var errMsg = (e && e.message) ? String(e.message) : '';
+    if (sendReq && sendReq.encrypt) {
+      notifyError(lang.e2eSendFail || lang.sendFail || 'Encrypted send failed (no plaintext fallback)', e);
+    } else {
+      notifyError(lang.sendFail, e);
+    }
   } finally {
     state.sending = false;
     updateSendState();

@@ -765,12 +765,17 @@ function renderMessages(opts) {
 
     // Render content based on message type
     if (msgType === 'image' && payload.data) {
-      html += '<figure class="msg-media" data-media-idx="' + idx + '" tabindex="0" role="button"'
-        + ' aria-label="' + esc(payload.filename || lang.attachImage || 'Image') + '">'
-        + '<img class="msg-image" src="' + esc(payload.data) + '" alt="' + esc(payload.filename || '') + '" loading="lazy" />'
-        + '<span class="msg-media-veil"></span>'
-        + '<span class="msg-media-zoom">' + SVG_ICONS.expand + '</span>'
-        + '</figure>';
+      var safeImg = safeIconUrl(payload.data);
+      if (safeImg) {
+        html += '<figure class="msg-media" data-media-idx="' + idx + '" tabindex="0" role="button"'
+          + ' aria-label="' + esc(payload.filename || lang.attachImage || 'Image') + '">'
+          + '<img class="msg-image" src="' + esc(safeImg) + '" alt="' + esc(payload.filename || '') + '" loading="lazy" />'
+          + '<span class="msg-media-veil"></span>'
+          + '<span class="msg-media-zoom">' + SVG_ICONS.expand + '</span>'
+          + '</figure>';
+      } else {
+        html += '<div class="msg-text">' + esc(payload.filename || lang.attachImage || 'Image') + '</div>';
+      }
       if (payload.text) html += '<div class="msg-text msg-caption">' + esc(payload.text) + '</div>';
     } else if (msgType === 'file' || msgType === 'file-meta') {
       var fileMeta = fileCardMeta(payload.filename, payload.mime_type);
@@ -829,10 +834,11 @@ function renderMessages(opts) {
       // '' | 'brand' (known platform → brand palette) | 'img' (favicon supplies
       // its own colors, so the card stays neutral)
       var iconMark = '';
-      if (shareCover) {
-        iconContent = '<img src="' + esc(shareCover) + '" alt="" />';
+      if (shareCover && safeIconUrl(shareCover)) {
+        iconContent = '<img src="' + esc(safeIconUrl(shareCover)) + '" alt="" />';
       } else if (msgType === 'tapp' && payload.tapp_icon) {
-        iconContent = payload.tapp_icon; // raw SVG string
+        // ARO-01: never inject untrusted SVG/HTML from federation payload
+        iconContent = sanitizeRemoteSvg(payload.tapp_icon) || shareIcons.tapp || SVG_ICONS.tapp;
       } else if (shareFavicon) {
         // data-fallback: swapped in on load error (dead favicon / hotlink block)
         iconContent = '<img class="msg-share-favicon" src="' + esc(shareFavicon) + '" alt="" data-fallback="' + esc(msgType) + '" />';
@@ -841,7 +847,11 @@ function renderMessages(opts) {
         iconContent = shareLogo;
         iconMark = 'brand';
       } else {
-        iconContent = payload.icon || shareIcons[msgType] || SVG_ICONS.file;
+        // payload.icon may be remote SVG/HTML — sanitize or fall back
+        var rawIcon = payload.icon || '';
+        iconContent = (rawIcon && sanitizeRemoteSvg(rawIcon))
+          || shareIcons[msgType]
+          || SVG_ICONS.file;
       }
       // Brand accent drives --acc (tile, wash, hover border) for known platforms.
       // Emitted as -l/-d pairs so the stylesheet — not inline style — picks the
@@ -850,10 +860,13 @@ function renderMessages(opts) {
       var shareAccentStyle = shareAccent
         ? ';--acc-l:' + shareAccent.l + ';--acc-d:' + shareAccent.d
         : '';
-      // Determine tapp share acceptance status from storage
+      // Determine tapp share acceptance status from storage (stable key, not list idx)
       var tappAcceptStatus = '';
+      var stKey = '';
       if (msgType === 'tapp' && payload.tapp_id) {
-        var stKey = 'tapp_accept_' + payload.tapp_id + '_' + idx;
+        stKey = typeof tappAcceptStorageKey === 'function'
+          ? tappAcceptStorageKey(msg, payload)
+          : ('tapp_accept_' + payload.tapp_id + '_' + (msg.message_id || idx));
         tappAcceptStatus = (state.tappAcceptMap && state.tappAcceptMap[stKey]) || '';
       }
       // Undecided incoming tapp share → decision card (no drill-in affordance yet)
@@ -863,23 +876,27 @@ function renderMessages(opts) {
         + (payload.tapp_id ? ' data-tapp-id="' + esc(payload.tapp_id) + '"' : '')
         + (payload.tapp_version ? ' data-tapp-version="' + esc(payload.tapp_version) + '"' : '')
         + (payload.tapp_name ? ' data-tapp-name="' + esc(payload.tapp_name) + '"' : '')
-        + ((payload.store_source || payload.storeSource) ? ' data-store-source="' + esc(payload.store_source || payload.storeSource) + '"' : '')
+        + ((payload.store_source || payload.storeSource) && isValidStoreSourceRef(payload.store_source || payload.storeSource)
+          ? ' data-store-source="' + esc(payload.store_source || payload.storeSource) + '"'
+          : '')
         + (payload.brew_id ? ' data-brew-id="' + esc(String(payload.brew_id)) + '"' : '')
-        + (payload.brew_link ? ' data-brew-link="' + esc(payload.brew_link) + '"' : '')
+        + (payload.brew_link && safeExternalHref(payload.brew_link) ? ' data-brew-link="' + esc(safeExternalHref(payload.brew_link)) + '"' : '')
         + (payload.platform_id ? ' data-platform-id="' + esc(payload.platform_id) + '"' : '')
         + (payload.item_id ? ' data-item-id="' + esc(String(payload.item_id)) + '"' : '')
-        + (shareCover ? ' data-image="' + esc(shareCover) + '"' : '')
+        + (shareCover && safeIconUrl(shareCover) ? ' data-image="' + esc(safeIconUrl(shareCover)) + '"' : '')
         + (payload.report_id ? ' data-report-id="' + esc(payload.report_id) + '"' : '')
         + (payload.summary ? ' data-report-summary="' + esc(payload.summary) + '"' : '')
         + (payload.platform ? ' data-report-platform="' + esc(payload.platform) + '"' : '')
         + (payload.content_preview ? ' data-report-content-preview="' + esc(payload.content_preview) + '"' : '')
         + ' data-msg-idx="' + idx + '"'
+        + (msg.message_id ? ' data-msg-id="' + esc(msg.message_id) + '"' : '')
+        + (stKey ? ' data-accept-key="' + esc(stKey) + '"' : '')
         + (shareNeedsDecision ? ' data-pending="1"' : '')
         + (iconMark ? ' data-mark="' + iconMark + '"' : '')
         + '>'
         + '<span class="msg-share-wash" aria-hidden="true"></span>'
         + '<div class="msg-share-main">'
-        + '<div class="msg-share-icon"' + (shareCover ? ' data-cover="1"' : '') + (iconMark ? ' data-mark="' + iconMark + '"' : '') + '>' + iconContent + '</div>'
+        + '<div class="msg-share-icon"' + (shareCover && safeIconUrl(shareCover) ? ' data-cover="1"' : '') + (iconMark ? ' data-mark="' + iconMark + '"' : '') + '>' + iconContent + '</div>'
         + '<div class="msg-share-body">'
         + '<div class="msg-share-title">' + esc(shareTitle) + '</div>'
         + (shareDesc ? '<div class="msg-share-desc">' + esc(shareDesc) + '</div>' : '');
@@ -903,8 +920,8 @@ function renderMessages(opts) {
       // Receiver: accept/reject span the card footer, below the main row
       if (shareNeedsDecision) {
         html += '<div class="msg-share-actions">'
-          + '<button type="button" class="msg-share-btn-reject" data-reject-idx="' + idx + '">' + esc(lang.rejectTapp) + '</button>'
-          + '<button type="button" class="msg-share-btn-accept" data-accept-idx="' + idx + '">' + esc(lang.acceptTapp) + '</button>'
+          + '<button type="button" class="msg-share-btn-reject" data-reject-idx="' + idx + '" data-accept-key="' + esc(stKey) + '">' + esc(lang.rejectTapp) + '</button>'
+          + '<button type="button" class="msg-share-btn-accept" data-accept-idx="' + idx + '" data-accept-key="' + esc(stKey) + '">' + esc(lang.acceptTapp) + '</button>'
           + '</div>';
       }
       html += '</div>';
@@ -922,15 +939,21 @@ function renderMessages(opts) {
 
   // ⋯ / long-press / contextmenu bound once via bindMsgContextMenu
 
-  // Bind tapp accept/reject buttons
+  // Bind tapp accept/reject buttons (stable accept key, not array index)
   container.querySelectorAll('.msg-share-btn-accept').forEach(function (btn) {
     btn.addEventListener('click', function (e) {
       e.stopPropagation();
-      var msgIdx = btn.dataset.acceptIdx;
       var card = btn.closest('.msg-share-card');
       var tappId = card ? card.dataset.tappId : '';
       if (!tappId) return;
-      var stKey = 'tapp_accept_' + tappId + '_' + msgIdx;
+      var stKey = (btn.dataset.acceptKey || (card && card.dataset.acceptKey) || '').trim();
+      if (!stKey) {
+        var msgIdx = parseInt(btn.dataset.acceptIdx, 10);
+        var m0 = state.messages && state.messages[msgIdx];
+        stKey = typeof tappAcceptStorageKey === 'function' && m0
+          ? tappAcceptStorageKey(m0, m0.payload || {})
+          : ('tapp_accept_' + tappId + '_' + (m0 && m0.message_id ? m0.message_id : msgIdx));
+      }
       if (!state.tappAcceptMap) state.tappAcceptMap = {};
       state.tappAcceptMap[stKey] = 'accepted';
       Tapp.storage.set(stKey, 'accepted').catch(function () {});
@@ -942,11 +965,17 @@ function renderMessages(opts) {
   container.querySelectorAll('.msg-share-btn-reject').forEach(function (btn) {
     btn.addEventListener('click', function (e) {
       e.stopPropagation();
-      var msgIdx = btn.dataset.rejectIdx;
       var card = btn.closest('.msg-share-card');
       var tappId = card ? card.dataset.tappId : '';
       if (!tappId) return;
-      var stKey = 'tapp_accept_' + tappId + '_' + msgIdx;
+      var stKey = (btn.dataset.acceptKey || (card && card.dataset.acceptKey) || '').trim();
+      if (!stKey) {
+        var msgIdxR = parseInt(btn.dataset.rejectIdx, 10);
+        var m1 = state.messages && state.messages[msgIdxR];
+        stKey = typeof tappAcceptStorageKey === 'function' && m1
+          ? tappAcceptStorageKey(m1, m1.payload || {})
+          : ('tapp_accept_' + tappId + '_' + (m1 && m1.message_id ? m1.message_id : msgIdxR));
+      }
       if (!state.tappAcceptMap) state.tappAcceptMap = {};
       state.tappAcceptMap[stKey] = 'rejected';
       Tapp.storage.set(stKey, 'rejected').catch(function () {});
@@ -1196,16 +1225,22 @@ async function downloadMessageFile(payload, triggerEl) {
     return;
   }
 
-  // Path A: inline data URL / base64
+  // Path A: inline data URL / base64 — rebuild controlled Blob (ARO-09)
   if (payload.data) {
     try {
+      var safe = typeof safeInlineDownload === 'function' ? safeInlineDownload(payload) : null;
+      if (!safe) {
+        try { Tapp.ui.showNotification({ title: lang.downloadFail || lang.loadFail, type: 'error' }); } catch (eBad) { /* ignore */ }
+        return;
+      }
       var a = document.createElement('a');
-      a.href = payload.data;
-      a.download = payload.filename || 'file';
+      a.href = safe.url;
+      a.download = safe.filename || 'file';
       a.rel = 'noopener';
       document.body.appendChild(a);
       a.click();
       a.remove();
+      setTimeout(function () { safe.revoke(); }, 2000);
     } catch (e2) {
       try { Tapp.ui.showNotification({ title: lang.downloadFail || lang.loadFail, type: 'error' }); } catch (e3) { /* ignore */ }
     }
@@ -1393,7 +1428,8 @@ function openTappDetail(tappId, card) {
   var overlay = createDetailOverlay(remoteName, {
     type: 'tapp',
     subtitle: tappId,
-    rawSvg: shareCardPayload(card).tapp_icon || '',
+    // ARO-01: sanitize before sheetVisual
+    rawSvg: sanitizeRemoteSvg((shareCardPayload(card).tapp_icon) || '') || '',
     fallback: SVG_ICONS.tapp,
   });
   var body = overlay.querySelector('.picker-body');
@@ -1411,12 +1447,7 @@ function openTappDetail(tappId, card) {
   });
 }
 
-function isValidStoreSourceRef(ref) {
-  if (!ref || typeof ref !== 'string') return false;
-  var s = ref.trim().toLowerCase();
-  if (!s || s === 'store' || s === 'direct') return false;
-  return true;
-}
+// isValidStoreSourceRef lives in helpers.js (HTTPS / numeric id only)
 
 function renderTappDetailView(body, tappId, name, desc, remoteVer, installed, localVer, needsUpdate, installPackage, installOmitted, storeSource) {
   var statusText = installed ? (needsUpdate ? lang.tappUpdateAvail : lang.tappInstalled) : lang.tappNotInstalled;
@@ -1511,39 +1542,18 @@ function renderTappDetailView(body, tappId, name, desc, remoteVer, installed, lo
         return;
       }
 
+      // ARO-05: never auto-fall back from store install to direct package.
+      // Direct package is only used when no valid store_source was present (explicit path above).
       Tapp.tappList.install(installReq).then(function () {
         actionBtn.textContent = lang.installSuccess;
         setSheetBtnState(actionBtn, 'ok');
         actionBtn.removeEventListener('click', handleInstallClick);
       }).catch(function (err) {
         var msg = (err && err.message) ? String(err.message) : (lang.installFailed || 'Install failed');
-        // If store path failed and we have a direct package, offer one automatic retry.
         if (hasStoreSource && hasDirectPkg && installReq.source === 'store') {
-          var directReq = {
-            source: 'direct',
-            manifest: installPackage.manifest,
-            code: installPackage.code,
-            styles: installPackage.styles,
-            pageTemplate: installPackage.pageTemplate,
-            widgetTemplates: installPackage.widgetTemplates,
-            widgetCss: installPackage.widgetCss,
-            pageCss: installPackage.pageCss,
-            i18n: installPackage.i18n,
-            pageModules: installPackage.pageModules,
-            assets: installPackage.assets,
-            permissions: installPackage.permissions
-          };
-          return Tapp.tappList.install(directReq).then(function () {
-            actionBtn.textContent = lang.installSuccess;
-            setSheetBtnState(actionBtn, 'ok');
-            actionBtn.removeEventListener('click', handleInstallClick);
-          }).catch(function (err2) {
-            var msg2 = (err2 && err2.message) ? String(err2.message) : msg;
-            actionBtn.textContent = lang.installFailed;
-            setSheetBtnState(actionBtn, 'err');
-            actionBtn.disabled = false;
-            if (errEl) { errEl.style.display = 'block'; errEl.textContent = msg2; }
-          });
+          msg = (lang.tappStoreInstallFailedNoAutoDirect
+            || 'Store install failed. Direct package was not installed automatically for safety. Re-share or install from a trusted catalog.')
+            + (msg ? (' (' + msg + ')') : '');
         }
         actionBtn.textContent = lang.installFailed;
         setSheetBtnState(actionBtn, 'err');

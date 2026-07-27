@@ -120,15 +120,21 @@ function arrayBufferToBase64(buffer) {
  * Chunked transfer for files above INLINE_ATTACH_MAX.
  * Supports both channel (DM) and room (group) via initiateTransfer / initiateRoomTransfer.
  */
-async function sendChunkedFileTransfer(attach, text, replyTo) {
+/**
+ * @param {object} [sendCtx] optional frozen { kind, id, quoteMsg } from doSend (ARO-03)
+ */
+async function sendChunkedFileTransfer(attach, text, replyTo, sendCtx) {
   var file = attach.file;
   if (!file) throw new Error('Missing file data');
 
-  var isRoom = state.activeKind === 'room';
-  var isChannel = state.activeKind === 'channel';
+  var destKind = (sendCtx && sendCtx.kind) || state.activeKind;
+  var destId = (sendCtx && sendCtx.id) || state.activeId;
+  var isRoom = destKind === 'room';
+  var isChannel = destKind === 'channel';
   if (!isRoom && !isChannel) {
     throw new Error(lang.fileTooLarge || 'File too large');
   }
+  if (!destId) throw new Error(lang.sendFail || 'No conversation');
 
   if (isChannel) {
     var chStatus = state.channelDetail && state.channelDetail.status;
@@ -154,21 +160,23 @@ async function sendChunkedFileTransfer(attach, text, replyTo) {
     file_size: attach.size,
     mime_type: attach.mime || 'application/octet-stream',
   };
+  // Always target frozen destId — never re-read state.activeId mid-upload
   var transfer = isRoom
-    ? await Tapp.federation.initiateRoomTransfer(state.activeId, meta)
-    : await Tapp.federation.initiateTransfer(state.activeId, meta);
+    ? await Tapp.federation.initiateRoomTransfer(destId, meta)
+    : await Tapp.federation.initiateTransfer(destId, meta);
   var transferId = transfer && transfer.transfer_id;
   if (!transferId) throw new Error('No transfer_id returned');
 
-  var buf = await file.arrayBuffer();
-  var bytes = new Uint8Array(buf);
-  var totalChunks = Math.max(1, Math.ceil(bytes.length / TRANSFER_CHUNK_SIZE));
+  // ARO-04 partial: stream chunks via file.slice instead of holding whole file twice
+  var totalSize = file.size || attach.size || 0;
+  var totalChunks = Math.max(1, Math.ceil(totalSize / TRANSFER_CHUNK_SIZE));
   var lastPct = -1;
 
   for (var i = 0; i < totalChunks; i++) {
     var start = i * TRANSFER_CHUNK_SIZE;
-    var end = Math.min(start + TRANSFER_CHUNK_SIZE, bytes.length);
-    var slice = bytes.subarray(start, end);
+    var end = Math.min(start + TRANSFER_CHUNK_SIZE, totalSize);
+    var sliceBuf = await file.slice(start, end).arrayBuffer();
+    var slice = new Uint8Array(sliceBuf);
     var chunkData = arrayBufferToBase64(slice);
     await Tapp.federation.uploadChunk(transferId, {
       chunk_index: i,
@@ -192,17 +200,18 @@ async function sendChunkedFileTransfer(attach, text, replyTo) {
     transfer_id: transferId,
     text: text || '',
   };
-  if (state.quoteMsg) {
-    msgPayload.quote_sender = state.quoteMsg.sender;
-    msgPayload.quote_text = state.quoteMsg.text;
-    msgPayload.quote_id = state.quoteMsg.message_id;
+  var quote = (sendCtx && sendCtx.quoteMsg) || state.quoteMsg;
+  if (quote) {
+    msgPayload.quote_sender = quote.sender;
+    msgPayload.quote_text = quote.text;
+    msgPayload.quote_id = quote.message_id;
   }
   var sendReq = { payload: msgPayload, message_type: 'file-meta' };
   if (replyTo) sendReq.reply_to = replyTo;
   if (isRoom) {
-    await Tapp.federation.sendRoomMessage(state.activeId, sendReq);
+    await Tapp.federation.sendRoomMessage(destId, sendReq);
   } else {
-    await Tapp.federation.sendMessage(state.activeId, sendReq);
+    await Tapp.federation.sendMessage(destId, sendReq);
   }
 
   try {
