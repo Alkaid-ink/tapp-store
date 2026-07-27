@@ -229,8 +229,8 @@ function safeInlineDownload(payload) {
     // basename only; strip path segments and ".." so downloads never suggest traversal
     var name = String(payload.filename || 'file').split(/[/\\]/).pop() || 'file';
     name = name.replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').replace(/\.\./g, '_').replace(/^\.+/, '');
-    name = name.slice(0, 180);
-    if (!name || name === '.' || name === '..') name = 'file';
+    name = name.replace(/^[\s._]+|[\s._]+$/g, '').slice(0, 180);
+    if (!name || name === '.' || name === '..' || /^_+$/.test(name)) name = 'file';
     return {
       url: url,
       filename: name,
