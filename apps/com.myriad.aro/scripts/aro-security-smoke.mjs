@@ -25,13 +25,26 @@ const views = page('views.js')
 assert.match(helpers, /function sanitizeRemoteSvg/)
 assert.match(helpers, /function isValidStoreSourceRef/)
 assert.match(helpers, /function safeInlineDownload/)
+assert.match(helpers, /function safeMessageImageUrl/)
 assert.match(helpers, /function createDisposableBag/)
 assert.match(helpers, /function pageListen/)
 assert.match(views, /pageListen\(document/)
 assert.match(chat, /sanitizeRemoteSvg\(payload\.tapp_icon\)/)
+assert.match(chat, /safeMessageImageUrl/)
 assert.doesNotMatch(api, /delete sendReq\.encrypt/)
 assert.match(api, /var ctx = \{/)
 assert.match(attachments, /file\.slice\(/)
+
+// Chat image bubbles must not use the tiny icon data: cap (256 KiB) alone
+const safeMessageImageUrl = new Function(helpers + '; return safeMessageImageUrl;')()
+const tiny = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+assert.ok(safeMessageImageUrl(tiny), 'tiny data:image ok')
+// ~400 KiB base64 body would fail safeIconUrl (256 KiB) but must pass for chat
+const mid = 'data:image/jpeg;base64,' + 'A'.repeat(400 * 1024)
+assert.ok(safeMessageImageUrl(mid), 'mid-size chat image data URL must pass')
+assert.equal(safeMessageImageUrl('javascript:alert(1)'), '')
+assert.equal(safeMessageImageUrl('/media/federation/1/wallhaven-1p9529.jpg'), '/media/federation/1/wallhaven-1p9529.jpg')
+assert.equal(safeMessageImageUrl('/media/federation/1/../evil.jpg'), '')
 
 // ARO-13 thin main
 assert.ok(main.length < 12000, 'main index.js should stay thin, got ' + main.length)

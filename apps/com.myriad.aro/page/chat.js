@@ -767,7 +767,10 @@ function renderMessages(opts) {
 
     // Render content based on message type
     if (msgType === 'image' && payload.data) {
-      var safeImg = safeIconUrl(payload.data);
+      // Use message-sized validator (not safeIconUrl's 256 KiB icon cap).
+      var safeImg = typeof safeMessageImageUrl === 'function'
+        ? safeMessageImageUrl(payload.data)
+        : safeIconUrl(payload.data);
       if (safeImg) {
         html += '<figure class="msg-media" data-media-idx="' + idx + '" tabindex="0" role="button"'
           + ' aria-label="' + esc(payload.filename || lang.attachImage || 'Image') + '">'

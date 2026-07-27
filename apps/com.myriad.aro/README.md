@@ -2,7 +2,7 @@
 
 社交中心：消息（Channel/Room）、时间线、环网与个人资料。
 
-> 官方社交 Tapp（version 1.0.21）。设置页含出站投递队列与联邦签名密钥轮换（需宿主 `federation.rotateKeys`）。
+> 官方社交 Tapp（version 1.0.22）。设置页含出站投递队列与联邦签名密钥轮换（需宿主 `federation.rotateKeys`）。
 
 ## 功能
 
@@ -23,6 +23,13 @@
 > 为 **elevated**；已安装实例更新时需重新授权该权限（否则只保留旧 granted 交集）。
 
 ## Changelog
+
+### 1.0.22
+
+- Fix chat image bubbles that only showed the filename after 1.0.10: large
+  inline `data:image/*` payloads (e.g. wallhaven photos under 2 MiB raw) were
+  rejected by `safeIconUrl`'s 256 KiB icon cap. Use `safeMessageImageUrl` with
+  a message-sized limit for image bubbles.
 
 ### 1.0.21
 
@@ -76,5 +83,5 @@ index.js          # core（background + 内嵌 i18n 回退）
 page.html / page.css / styles.css
 page/*.js         # pageModules（UI 真源）
 i18n/{zh,en,ja}.json
-manifest.json     # version 1.0.21
+manifest.json     # version 1.0.22
 ```

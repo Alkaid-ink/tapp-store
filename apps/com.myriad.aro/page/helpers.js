@@ -1212,6 +1212,49 @@ function safeIconUrl(url) {
   return '';
 }
 
+/**
+ * Chat/image-bubble media src (NOT for tiny share icons).
+ *
+ * Aro 1.0.10 re-routed image bubbles through safeIconUrl, whose 256 KiB
+ * data: cap is meant for favicons/covers. Inline chat images may be up to
+ * INLINE_ATTACH_MAX (2 MiB raw ≈ ~2.8 MiB base64 data URL), so wallhaven-
+ * sized photos were rejected and rendered as bare filenames.
+ *
+ * Still blocks javascript:/vbscript: and non-image schemes. Size aligns with
+ * forward payload cap (6 MiB string) and host-relative federation media paths.
+ */
+// ~2 MiB raw * 4/3 base64 + header, with headroom under the 6 MiB forward cap
+var SAFE_MESSAGE_IMAGE_DATA_MAX = 6 * 1024 * 1024;
+
+function safeMessageImageUrl(url) {
+  if (!url) return '';
+  var v = String(url).trim();
+  if (!v) return '';
+  var lower = v.toLowerCase();
+  if (lower.indexOf('javascript:') === 0 || lower.indexOf('vbscript:') === 0) return '';
+  if (lower.indexOf('https://') === 0) {
+    try {
+      var u = new URL(v);
+      if (u.protocol !== 'https:' || u.username || u.password) return '';
+      return u.href;
+    } catch (e) {
+      return '';
+    }
+  }
+  // Host-same-origin federation media: /media/federation/{userId}/{file}
+  if (v.charAt(0) === '/' && v.indexOf('//') !== 0) {
+    if (v.indexOf('..') >= 0) return '';
+    if (/^\/media\/federation\/\d+\/[A-Za-z0-9._-]+$/.test(v)) return v;
+    return '';
+  }
+  if (lower.indexOf('data:image/') === 0) {
+    if (!/^data:image\/(png|jpe?g|gif|webp|avif|svg\+xml);base64,/i.test(v)) return '';
+    if (v.length > SAFE_MESSAGE_IMAGE_DATA_MAX) return '';
+    return v;
+  }
+  return '';
+}
+
 /* ----- File bubble typing: accent slug + glyph + short extension label ----- */
 var FILE_KIND_RULES = [
   { kind: 'image', re: /^(png|jpe?g|gif|webp|avif|bmp|svg|heic|heif|ico)$/ },
