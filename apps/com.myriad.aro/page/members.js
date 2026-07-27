@@ -27,7 +27,15 @@ function renderMembers() {
     panel.style.display = '';
     panel.style.pointerEvents = '';
   }
-  $('member-title').textContent = lang.members + ' (' + state.members.length + ')';
+  var memberTitleCount = (typeof activeMemberCountFromList === 'function')
+    ? activeMemberCountFromList(state.members)
+    : state.members.length;
+  // Show total roster size (incl. pending) when pending rows exist so counts match list.
+  var hasPendingMember = (state.members || []).some(function (m) {
+    return (m.membership_status || m.status || 'active') === 'pending';
+  });
+  if (hasPendingMember) memberTitleCount = state.members.length;
+  $('member-title').textContent = lang.members + ' (' + memberTitleCount + ')';
 
   var myRole = state.roomDetail.my_role || '';
   var myPending = (state.roomDetail.my_membership_status || state.roomDetail.membership_status || 'active') === 'pending';
@@ -301,7 +309,11 @@ function renderChatHeader() {
     if (avatarEl) {
       avatarEl.innerHTML = avatarContentHtml(rm.avatar_url || '', rm.name || '?');
     }
-    var metaHtml = '<span class="meta-badge badge-room">' + (rm.member_count || 0) + ' ' + esc(lang.members) + '</span>'
+    // Prefer live roster length when loaded — roomDetail.member_count lags after joins.
+    var liveMemberCount = (state.members && state.members.length && typeof activeMemberCountFromList === 'function')
+      ? activeMemberCountFromList(state.members)
+      : (rm.member_count || 0);
+    var metaHtml = '<span class="meta-badge badge-room">' + liveMemberCount + ' ' + esc(lang.members) + '</span>'
       + (rm.is_public ? '<span class="meta-badge badge-public">' + esc(lang.publicGroup || 'Public') + '</span>' : '')
       + (roomPending ? '<span class="meta-badge badge-pending">' + esc(lang.pending || 'Pending') + '</span>' : '')
       + (canSelfJoin ? '<span class="meta-badge badge-pending">' + esc(lang.openJoin || 'Open') + '</span>' : '')

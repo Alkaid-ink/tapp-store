@@ -932,6 +932,90 @@ function mergeIncomingMessage(msg) {
   return true;
 }
 
+/**
+ * Pull latest room roster (and optionally room detail). Used after membership
+ * WS events and during poll so a missed RoomJoin still converges without
+ * reopening the chat.
+ *
+ * @param {string} roomId
+ * @param {number} [gen] openGen snapshot
+ * @param {{ fetchDetail?: boolean, forceRender?: boolean, optimisticActor?: string, optimisticRole?: string }} [opts]
+ * @returns {Promise<boolean>} true when roster content changed
+ */
+async function refreshRoomMembers(roomId, gen, opts) {
+  opts = opts || {};
+  if (!roomId || !Tapp.federation || typeof Tapp.federation.getRoomMembers !== 'function') {
+    return false;
+  }
+  var useGen = gen != null ? gen : state.openGen;
+
+  // Optimistic insert so UI reacts before getRoomMembers round-trip.
+  if (opts.optimisticActor && typeof findMemberByActor === 'function') {
+    if (!findMemberByActor(opts.optimisticActor)) {
+      state.members = (state.members || []).concat([{
+        actor_url: opts.optimisticActor,
+        role: opts.optimisticRole || 'member',
+        membership_status: 'active',
+        is_local: false,
+        display_name: null,
+        avatar_url: null,
+      }]);
+      if (typeof applyRoomMemberCount === 'function' && typeof activeMemberCountFromList === 'function') {
+        applyRoomMemberCount(roomId, activeMemberCountFromList(state.members));
+      }
+      if (typeof renderMembers === 'function') renderMembers();
+      if (typeof renderChatHeader === 'function') renderChatHeader();
+      if (typeof renderConvList === 'function') renderConvList();
+    }
+  }
+
+  try {
+    var res = await Tapp.federation.getRoomMembers(roomId);
+    if (!isConversationCurrent('room', roomId, useGen)) return false;
+    var next = unwrapRoomMembers(res);
+    var prevFp = typeof membersFingerprint === 'function'
+      ? membersFingerprint(state.members)
+      : '';
+    var nextFp = typeof membersFingerprint === 'function'
+      ? membersFingerprint(next)
+      : String(next.length);
+    var changed = nextFp !== prevFp;
+    state.members = next;
+    var activeCount = typeof activeMemberCountFromList === 'function'
+      ? activeMemberCountFromList(next)
+      : next.length;
+    if (typeof applyRoomMemberCount === 'function') {
+      applyRoomMemberCount(roomId, activeCount);
+    }
+
+    if (opts.fetchDetail && typeof Tapp.federation.getRoom === 'function') {
+      try {
+        var detail = await Tapp.federation.getRoom(roomId);
+        if (!isConversationCurrent('room', roomId, useGen)) return false;
+        if (detail) {
+          state.roomDetail = detail;
+          // Prefer roster-derived active count when we have members loaded.
+          if (next.length > 0 && typeof applyRoomMemberCount === 'function') {
+            state.roomDetail.member_count = activeCount;
+            applyRoomMemberCount(roomId, activeCount);
+          } else if (detail.member_count != null && typeof applyRoomMemberCount === 'function') {
+            applyRoomMemberCount(roomId, detail.member_count);
+          }
+        }
+      } catch (eDetail) { /* ignore detail refresh */ }
+    }
+
+    if (changed || opts.forceRender) {
+      if (typeof renderMembers === 'function') renderMembers();
+      if (typeof renderChatHeader === 'function') renderChatHeader();
+      if (typeof renderConvList === 'function') renderConvList();
+    }
+    return changed;
+  } catch (e) {
+    return false;
+  }
+}
+
 async function pollMessages(force) {
   if (!state.activeId || !state.activeKind) return;
   // Snapshot target so a mid-flight conversation switch cannot apply wrong msgs.
@@ -943,7 +1027,35 @@ async function pollMessages(force) {
     if (kind === 'channel') {
       res = await Tapp.federation.getMessages(id, undefined, 200);
     } else {
-      res = await Tapp.federation.getRoomMessages(id, undefined, 200);
+      // Rooms: poll messages + roster together so joins/leaves converge even if
+      // the membership WS event was missed (common after reconnect / lag).
+      var roomPoll = await Promise.allSettled([
+        Tapp.federation.getRoomMessages(id, undefined, 200),
+        Tapp.federation.getRoomMembers(id),
+      ]);
+      if (!isConversationCurrent(kind, id, gen)) return;
+      if (roomPoll[0].status === 'fulfilled') {
+        res = roomPoll[0].value;
+      }
+      if (roomPoll[1].status === 'fulfilled' && roomPoll[1].value) {
+        var nextMembers = unwrapRoomMembers(roomPoll[1].value);
+        var prevMfp = typeof membersFingerprint === 'function'
+          ? membersFingerprint(state.members)
+          : '';
+        var nextMfp = typeof membersFingerprint === 'function'
+          ? membersFingerprint(nextMembers)
+          : String(nextMembers.length);
+        if (force || nextMfp !== prevMfp) {
+          state.members = nextMembers;
+          var ac = typeof activeMemberCountFromList === 'function'
+            ? activeMemberCountFromList(nextMembers)
+            : nextMembers.length;
+          if (typeof applyRoomMemberCount === 'function') applyRoomMemberCount(id, ac);
+          if (typeof renderMembers === 'function') renderMembers();
+          if (typeof renderChatHeader === 'function') renderChatHeader();
+          if (typeof renderConvList === 'function') renderConvList();
+        }
+      }
     }
     if (!isConversationCurrent(kind, id, gen)) return;
     if (res) {
@@ -1056,6 +1168,18 @@ function handleRealtimeMessage(ev) {
     if (data.type === 'message' && data.message && scopeId) {
       maybeNotifyIncomingMessage(scope, scopeId, data.message);
       loadConversations().catch(function () {});
+    } else if (
+      data.event === 'member_invited'
+      || data.event === 'member_left'
+      || data.event === 'member_joined'
+      || data.event === 'member_removed'
+      || data.event === 'member_kicked'
+      || data.type === 'room_deleted'
+    ) {
+      // Membership on another room (or after switch): refresh list counts.
+      if (typeof loadConversations === 'function') {
+        loadConversations().catch(function () {});
+      }
     }
     return;
   }
@@ -1146,12 +1270,22 @@ function handleRealtimeMessage(ev) {
     }
     var roomIdForMembers = state.activeId;
     var genForMembers = state.openGen;
-    Tapp.federation.getRoomMembers(roomIdForMembers).then(function (res) {
-      if (!isConversationCurrent('room', roomIdForMembers, genForMembers)) return;
-      state.members = unwrapRoomMembers(res);
-      renderMembers();
-      renderChatHeader();
-    }).catch(function () {});
+    var joinActor = data.event === 'member_joined' ? data.actor : null;
+    if (typeof refreshRoomMembers === 'function') {
+      refreshRoomMembers(roomIdForMembers, genForMembers, {
+        fetchDetail: true,
+        forceRender: true,
+        optimisticActor: joinActor || undefined,
+        optimisticRole: data.role || 'member',
+      }).catch(function () {});
+    } else {
+      Tapp.federation.getRoomMembers(roomIdForMembers).then(function (res) {
+        if (!isConversationCurrent('room', roomIdForMembers, genForMembers)) return;
+        state.members = unwrapRoomMembers(res);
+        renderMembers();
+        renderChatHeader();
+      }).catch(function () {});
+    }
     if (typeof loadConversations === 'function') {
       loadConversations().catch(function () {});
     }
@@ -1214,7 +1348,21 @@ function bindRealtimeListeners() {
         }
         return;
       }
-      if (ev.roomId !== state.activeId || state.activeKind !== 'room') return;
+      if (ev.roomId !== state.activeId || state.activeKind !== 'room') {
+        // Not the open room — still refresh list so member_count badges update.
+        if (
+          ev.event === 'member_joined'
+          || ev.event === 'member_left'
+          || ev.event === 'member_removed'
+          || ev.event === 'member_invited'
+          || ev.event === 'member_kicked'
+        ) {
+          if (typeof loadConversations === 'function') {
+            loadConversations().catch(function () {});
+          }
+        }
+        return;
+      }
       var roomId = ev.roomId;
       var gen = state.openGen;
       if (ev.event === 'disconnected') pollMessages(true);
@@ -1239,13 +1387,26 @@ function bindRealtimeListeners() {
         || ev.event === 'member_left'
         || ev.event === 'member_removed'
         || ev.event === 'member_invited'
+        || ev.event === 'member_kicked'
       ) {
-        Tapp.federation.getRoomMembers(roomId).then(function (res) {
-          if (!isConversationCurrent('room', roomId, gen)) return;
-          state.members = unwrapRoomMembers(res);
-          renderMembers();
-          renderChatHeader();
-        }).catch(function () {});
+        if (typeof refreshRoomMembers === 'function') {
+          refreshRoomMembers(roomId, gen, {
+            fetchDetail: true,
+            forceRender: true,
+            optimisticActor: ev.event === 'member_joined' ? ev.actor : undefined,
+            optimisticRole: ev.role || 'member',
+          }).catch(function () {});
+        } else {
+          Tapp.federation.getRoomMembers(roomId).then(function (res) {
+            if (!isConversationCurrent('room', roomId, gen)) return;
+            state.members = unwrapRoomMembers(res);
+            renderMembers();
+            renderChatHeader();
+          }).catch(function () {});
+        }
+        if (typeof loadConversations === 'function') {
+          loadConversations().catch(function () {});
+        }
       }
     });
   }
@@ -1754,16 +1915,26 @@ async function doJoinOpenRoom() {
       state.roomDetail.my_role = state.roomDetail.my_role || 'member';
     }
     try {
-      var detail = await Tapp.federation.getRoom(state.activeId);
-      if (detail) state.roomDetail = detail;
-      var membersRes = await Tapp.federation.getRoomMembers(state.activeId);
-      state.members = unwrapRoomMembers(membersRes);
+      if (typeof refreshRoomMembers === 'function') {
+        await refreshRoomMembers(state.activeId, state.openGen, {
+          fetchDetail: true,
+          forceRender: true,
+        });
+      } else {
+        var detail = await Tapp.federation.getRoom(state.activeId);
+        if (detail) state.roomDetail = detail;
+        var membersRes = await Tapp.federation.getRoomMembers(state.activeId);
+        state.members = unwrapRoomMembers(membersRes);
+      }
     } catch (e2) { /* ignore */ }
     renderChatHeader();
     if (typeof renderMessages === 'function') renderMessages();
     renderMembers();
     renderConvList();
     updateSendState();
+    if (typeof loadConversations === 'function') {
+      loadConversations().catch(function () {});
+    }
     if (typeof maybePublishE2eKeys === 'function') {
       maybePublishE2eKeys().catch(function () {});
     }
@@ -1794,16 +1965,26 @@ async function doAcceptRoomInvite() {
       }
     }
     try {
-      var detail = await Tapp.federation.getRoom(state.activeId);
-      if (detail) state.roomDetail = detail;
-      var membersRes = await Tapp.federation.getRoomMembers(state.activeId);
-      state.members = unwrapRoomMembers(membersRes);
+      if (typeof refreshRoomMembers === 'function') {
+        await refreshRoomMembers(state.activeId, state.openGen, {
+          fetchDetail: true,
+          forceRender: true,
+        });
+      } else {
+        var detail = await Tapp.federation.getRoom(state.activeId);
+        if (detail) state.roomDetail = detail;
+        var membersRes = await Tapp.federation.getRoomMembers(state.activeId);
+        state.members = unwrapRoomMembers(membersRes);
+      }
     } catch (e2) { /* ignore refresh errors */ }
     renderChatHeader();
     if (typeof renderMessages === 'function') renderMessages();
     renderMembers();
     renderConvList();
     updateSendState();
+    if (typeof loadConversations === 'function') {
+      loadConversations().catch(function () {});
+    }
     if (typeof maybePublishE2eKeys === 'function') {
       maybePublishE2eKeys().catch(function () {});
     }

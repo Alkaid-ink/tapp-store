@@ -2372,6 +2372,49 @@ function unwrapRoomMembers(res) {
   return [];
 }
 
+/** Active (non-pending) members — matches server member_count semantics. */
+function activeMemberCountFromList(members) {
+  var list = members || state.members || [];
+  var n = 0;
+  for (var i = 0; i < list.length; i++) {
+    var st = list[i].membership_status || list[i].status || 'active';
+    if (st === 'active') n++;
+  }
+  return n;
+}
+
+/** Cheap roster fingerprint for poll / WS refresh de-dupe. */
+function membersFingerprint(members) {
+  var list = members || [];
+  var parts = [];
+  for (var i = 0; i < list.length; i++) {
+    var m = list[i];
+    parts.push(
+      String(m.actor_url || '')
+        + '|'
+        + String(m.role || '')
+        + '|'
+        + String(m.membership_status || m.status || 'active'),
+    );
+  }
+  parts.sort();
+  return parts.join(';') + '#' + list.length;
+}
+
+/** Keep roomDetail + conversation list member_count in sync with roster. */
+function applyRoomMemberCount(roomId, count) {
+  if (!roomId || count == null || count < 0) return;
+  if (state.roomDetail && (state.roomDetail.room_id === roomId || state.activeId === roomId)) {
+    state.roomDetail.member_count = count;
+  }
+  for (var i = 0; i < (state.rooms || []).length; i++) {
+    if (state.rooms[i].room_id === roomId) {
+      state.rooms[i].member_count = count;
+      break;
+    }
+  }
+}
+
 function sameActorUrl(a, b) {
   var left = normalizeFederationUrl(a) || String(a || '').trim().replace(/\/+$/, '');
   var right = normalizeFederationUrl(b) || String(b || '').trim().replace(/\/+$/, '');
