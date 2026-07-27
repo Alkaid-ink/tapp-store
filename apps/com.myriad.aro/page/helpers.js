@@ -246,6 +246,27 @@ function tappAcceptStorageKey(msg, payload) {
  * Rebuild a controlled Blob URL from an untrusted data: payload (ARO-09).
  * Returns { url, filename, revoke } or null.
  */
+/**
+ * Allow common binary / document / config mimes for inline download.
+ * Config shares often arrive as application/json, text/yaml, text/x-*, etc.
+ */
+function isAllowedInlineDownloadMime(mime, filename) {
+  var m = String(mime || '').toLowerCase().split(';')[0].trim();
+  if (!m || m === 'application/octet-stream' || m === 'binary/octet-stream') return true;
+  if (/^(image\/(png|jpe?g|gif|webp|avif|svg\+xml)|application\/(pdf|zip|gzip|x-gzip|x-tar|json|xml|toml|x-yaml|yaml|javascript|typescript)|text\/(plain|csv|markdown|md|html|css|javascript|xml|yaml|x-yaml|x-sh|x-shellscript)|audio\/|video\/)/i.test(m)) {
+    return true;
+  }
+  // Extension fallback when mime is wrong/missing (compose/env/conf configs)
+  var name = String(filename || '').toLowerCase();
+  if (/\.(json|ya?ml|toml|env|conf|config|ini|cfg|txt|md|markdown|xml|html?|css|js|ts|tsx|jsx|rs|go|py|sh|bash|zsh|sql|csv|log|lock|sum|mod|dockerfile)$/i.test(name)) {
+    return true;
+  }
+  if (/(^|\/)(docker-compose|compose)\.(ya?ml|json)$/i.test(name) || /(^|\/)\.env(\.|$)/i.test(name)) {
+    return true;
+  }
+  return false;
+}
+
 function safeInlineDownload(payload) {
   if (!payload || !payload.data || typeof payload.data !== 'string') return null;
   var data = payload.data.trim();
@@ -257,19 +278,20 @@ function safeInlineDownload(payload) {
   mime = (m[1] || 'application/octet-stream').toLowerCase();
   var isB64 = !!m[2];
   b64 = m[3] || '';
-  // Whitelist common attachment types
-  var okMime = /^(image\/(png|jpe?g|gif|webp|avif)|application\/(pdf|zip|octet-stream)|text\/plain|audio\/|video\/)/i.test(mime);
-  if (!okMime) return null;
+  var filenameHint = payload.filename || payload.name || 'file';
+  if (!isAllowedInlineDownloadMime(mime, filenameHint)) return null;
   if (!isB64) return null;
   try {
     var bin = atob(b64);
     if (bin.length > 6 * 1024 * 1024) return null;
     var bytes = new Uint8Array(bin.length);
     for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    var blob = new Blob([bytes], { type: mime });
+    // Prefer a concrete mime for Blob so browsers save with a usable type
+    var blobMime = mime && mime !== 'application/octet-stream' ? mime : 'application/octet-stream';
+    var blob = new Blob([bytes], { type: blobMime });
     var url = URL.createObjectURL(blob);
     // basename only; strip path segments and ".." so downloads never suggest traversal
-    var name = String(payload.filename || 'file').split(/[/\\]/).pop() || 'file';
+    var name = String(filenameHint).split(/[/\\]/).pop() || 'file';
     name = name.replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').replace(/\.\./g, '_').replace(/^\.+/, '');
     name = name.replace(/^[\s._]+|[\s._]+$/g, '').slice(0, 180);
     if (!name || name === '.' || name === '..' || /^_+$/.test(name)) name = 'file';

@@ -1,4 +1,15 @@
 // ==================== API ====================
+/** Optimistically zero a room's unread badge (server marks last_read_at on getRoomMessages). */
+function clearRoomUnreadLocal(roomId) {
+  if (!roomId || !state.rooms || !state.rooms.length) return;
+  for (var i = 0; i < state.rooms.length; i++) {
+    if (state.rooms[i].room_id === roomId) {
+      state.rooms[i].unread_count = 0;
+      break;
+    }
+  }
+}
+
 async function loadConversations() {
   var gen = (state.convLoadGen = (state.convLoadGen || 0) + 1);
   try {
@@ -161,6 +172,8 @@ async function openConversation(kind, id) {
       if (roomParts[2].status === 'fulfilled' && roomParts[2].value) {
         state.messages = roomParts[2].value.messages || [];
         state.messagesFp = messagesFingerprint(state.messages);
+        // getRoomMessages marks last_read_at server-side; clear badge immediately.
+        clearRoomUnreadLocal(id);
       } else {
         // pending membership: empty transcript is expected
         state.messages = [];
@@ -183,6 +196,10 @@ async function openConversation(kind, id) {
   updateSendState();
   startPolling();
   subscribeRealtime();
+  // Refresh list so server unread (post last_read_at) is not stuck for a full poll cycle
+  if (kind === 'room' && typeof loadConversations === 'function') {
+    loadConversations().catch(function () {});
+  }
   // Best-effort E2E key publish after open (non-blocking); ignore if user already left
   if (typeof maybePublishE2eKeys === 'function') {
     maybePublishE2eKeys().then(function () {
@@ -539,10 +556,9 @@ async function doSend() {
 
   // Need either text or attachment
   if ((!text && !attach) || !state.activeId || state.sending) return;
-  // Backend only accepts active|accepted; pending/closed must not clear the input
-  if (typeof isChannelComposerLocked === 'function' ? isChannelComposerLocked() : (
-    state.activeKind === 'channel' && state.channelDetail && state.channelDetail.status === 'closed'
-  )) return;
+  // Backend only accepts active|accepted; pending/closed / pending room invites must not clear the input
+  if (typeof isChannelComposerLocked === 'function' && isChannelComposerLocked()) return;
+  if (typeof isRoomComposerLocked === 'function' && isRoomComposerLocked()) return;
 
   // ARO-03: freeze destination + draft for entire async send chain
   var ctx = {
@@ -634,6 +650,17 @@ async function doSend() {
       // Direct package remains optional but receivers must not auto-install as store fallback
       if (attach.installPackage) msgPayload.install_package = attach.installPackage;
       if (attach.installPackageOmitted) msgPayload.install_package_omitted = attach.installPackageOmitted;
+      // Room/channel payload hard cap is 32 MiB JSON. Install packages + multi-recipient
+      // E2E wrap can blow past that → 413 and "tapp share broken". Prefer store_source;
+      // drop the package when the envelope would be too large.
+      try {
+        var est = JSON.stringify(msgPayload).length;
+        var PAYLOAD_SOFT_MAX = 28 * 1024 * 1024;
+        if (est > PAYLOAD_SOFT_MAX && msgPayload.install_package) {
+          delete msgPayload.install_package;
+          msgPayload.install_package_omitted = 'payload_too_large';
+        }
+      } catch (eSz) { /* ignore size probe */ }
       if (attach.brewId) msgPayload.brew_id = attach.brewId;
       if (attach.brewLink) msgPayload.brew_link = attach.brewLink;
       if (attach.sourceIcon) msgPayload.source_icon = attach.sourceIcon;
@@ -697,8 +724,12 @@ async function doSend() {
 
     sendReq = { payload: msgPayload, message_type: msgType };
     if (replyTo) sendReq.reply_to = replyTo;
-    // Prefer E2E only when session looks established. ARO-02: never auto-downgrade to plaintext.
-    if (state.e2ePreferEncrypt !== false && isE2eReadyForActive()) {
+    // Prefer E2E only when session looks established. ARO-02: never auto-downgrade to plaintext
+    // on client after encrypt=true fails — but skip encrypt for large rich shares (tapp package /
+    // library snapshots) so multi-recipient room wrap does not explode past payload limits.
+    // Room multi-recipient E2E wraps each recipient; packages explode past the 32 MiB cap.
+    var forcePlain = !!(ctx.kind === 'room' && msgPayload && msgPayload.install_package);
+    if (!forcePlain && state.e2ePreferEncrypt !== false && isE2eReadyForActive()) {
       sendReq.encrypt = true;
     }
     var sendRes;

@@ -14,9 +14,9 @@ function toggleAttachMenu() {
   // Not writable / no active conversation: attach disabled
   var btn = $('attach-btn');
   if (btn && btn.disabled) return;
-  var locked = typeof isChannelComposerLocked === 'function'
-    ? isChannelComposerLocked()
-    : !!(state.activeKind === 'channel' && state.channelDetail && state.channelDetail.status === 'closed');
+  var locked = (typeof isChannelComposerLocked === 'function' && isChannelComposerLocked())
+    || (typeof isRoomComposerLocked === 'function' && isRoomComposerLocked())
+    || !!(state.activeKind === 'channel' && state.channelDetail && state.channelDetail.status === 'closed');
   if (!state.activeId || locked || state.sending) return;
   wrap.style.position = 'relative';
   if (btn) btn.classList.add('attach-btn-active');
@@ -428,7 +428,9 @@ function openTappPicker(icons, titles) {
       : Promise.resolve();
     // Package snapshot for reliability (storeSource remains P0). Cap under
     // channel/room 32 MiB payload + bridge envelope (bridge / backend).
-    var TAPP_SHARE_PACKAGE_MAX = 28 * 1024 * 1024;
+    // Keep package modest: room multi-recipient E2E + JSON envelope easily exceeds 32 MiB.
+    // Store catalog URL is the primary install path; package is best-effort offline fallback.
+    var TAPP_SHARE_PACKAGE_MAX = 8 * 1024 * 1024;
     var resolvePkg = (typeof Tapp.tappList !== 'undefined' && typeof Tapp.tappList.getInstallPackage === 'function')
       ? Tapp.tappList.getInstallPackage(selectedTapp.id, { maxBytes: TAPP_SHARE_PACKAGE_MAX })
           .then(function (pkgRes) {
@@ -440,6 +442,7 @@ function openTappPicker(icons, titles) {
           })
           .catch(function (e) {
             console.warn('[Aro] getInstallPackage failed; store-only share', e);
+            pending.installPackageOmitted = 'fetch_failed';
           })
       : Promise.resolve();
     Promise.all([resolveStore, resolvePkg]).then(finish).catch(finish);
