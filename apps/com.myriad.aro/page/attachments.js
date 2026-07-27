@@ -48,7 +48,7 @@ function toggleAttachMenu() {
 
   // Close on outside click
   setTimeout(function () {
-    document.addEventListener('click', _attachOutsideClick);
+    pageListen(document, 'click', _attachOutsideClick);
   }, 0);
 }
 

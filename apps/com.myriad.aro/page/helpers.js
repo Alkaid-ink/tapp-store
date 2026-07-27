@@ -42,6 +42,15 @@ function disposePageSession() {
     pageDisposables = null;
   }
 }
+/** Prefer this for long-lived DOM listeners so destroy can tear them down (ARO-14). */
+function pageListen(target, type, handler, options) {
+  if (!target || typeof target.addEventListener !== 'function') return;
+  if (typeof getPageDisposables === 'function') {
+    getPageDisposables().listen(target, type, handler, options);
+  } else {
+    target.addEventListener(type, handler, options);
+  }
+}
 
 /** SVG elements allowed when rendering untrusted remote icon markup (ARO-01). */
 var SAFE_SVG_TAGS = {
@@ -1302,8 +1311,8 @@ function initAroSelect(rootOrId, opts) {
   });
   root.addEventListener('keydown', onKeyDown);
   // Bubble phase only — capture:true previously risked ordering races with list/tab clicks.
-  document.addEventListener('click', onDocPointer, false);
-  document.addEventListener('keydown', function (e) {
+  pageListen(document, 'click', onDocPointer, false);
+  pageListen(document, 'keydown', function (e) {
     if (e.key === 'Escape' && open) {
       closeMenu();
     }

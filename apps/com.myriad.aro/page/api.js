@@ -1289,12 +1289,16 @@ function closeInvitePopover() {
   }
   aroDismiss(_invitePopover, { ms: 120 });
 }
-document.addEventListener('click', function (e) {
+function _invitePopoverOutsideClick(e) {
   if (!_invitePopover || _invitePopover.style.display === 'none') return;
   var wrap = $('invite-wrap');
   if ((wrap && wrap.contains(e.target)) || _invitePopover.contains(e.target)) return;
   closeInvitePopover();
-});
+}
+/** Call from bindEvents after page bag is live (ARO-14). */
+function registerInvitePopoverOutsideGuard() {
+  pageListen(document, 'click', _invitePopoverOutsideClick);
+}
 
 function renderInvitePopoverContacts() {
   var listEl = $('invite-pop-list');

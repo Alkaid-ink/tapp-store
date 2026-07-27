@@ -3396,7 +3396,7 @@ function bindEvents() {
     }
   });
   // Close ring manage menu on outside click
-  document.addEventListener('click', function (e) {
+  pageListen(document, 'click', function (e) {
     var dd = $('ring-manage-dropdown');
     if (!dd || !dd.classList.contains('open')) return;
     var wrap = dd.closest('.manage-wrap') || dd.parentElement;
@@ -3472,12 +3472,12 @@ function bindEvents() {
       handleFeedPlusAction(item.getAttribute('data-feed-plus'));
     });
   });
-  document.addEventListener('click', function (e) {
+  pageListen(document, 'click', function (e) {
     var t = e.target;
     if (t && (t.closest('#feed-plus-wrap') || t.closest('#feed-plus-wrap-mobile'))) return;
     closeFeedPlusMenu();
   });
-  document.addEventListener('keydown', function (e) {
+  pageListen(document, 'keydown', function (e) {
     if (e.key !== 'Escape') return;
     var menuOpen = document.querySelector('.feed-plus-menu.open');
     if (menuOpen) {
@@ -3629,11 +3629,11 @@ function bindEvents() {
       copyFederationIdentity(btn.dataset.copyFed);
     });
   });
-  document.addEventListener('click', function (e) {
+  pageListen(document, 'click', function (e) {
     if (e.target && e.target.closest('[data-fed-profile]')) return;
     closeFeedProfilePopovers();
   });
-  window.addEventListener('resize', function () { closeFeedProfilePopovers(); });
+  pageListen(window, 'resize', function () { closeFeedProfilePopovers(); });
 
   // Messenger events
   var sendBtn = $('send-btn');
@@ -3825,7 +3825,7 @@ function bindEvents() {
   });
 
   // Esc closes topmost messenger overlays/menus (menus → pickers → dialogs)
-  document.addEventListener('keydown', function (e) {
+  pageListen(document, 'keydown', function (e) {
     if (e.key !== 'Escape' && e.keyCode !== 27) return;
     // Message context menu
     if (typeof closeMsgMenu === 'function' && typeof _msgMenu !== 'undefined' && _msgMenu) {
@@ -3890,5 +3890,10 @@ function bindEvents() {
       e.preventDefault();
     }
   });
+
+  // ARO-14: document-level guards that used to bind at module load
+  if (typeof registerManageDropdownOutsideGuard === 'function') registerManageDropdownOutsideGuard();
+  if (typeof registerInvitePopoverOutsideGuard === 'function') registerInvitePopoverOutsideGuard();
+  if (typeof registerMsgMenuOutsideGuards === 'function') registerMsgMenuOutsideGuards();
 }
 

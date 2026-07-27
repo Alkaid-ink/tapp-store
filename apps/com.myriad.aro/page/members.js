@@ -100,12 +100,16 @@ function closeManageDropdown() {
   var dd = $('manage-dropdown');
   if (dd) dd.classList.remove('open');
 }
-document.addEventListener('click', function (e) {
+function _manageDropdownOutsideClick(e) {
   var dd = $('manage-dropdown');
   if (!dd || !dd.classList.contains('open')) return;
   var wrap = dd.parentElement;
   if (wrap && !wrap.contains(e.target)) closeManageDropdown();
-});
+}
+/** Call from bindEvents after page bag is live (ARO-14). */
+function registerManageDropdownOutsideGuard() {
+  pageListen(document, 'click', _manageDropdownOutsideClick);
+}
 
 // ==================== Pending invite / open-join CTAs (mid-pane) ====================
 /** Remote-initiated DM that still needs Accept/Reject. */

@@ -216,18 +216,11 @@ function onMsgMenuOutside(e) {
   closeMsgMenu();
 }
 
-// Single document listeners (not re-bound per render)
-// ARO-14: page-session disposables (also cleaned on destroy)
-(function bindMsgMenuOutsideOnce() {
-  if (typeof getPageDisposables === 'function') {
-    var bag = getPageDisposables();
-    bag.listen(document, 'click', onMsgMenuOutside);
-    bag.listen(document, 'contextmenu', onMsgMenuOutside);
-  } else {
-    document.addEventListener('click', onMsgMenuOutside);
-    document.addEventListener('contextmenu', onMsgMenuOutside);
-  }
-})();
+// Single document listeners — registered from bindEvents after page bag exists
+function registerMsgMenuOutsideGuards() {
+  pageListen(document, 'click', onMsgMenuOutside);
+  pageListen(document, 'contextmenu', onMsgMenuOutside);
+}
 
 function showMsgMenu(msgEl, x, y) {
   closeMsgMenu();
@@ -1186,7 +1179,7 @@ function openImageViewer(src, name) {
     if (act && act.dataset.act === 'close') { close(); return; }
     if (!e.target.closest('.img-viewer-img')) close();
   });
-  document.addEventListener('keydown', onKey);
+  pageListen(document, 'keydown', onKey);
 
   document.body.appendChild(overlay);
   if (typeof showAroOverlay === 'function') showAroOverlay(overlay);
@@ -1400,7 +1393,7 @@ function createDetailOverlay(title, opts) {
   var onKey = function (e) { if (e.key === 'Escape') close(); };
   overlay.querySelector('.picker-close-btn').addEventListener('click', close);
   overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
-  document.addEventListener('keydown', onKey);
+  pageListen(document, 'keydown', onKey);
 
   document.body.appendChild(overlay);
   // Match createPickerOverlay: CSS defaults to closed; must open explicitly.
