@@ -583,15 +583,10 @@ function isChannelComposerLocked() {
 }
 
 function isRoomInvitePending() {
-  if (state.activeKind !== 'room') return false;
-  // No detail yet (or only optimistic shell): treat as locked/pending-unknown.
-  if (!state.roomDetail) return !!state.activeId;
+  if (state.activeKind !== 'room' || !state.roomDetail) return false;
   var st = state.roomDetail.my_membership_status
     || state.roomDetail.membership_status;
-  // Missing status while opening must not default to 'active' (would unlock compose).
-  if (st == null || st === '') {
-    return !!state.chatOpening || !!state.activeId;
-  }
+  // Only explicit pending shows invite/join CTAs — never invent pending from missing status.
   return st === 'pending';
 }
 
