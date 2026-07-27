@@ -1,95 +1,64 @@
-# Tapp 开发文档
+# Tapp 开发文档（tapp-store 镜像）
 
-> 📚 本文档已拆分为模块化结构，请根据需要查阅对应文档。
+本目录是 [Myriad 主仓库](https://github.com/Myriad-You/Myriad) `docs/development/` 的**贡献者镜像**，方便在商店仓库内阅读协议与 SDK 说明。
 
-## 📖 模块文档
+| 优先级 | 说明 |
+| ------ | ---- |
+| **权威** | Myriad `docs/development/tapp/*` 与当前安装器代码 |
+| **本镜像** | 可能随 PR 同步；若与主仓库冲突，以 Myriad 为准 |
 
-| 文档                                  | 说明                                      |
-| ------------------------------------- | ----------------------------------------- |
-| [快速入门](tapp/QUICKSTART.md)        | 5 分钟创建第一个 Tapp，代码架构，生命周期 |
-| [Manifest 配置](tapp/MANIFEST.md)     | 完整的 manifest.json 配置参考             |
-| [SDK API 参考](tapp/API_REFERENCE.md) | 所有 Tapp SDK API 详细文档                |
-| [小组件开发](tapp/WIDGET.md)          | Widget 开发指南、尺寸适配、样式规范       |
-| [安全沙箱](tapp/SANDBOX.md)           | CSP 策略、iframe 限制、权限系统           |
-| [样式规范](tapp/STYLING.md)           | CSS 变量、Tailwind 集成、Glass 风格       |
-| [REST API](tapp/REST_API.md)          | 后端 REST API 端点参考                    |
+商店仓库自身的目录协议与发布流程见：
 
-## 🚀 快速导航
+- 根目录 [README.md](../README.md)
+- [tapp/STORE.md](./tapp/STORE.md)（与 Myriad 同步的全文）
 
-### 新手入门
+## 模块文档
 
-1. 阅读 [快速入门](tapp/QUICKSTART.md) 创建第一个 Tapp
-2. 了解 [Manifest 配置](tapp/MANIFEST.md) 完善应用信息
-3. 查阅 [SDK API 参考](tapp/API_REFERENCE.md) 使用各种功能
+| 文档 | 说明 |
+| ---- | ---- |
+| [架构总览](tapp/ARCHITECTURE.md) | 安装态、运行态、沙箱、后台 core 与调度器 |
+| [Tapp 商店](tapp/STORE.md) | 远程目录 `index.json`、源管理、安装链路与发布 |
+| [Tapp Playground](tapp/PLAYGROUND.md) | Pro AI 生成、预览、导出 |
+| [Playground 生成上下文](tapp/PLAYGROUND_GENERATION_CONTEXT.md) | 注入模型的开发上下文 |
+| [快速入门](tapp/QUICKSTART.md) | CLI、代码架构、生命周期 |
+| [Manifest 配置](tapp/MANIFEST.md) | manifest.json 字段 |
+| [SDK API 参考](tapp/API_REFERENCE.md) | 沙箱 SDK |
+| [小组件开发](tapp/WIDGET.md) | Widget |
+| [页面样式规范](tapp/PAGE.md) | Page 布局与深色模式 |
+| [安全沙箱](tapp/SANDBOX.md) | CSP 与权限 |
+| [图形与轻量游戏](tapp/GRAPHICS.md) | Canvas / assets |
+| [样式规范](tapp/STYLING.md) | Glass / Tailwind |
+| [设计规范摘要](tapp/DESIGN_SPEC.md) | Playground 设计语言 |
+| [运行时契约](tapp/RUNTIME_CONTRACT_DESIGN.md) | Grant / Data Exchange / AI / Event |
+| [REST API](tapp/REST_API.md) | 宿主后端路由 |
+| [故障排除](tapp/TROUBLESHOOTING.md) | 常见问题 |
+| [权限 fixtures](tapp/fixtures/README.md) | host / action 权限对照 |
 
-### 开发小组件
+## 仅存在于 Myriad 主仓库
 
-1. 查看 [小组件开发](tapp/WIDGET.md) 了解 Widget SDK 限制
-2. 参考 [样式规范](tapp/STYLING.md) 实现 Glass 风格设计
-3. 了解 [安全沙箱](tapp/SANDBOX.md) 避免 XSS 风险
+下列内容请直接打开主仓库，本镜像不维护副本：
 
-### 高级功能
+| 文档 | 链接 |
+| ---- | ---- |
+| `.tapp` ZIP 格式 | [TAPP_FILE_FORMAT.md](https://github.com/Myriad-You/Myriad/blob/preview/docs/features/TAPP_FILE_FORMAT.md) |
+| `@myriad/tapp-cli` | [tools/tapp-cli](https://github.com/Myriad-You/Myriad/tree/preview/tools/tapp-cli) |
+| 系统架构 / 构建 | [ARCHITECTURE](https://github.com/Myriad-You/Myriad/blob/preview/docs/development/ARCHITECTURE.md) · [BUILD](https://github.com/Myriad-You/Myriad/blob/preview/docs/development/BUILD.md) |
 
-1. [Manifest 配置 - API 声明](tapp/MANIFEST.md#api-声明) - API 声明与 Spoof 模式
-2. [SDK API 参考 - 定时任务](tapp/API_REFERENCE.md#定时任务-api) - 定时任务调度
-3. [REST API](tapp/REST_API.md) - 直接调用后端接口
+## 给商店贡献者的最短路径
 
-## 📁 目录结构
+1. 读 [STORE.md](./tapp/STORE.md) 与根 [README](../README.md)  
+2. 用 CLI 在本地 `check` / `pack`（见 [QUICKSTART](./tapp/QUICKSTART.md)）  
+3. 把应用放进 `apps/{id}/` 并更新 `index.json`  
+4. 核对 **category / version / download 路径 / assets**  
+5. 在 Myriad 实例上强制刷新商店源并试装  
 
+## 同步说明
+
+从 Myriad 更新镜像时，复制：
+
+```text
+Myriad/docs/development/TAPP_DEVELOPMENT.md  →  development/TAPP_DEVELOPMENT.md  （再按本文件调整镜像说明）
+Myriad/docs/development/tapp/**              →  development/tapp/**
 ```
-docs/development/tapp/
-├── QUICKSTART.md      # 快速入门
-├── MANIFEST.md        # Manifest 配置
-├── API_REFERENCE.md   # SDK API 参考
-├── WIDGET.md          # 小组件开发
-├── SANDBOX.md         # 安全沙箱
-├── STYLING.md         # 样式规范
-└── REST_API.md        # REST API 端点
-```
 
----
-
-## 📝 更新日志
-
-### 2025-12-08 - 文档重构
-
-- 📚 将单一 4500 行文档拆分为 7 个模块化文档
-- 🆕 新增导航索引，便于快速定位
-- 🆕 `api_declarations` 配置：声明外部 API 端点
-- 🆕 Spoof 模式：隐藏真实 API 端点，显示伪装地址
-- 🆕 后端 `spoof_utils.rs` 服务支持
-
-### 2025-12-06 - 样式规范文档修正
-
-- 📝 Widget 模式完全支持 Tailwind CSS
-- 📝 Page 模式使用内联 style + tapp-\* 工具类
-- 🔧 修正 `Tapp.ui.confirm()` 等 API 签名
-
-### 2025-12-05 - 主色调 API & 后台运行需求
-
-- 🆕 `Tapp.ui.getPrimaryColor()` 获取壁纸主色调
-- 🆕 `Tapp.background` API 声明后台运行需求
-- 🆕 7 种后台需求类型
-
-### 2025-11-20 - 自适应尺寸 + i18n
-
-- 🆕 自动注入自适应 CSS 变量
-- 🆕 响应式工具类
-- 🆕 `Tapp.ui.getLocale()` 获取用户语言
-
-### 2025-10-15 - 代码分离架构
-
-- 🆕 分离模式：core, widget, page 代码分离
-- 🆕 Widget 预注册机制
-
-### 2025-09-01 - 安全增强版本
-
-- 🆕 `Tapp.dom` 安全 API
-- 🆕 增强 AI 提示词安全检测
-
-### 2025-08-01 - 初始版本
-
-- 基础 API (storage, ui, lifecycle)
-- 小组件系统
-- 平台数据访问
-- AI 集成
+不要把 Myriad 整仓 `docs/deployment` 等非 Tapp 文档复制进来。

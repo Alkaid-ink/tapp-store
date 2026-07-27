@@ -1,10 +1,13 @@
 # Tapp API 参考
 
-本文档提供 Tapp SDK 所有可用 API 的详细说明。
+本文档详细说明通用稳定 API，并在文末列出完整版与 Widget SDK 的能力边界。SDK 方法
+只有在当前沙箱注册了对应 handler 且权限已授予时才可用；不能仅以 `window.Tapp` 上存在
+某个方法判断能力可调用。
 
 ## 目录
 
 - [存储 API](#存储-api)
+- [国际化 API](#国际化-api)
 - [跨 Tapp Data Exchange API](#跨-tapp-data-exchange-api)
 - [设置 API](#设置-api)
 - [UI API](#ui-api)
@@ -16,23 +19,52 @@
 - [报告 API](#报告-api)
 - [DOM 安全 API](#dom-安全-api)
 - [数据处理 API](#数据处理-api)
-- [文件 API](#文件-api)
 - [媒体控制 API](#媒体控制-api)
 - [上下文 API](#上下文-api)
 - [用户角色 API](#用户角色-api)
-- [Federation Feed API](#federation-feed-api)
+- [Federation API](#federation-api)
+- [Tapp 列表 API](#tapp-列表-api)
+- [Brew 列表 API](#brew-列表-api)
 - [组件注册 API](#组件注册-api)
 - [快捷键 API](#快捷键-api)
-- [事件总线 API](#事件总线-api)
+- [事件 API](#事件-api)
 - [后台需求 API](#后台需求-api)
 - [动态内容 API](#动态内容-api)
 - [定时任务 API](#定时任务-api)
+- [声明式网络 API](#声明式网络-api)
+- [文件与语音 API](#文件与语音-api)
+- [包内资源 Assets API](#包内资源-assets-api)
+- [能力边界与完整命名空间](#能力边界与完整命名空间)
+
+---
+
+## 国际化 API
+
+**权限**：无（Basic 读取能力）
+
+安装资源中的 `i18n/<locale>.json` 会以只读数据注入沙箱。Page、Widget 和 headless core
+统一通过 `Tapp.i18n` 读取，不要自行猜测 `Tapp.i18n` 以外的接口，也不要直接依赖
+`window._TAPP_I18N` 内部变量。
+
+```javascript
+const title = Tapp.i18n.t("title");
+const progress = Tapp.i18n.t("progress", { done: 3, total: 5 });
+const locale = Tapp.i18n.getLocale();
+const allTranslations = Tapp.i18n.getAll(); // 返回只读数据的深拷贝
+```
+
+`t()` 先匹配语言表中的完整 key，因此 `{"app.title": "..."}` 可直接使用；未命中时再把
+点号作为嵌套路径读取。locale 按当前完整 locale、语言前缀、`en-US`、`zh-CN` 的顺序
+回退；缺失时返回 key，避免把 `undefined` 写进 DOM。语言切换后 `getLocale()` 和 `t()`
+立即使用新 locale，已有 DOM 文本仍应在 `Tapp.ui.onLocaleChange()` 回调中重新渲染。
 
 ---
 
 ## 存储 API
 
 **权限**: `storage`
+
+该能力仅向已登录用户的 Runtime Grant 签发。访客运行公开 Tapp 时没有持久 storage。
 
 ```javascript
 // 获取数据
@@ -47,25 +79,37 @@ await Tapp.storage.remove("key");
 // 获取所有键
 const keys = await Tapp.storage.keys();
 
+// 一次获取所有键值（不要自行 keys() 后逐项 get）
+const entries = await Tapp.storage.getAll();
+// 返回: { key: value, ... }
+
 // 清空存储
 await Tapp.storage.clear();
 
 // 获取存储使用情况
 const usage = await Tapp.storage.usage();
-// 返回: { used: 1024, quota: 5242880 } // 服务端硬配额，单位字节
+// 返回: { used: 1024, quota: 5242880 } // 字节；quota 是服务端硬上限
+
+// 同一 Tapp 的其他 Page、Widget 或 headless core 修改 storage 时触发
+const unsubscribe = Tapp.storage.onChanged(({ key, operation }) => {
+  console.log(key, operation); // operation: set | remove | clear
+});
 ```
 
-单值最大 1 MiB，总量最大 5 MiB；总量检查与写入位于同一数据库事务，跨副本并发不能越过
-配额。公开 Tapp 仍按当前登录用户的 `user_id + tapp_id` 隔离存储，不会读取安装 owner 的
-私有数据。需要一次读取全部数据时使用 `Tapp.storage.getAll()`，不要自行 `keys()` 后逐项
-`get()`。`_settings.`、`_component:`、`_shortcut:`、`_report:` 是宿主保留前缀。
+存储 key 和单值由后端校验，单值最大 1 MiB，总量最大 5 MiB。替换投影与写入位于同一数据库
+事务并使用 subject/Tapp advisory lock，因此并发写入也不能越过配额。公开 Tapp 仍按当前
+登录用户隔离存储；`_settings.`、`_component:`、`_shortcut:`、`_report:` 为宿主保留前缀。
 
 ---
 
 ## 跨 Tapp Data Exchange API
 
-提供方在 `core` 注册 Manifest 中声明的 export；离开页面后仍需提供时，应同时声明对应的
-`backgroundRequirements`：
+该 API 不使用可长期授予的静态权限。安全边界由双方 Manifest 声明、双方 Runtime Grant、
+同一当前用户、provider 安装 owner、宿主可见授权弹窗和服务端原子消费的一次性 Data Access
+Grant 共同组成。
+
+提供方通常在 `core` 注册 handler；需要离开页面后仍可提供数据时，还应声明真实的
+`backgroundRequirements`，让 headless core 保持在线：
 
 ```javascript
 const removeProvider = await Tapp.dataExchange.provide(
@@ -75,9 +119,11 @@ const removeProvider = await Tapp.dataExchange.provide(
     return getCurrentPlaylist(params);
   },
 );
+
+removeProvider(); // 不再提供时调用
 ```
 
-调用方必须声明匹配 import：
+调用方必须在 Manifest 的 `imports` 中声明目标与 export：
 
 ```javascript
 const playlist = await Tapp.dataExchange.request({
@@ -88,15 +134,23 @@ const playlist = await Tapp.dataExchange.request({
 });
 ```
 
-每次调用都显示一张宿主一次性授权弹窗，明确双方 Tapp、export、参数范围、用途、返回上限和
-倒计时；默认选择拒绝，不提供长期授权。Runtime Grant 与一次性 token 不进入 iframe。调用方
-销毁、提供方离线、超时、schema 或大小不匹配都会拒绝且不返回部分结果。
+每次 `request()` 都会进入宿主授权队列，并显示一张结构化弹窗，列出调用方、提供方、数据
+名称、请求参数/字段范围、用途、返回上限和自动过期倒计时。弹窗默认聚焦“拒绝”，Escape、
+遮罩和关闭按钮都视为拒绝；多个请求按顺序逐项确认。不提供“始终允许”是刻意的设计决策
+（不是未完成项）：跨 Tapp 数据流动必须每次可见、可拒绝，避免一次勾选变成永久静默通道。
+用户拒绝、弹窗关闭、调用方销毁、提供方离线、30 秒未响应、响应超限或 schema 不匹配都会
+拒绝调用；不会返回部分结果。Runtime Grant 与一次性 token 都只存在于宿主，不会进入
+iframe 或 `postMessage`。当前仅从已在线并注册 handler 的 Page、Widget 或 headless
+runtime 中选择提供方，不会为没有后台实例的 Tapp 隐式启动完整 Page。
 
 ---
 
 ## 设置 API
 
 **权限**: `storage`
+
+访客不会获得 `storage`，因此只使用 Manifest 中的默认设置；以下读写 API 仅在已登录
+用户的 Tapp runtime 中可用。
 
 ```javascript
 // 获取设置项
@@ -111,7 +165,8 @@ const allSettings = await Tapp.settings.getAll();
 ```
 
 设置是 Manifest 声明的安装级配置。安装 owner 或管理员可修改；运行该安装的其他已登录用户
-只读。用户自己的偏好应使用 `Tapp.storage` 保存，不能通过 `_settings.` 前缀直接访问安装设置。
+只读。`getAll()` 使用独立 settings 端点一次读取全部已保存值，不会枚举当前用户的私有
+`Tapp.storage`。
 
 ---
 
@@ -254,6 +309,8 @@ async function animateListItems(items) {
 
 **权限**: `platform:read`, `platform:write`
 
+平台数据端点要求持久登录主体，匿名访客不会获得 `platform:read` Runtime Grant。
+
 ```javascript
 // 获取已启用平台列表
 const platforms = await Tapp.platform.listEnabled();
@@ -294,8 +351,8 @@ await Tapp.platform.addItems([
 
 **权限**: `ai:generate`, `ai:analyze`, `ai:chat`, `ai:image`
 
-AI 只提供服务端治理的 Task API；旧的 `generate/analyze/chat/image/getQuota/canGenerate`
-入口已删除。Manifest 必须声明 operation、model tier、context source 和 output format。
+AI 只提供服务端治理的 Task API。Manifest 必须通过 `ai` 声明 operation、model tier、context
+source 与 output format，并同时申请 operation 对应的 `ai:*` 权限。
 
 ```javascript
 let task = await Tapp.ai.tasks.create({
@@ -314,14 +371,16 @@ const stop = await Tapp.ai.tasks.subscribe(task.taskId, ({ event, data }) => {
 });
 
 task = await Tapp.ai.tasks.get(task.taskId);
-await Tapp.ai.tasks.cancel(task.taskId);
+await Tapp.ai.tasks.cancel(task.taskId); // 仅非终态任务
 const usage = await Tapp.ai.tasks.usage();
 stop();
 ```
 
-任务绑定 subject、安装 owner 与 Tapp，最多并发 4 个，执行上限 125 秒，终态保留 15 分钟。
-并发/保留数与幂等键在跨副本事务中原子判定；相同请求不会重复执行或计费。跨 Tapp 上下文
-必须先走 Data Exchange，JSON 输出由后端按 inline schema 验证。
+任务绑定当前 Tapp/subject/owner，最多并发 4 个，125 秒执行上限，终态保留 15 分钟。
+并发/保留上限和 `idempotencyKey` 在跨副本事务中原子判定；同一身份重复提交相同请求只返回
+原任务，不会重复调用模型或重复计费。
+`platform`、`report` 上下文还需对应读取权限；跨 Tapp 上下文不能由 AI 接口静默获取，必须
+先走 One-shot Data Exchange。结构化 JSON 输出会在后端解析并验证 inline schema。
 
 ---
 
@@ -335,16 +394,18 @@ const off = Tapp.agent.onInteraction("report.compose", async (interaction) => {
 });
 ```
 
-只有接受 interaction 的 runtime 能提交结果。输入和结果按 Manifest schema 校验，5 分钟截止；
-到期由共享 CAS worker 转为 `expired` 并恢复原 Agent Executor，而不是直接删除后留下等待任务。
-`requestIntent()` 只支持 `ui.open`、`report.create`、`dataExchange.request` 宿主 adapter；跨
-Tapp 数据仍由 Data Exchange 显示唯一的一次性授权弹窗。
+只有 `accept()` 成功的 runtime 能提交结果；输入/结果按 Manifest schema 校验，5 分钟到期，
+结果提交默认使用基于 interactionId 的幂等键，提交后恢复原 Agent task。`requestIntent()`
+经后端授权后由 `ui.open`、`report.create` 或 `dataExchange.request` 宿主 adapter 执行；跨
+Tapp 数据读取只显示 Data Exchange 自己的一张明细化一次性授权弹窗。
+到期不是简单删除：共享过期 worker 会以 CAS 转为 `expired`，并让原 Executor 从持久化任务
+恢复，避免任务永久停在等待状态。
 
 ---
 
 ## 小组件 API
 
-**权限**: `widget:register`
+**权限**: `widget:register`（privileged，仅当前管理员）
 
 ```javascript
 // 注册小组件
@@ -353,7 +414,6 @@ await Tapp.widget.register({
   name: "我的小组件",
   defaultSize: "2x2",
   sizes: ["1x1", "2x2", "4x2"],
-  refreshPolicy: { mode: "event", refreshOnVisible: true },
   category: "utility",
 });
 
@@ -363,15 +423,29 @@ await Tapp.widget.unregister("my-widget");
 // 获取已注册小组件
 const widgets = await Tapp.widget.listRegistered();
 
-// 更新小组件配置
+// 替换小组件注册元数据（不会保存用户设置）
 await Tapp.widget.updateConfig("my-widget", {
-  title: "新标题",
+  name: "我的小组件",
+  description: "更新后的说明",
+  icon: "🧊",
+  defaultSize: "2x2",
+  sizes: ["1x1", "2x2", "4x2"],
+  category: "utility",
 });
 ```
 
-在 Widget 沙箱中，`Tapp.widget.getInstanceSettings()` 读取当前 Dashboard 实例设置，
-`updateInstanceSettings(patch)` 更新 Manifest 已声明字段，`invalidate(reason)` 请求刷新。
-同一 Tapp 其他运行实例修改 storage 时可通过 `Tapp.storage.onChanged(callback)` 订阅。
+在 Widget 沙箱内还提供当前 Dashboard 实例专用 API（无需 `widget:register`）：
+
+```javascript
+const settings = Tapp.widget.getInstanceSettings();
+await Tapp.widget.updateInstanceSettings({ compact: true });
+await Tapp.widget.invalidate("data-ready");
+```
+
+`updateInstanceSettings()` 只能更新当前 Widget 的 `widgets[].settings` 已声明字段，宿主会
+按类型、select 选项和数值范围校验，然后写入 Dashboard 布局。顶层 `settings` 仍是整个
+Tapp 共享的全局设置。可见刷新采用 `widgets[].refreshPolicy`；后台周期任务继续使用
+scheduler/headless core，不依赖 Widget iframe 常驻。
 
 ---
 
@@ -451,7 +525,11 @@ Tapp.dom.renderList(container, items, (item, index) => {
 
 ## 数据处理 API
 
-**无需权限** - 数据转换管道
+权限按数据流动态计算：inline 输入且无输出不需要静态权限；platform 输入需要
+`platform:read`，platform 输出需要 `platform:write`，storage 输入/输出需要 `storage`。
+纯 inline 输入与返回值不需要额外权限，访客也可使用；一旦请求 platform 或 storage，
+服务端仍按当前 Runtime Grant 拒绝未获授权的访问。
+后端同时校验 Runtime Grant 与安装授权。
 
 ```javascript
 const result = await Tapp.data.transform({
@@ -461,6 +539,13 @@ const result = await Tapp.data.transform({
     { type: "sort", field: "createdAt", order: "desc" },
     { type: "limit", count: 10 },
     { type: "select", fields: ["id", "title", "date"] },
+    {
+      type: "map",
+      operations: [
+        { op: "rename", from: "title", to: "name" },
+        { op: "default", field: "date", value: null },
+      ],
+    },
   ],
   output: { target: "storage", key: "my-data" },
 });
@@ -476,58 +561,17 @@ const result = await Tapp.data.transform({
 
 ### 管道操作
 
-| 操作        | 参数                         | 说明     |
-| ----------- | ---------------------------- | -------- |
-| `filter`    | `field`, `operator`, `value` | 过滤数据 |
-| `sort`      | `field`, `order`             | 排序     |
-| `limit`     | `count`                      | 限制数量 |
-| `offset`    | `count`                      | 跳过数量 |
-| `select`    | `fields`                     | 选择字段 |
-| `group`     | `by`                         | 分组     |
-| `aggregate` | `operation`, `field`         | 聚合统计 |
-| `dedupe`    | `key`                        | 去重     |
-| `map`       | `expression`                 | 映射转换 |
-
----
-
-## 文件 API
-
-**权限**: `storage`
-
-在主应用上下文中执行文件下载，绕过 iframe 沙盒限制。
-
-```javascript
-// 下载文件
-await Tapp.file.download(content, filename, mimeType);
-
-// 示例：下载配置文件
-await Tapp.file.download(
-  "version: 3.8\nservices:\n  ...",
-  "docker-compose.yml",
-  "text/yaml",
-);
-
-// 示例：下载 JSON 数据
-const data = { name: "test", value: 123 };
-await Tapp.file.download(
-  JSON.stringify(data, null, 2),
-  "data.json",
-  "application/json",
-);
-```
-
-### 参数说明
-
-| 参数       | 类型     | 必填 | 说明                                       |
-| ---------- | -------- | ---- | ------------------------------------------ |
-| `content`  | `string` | 是   | 文件内容                                   |
-| `filename` | `string` | 是   | 文件名（禁止包含路径字符）                 |
-| `mimeType` | `string` | 否   | MIME 类型，默认 `text/plain;charset=utf-8` |
-
-### 限制
-
-- 文件大小最大 10MB
-- 文件名不能包含 `..`、`/`、`\` 等路径字符
+| 操作        | 参数                         | 说明                         |
+| ----------- | ---------------------------- | ---------------------------- |
+| `filter`    | `field`, `operator`, `value` | 过滤数据                     |
+| `sort`      | `field`, `order`             | 排序                         |
+| `limit`     | `count`                      | 限制数量                     |
+| `offset`    | `count`                      | 跳过数量                     |
+| `select`    | `fields`                     | 选择字段                     |
+| `group`     | `by`                         | 分组                         |
+| `aggregate` | `operation`, `field`         | 聚合统计                     |
+| `dedupe`    | `key`                        | 去重                         |
+| `map`       | `operations`                 | 声明式字段映射；不执行表达式 |
 
 ---
 
@@ -565,6 +609,52 @@ const playlist = await Tapp.media.getPlaylist();
 const unsubscribe = Tapp.media.onStateChange((state) => {
   console.log("播放状态:", state.isPlaying);
 });
+
+// 监听轻量播放进度；进度 tick 不重复发送完整状态
+const stopProgress = Tapp.media.onProgress((progress) => {
+  console.log(progress.current, progress.duration, progress.percentage);
+});
+
+// 实时频谱分析（需要 media:read）
+// 返回归一化 0-1 的频段数据，播放任意音乐时均可用（无需首页频谱组件在场）
+const s = await Tapp.media.getSpectrum();
+// 返回: {
+//   spectrum: number[4],  // 为 4 柱视觉重排的数据（低-高-高-低对称，适合简单柱状）
+//   bands: number[8],     // 原始 8 频段（bass→high 自然顺序，适合频谱可视化）
+//   energy, bass, mid, high
+// }
+// 建议架构：~15fps 轮询数据 + 本地攻击/释放包络 60fps 渲染（postMessage 有成本）
+
+// 获取歌词：逐字 + 逐行兜底（需要 media:read）
+// 多源逐字：网易云 yrc（按 id）→ 酷狗 KRC（按 歌名+歌手+时长）→ 逐行
+// 不传参数默认取当前播放曲目；也可指定 { songId, source }
+const ly = await Tapp.media.getLyrics();
+// 返回: {
+//   lines:    [{ time, text, translation? }],           // 逐行 LRC（始终尝试提供）
+//   verbatim: [{ time, duration, text, translation?,
+//               words: [{ time, duration, text }] }],   // 逐字（word.time 为绝对秒）
+//   hasVerbatim: boolean,                               // 是否含逐字数据
+//   source: "netease" | "qq",                           // 曲目来源
+//   verbatimSource: "netease" | "kugou" | "",           // 逐字实际命中源
+//   hasTranslation: boolean,                            // 是否含逐行翻译
+//   translationLang: "zh" | ""                          // 翻译语言（当前仅网易中文翻译源）
+// }
+// verbatim 为空时消费方应回退到 lines 做逐行高亮
+// 说明：网易云 yrc 覆盖较少，酷狗 KRC 覆盖最广（尤其日系/番剧），故作为回退源
+// 翻译：整行级（无逐字翻译），已按时间就近对齐挂在各行 translation 字段；
+//      建议仅当 translationLang 与用户界面语言一致时展示翻译开关
+
+// 节拍网格：预载全曲离线分析（需要 media:read）
+// 主应用对当前歌曲做一次性节拍跟踪（Ellis 2007 风格：谱通量 + 自相关 + comb 相位），
+// 返回精确拍点时间戳——可视化可按网格预测踩拍，消除实时检测的固有滞后
+const grid = await Tapp.media.getBeatGrid();
+// 返回: { available: boolean, bpm, beats: number[]（秒）, confidence: 0-1 }
+// available=false 或 confidence 低时应回退到实时频谱检测
+// 注意：首次调用会触发全曲下载+分析（约 1-3s），结果按歌缓存
+
+// VIP 歌曲开关（读 media:read / 写 media:control）
+const { skipVip } = await Tapp.media.getSkipVip();
+await Tapp.media.setSkipVip(true); // true=跳过VIP歌曲
 ```
 
 ---
@@ -624,28 +714,241 @@ const levels = await Tapp.user.getAllowedPermissionLevels();
 const canUse = await Tapp.user.canUsePermissionLevel("elevated");
 ```
 
-等级接口表示该角色在系统层面可以使用的权限等级，并不代表当前 Tapp 已获得等级内的
-每项权限。实际调用前仍应检查 `Tapp.permissions`，宿主与后端也会再次校验。
+这两个等级 API 读取后端当前的权限下放配置，表示该角色在系统层面是否可以使用此
+等级，并不表示当前 Tapp 已取得该等级下的每项权限。实际调用前仍应以
+`Tapp.permissions.includes("具体权限")` 为准，后端也会再次校验。
+尤其对游客，`basic` 只表示该等级存在；要求持久登录主体的 basic 能力不会出现在
+Runtime Grant 中。
 
 ---
 
-## Federation Feed API
+## Federation API
 
-**权限**: `federation:read`
+联邦能力由 Page/headless 宿主通过 `FederationBridge` 代理到 `/api/federation/*`，并要求
+有效 Runtime Grant。权限族：
+
+| 权限 | 用途 |
+| ---- | ---- |
+| `federation:read` | 身份、Feed/Timeline、关注列表、已发布列表、Channel/Room/Ring 读取 |
+| `federation:write` | 关注/取关、publish、createNote、uploadMedia、unpublish、创建/治理 Channel·Room·Ring |
+| `federation:message` | 发送 Channel/Room 消息与实时订阅（WS ticket） |
+| `federation:files` | Channel 文件分块传输 |
+| `federation:trust` | 实例信任策略（特权，仅管理员） |
+
+游客不会取得 `federation:write`、`federation:message` 或 `federation:files`。Tapp 应使用
+`Tapp.user.getRole()` 调整界面，不要向游客展示关注、发布、私聊、Room 或文件传输操作。
+
+Playground **临时预览不注册** federation handlers、也不签发 Runtime Grant；下列 API 仅在
+正式安装运行后可用。权限映射与 REST 对照见
+`docs/development/tapp/fixtures/action_permissions.json` 与
+`host_route_permissions.json`。
+
+### Feed / Timeline / 身份 / 关注
 
 ```javascript
 const role = await Tapp.user.getRole();
+const identity = await Tapp.federation.getIdentity();
 const feed = await Tapp.federation.getFeed();
-
 // 游客：feed.audience === "public"
-// 普通用户/管理员：feed.audience === "public+personal"
-// feed.items 中的 scope 为 "public" 或 "personal"
+// 已登录：feed.audience === "public+personal"；item.scope 为 "public" | "personal"
+
+const timeline = await Tapp.federation.getTimeline(); // 已登录个人 Timeline
+const following = await Tapp.federation.getFollowing();
+const followers = await Tapp.federation.getFollowers();
+
+await Tapp.federation.follow("https://peer.example/users/alice");
+await Tapp.federation.unfollow("https://peer.example/users/alice");
 ```
 
-游客只能读取公开 Activity，不会取得 `federation:write`、`federation:message` 或
-`federation:files`。Tapp 应根据 `Tapp.user.getRole()` 隐藏关注、发布、私聊、Room 和
-文件传输入口。已登录用户需要同时展示公开内容与自己的 Timeline 时使用 `getFeed()`；
-`getTimeline()` 保留为原始个人 Timeline 接口。
+`getFeed()` 是角色感知入口：游客只读公开 Activity，已登录用户合并公开 Activity 与自己的
+Timeline。需要同时展示公开内容时优先 `getFeed()`；`getTimeline()` 保留为原始个人 Timeline。
+
+### 媒体上传与 freeform Note
+
+**权限**: `federation:write`
+
+推荐流程：**先 `uploadMedia`，再把返回的 URL 放进 `createNote` / `publish` 的
+`attachments`**。不要把任意外链当作附件；bridge 与后端都会校验联邦媒体 URL 形态
+（`/media/federation/{userId}/{filename}`）。
+
+```javascript
+// 1) 上传：data 为 data URL 或 raw base64（经 postMessage；见下方体积上限）
+const uploaded = await Tapp.federation.uploadMedia({
+  data: dataUrlOrBase64,
+  name: "photo.jpg",
+  mime: "image/jpeg",
+  // media_type 可选，与 mime 同类提示
+});
+// uploaded: { url, media_type, name, size, attachment_type }
+
+// 2) 创建 Note（服务端生成 content_id；可只带 text 或 attachments）
+const note = await Tapp.federation.createNote({
+  text: "hello from Tapp",
+  visibility: "public", // public | followers | direct
+  attachments: [
+    {
+      url: uploaded.url,
+      media_type: uploaded.media_type || "image/jpeg",
+      name: uploaded.name,
+    },
+  ],
+});
+// note: { success, activity_id, content_type, content_id, visibility,
+//         delivered_queued?, author_timeline? }
+// delivered_queued：best-effort fan-out 入队数量；author_timeline：是否写入作者本地时间线
+```
+
+后端媒体限制（与 bridge 专用校验对齐）：
+
+| 类型 | 上限 |
+| ---- | ---- |
+| 图片 | 10 MiB raw |
+| 视频 | 50 MiB raw |
+| 路由 body（multipart） | 55 MiB |
+| Note 正文 | 约 10_000 字符 |
+| 附件数 | 最多 8 |
+
+Bridge 对 `federation.uploadMedia` **不**走默认 ~1 MiB JSON 上限：允许 data URL / base64
+字符数约为 `ceil(50 MiB * 4/3) + 256`，以覆盖最大视频的 base64 膨胀。超限时校验失败（常见
+文案含 `Media data too large` / `Payload too large`）。
+
+### publish / unpublish / 已发布列表
+
+```javascript
+// 发布本地已有内容（report / brew-article / tapp / library）或 content_type: "note"
+const published = await Tapp.federation.publish({
+  content_type: "report",
+  content_id: "report-id",
+  visibility: "public",
+});
+
+// freeform note 也可走 publish({ content_type: "note", text, attachments })；
+// 新写 Note 优先 createNote。
+
+await Tapp.federation.unpublish({
+  content_type: "note",
+  content_id: published.content_id,
+});
+
+const mine = await Tapp.federation.getPublished();
+```
+
+`content_type !== "note"` 时必须提供 `content_id`。同一 `(content_type, content_id)` 重复
+发布返回冲突。Delete/unpublish 同样对 followers 做 best-effort fan-out。
+
+### Channel / Room / Ring / Trust / 传输（摘要）
+
+SDK 已暴露完整方法面（`sdkGenerator` + `FederationBridge`）。调用前须在 Manifest 申请对应
+权限，且当前宿主已注册 handler：
+
+| 域 | 读 (`federation:read`) | 写 / 消息 |
+| -- | ---------------------- | --------- |
+| Channel | `getChannels`, `getChannel`, `getMessages` | `createChannel`, `acceptChannel`, `closeChannel`；消息与订阅：`sendMessage`, `subscribeChannel`…（`federation:message`） |
+| Room | `getRooms`, `getRoom`, `getRoomMembers`, `getRoomMessages` | `createRoom`, `updateRoom`, `inviteMember`, `removeMember`, `leaveRoom`, `deleteRoom`, `pinRoomMessage`；消息：`sendRoomMessage` 等 |
+| Ring | `getRings`, `getRing`, `getRingPeers` | `createRing`, `leaveRing`, `addPeer`, `removePeer`, `triggerSync` |
+| Trust | — | `getTrustPolicy`, `getInstances`, `updateInstanceTrust`, `toggleInstanceBlock`（`federation:trust`） |
+| Files | — | `initiateTransfer`, `listTransfers`, `getTransfer`, `uploadChunk`, `cancelTransfer`（`federation:files`） |
+
+实时事件（沙箱内回调，不单独占权限条目；订阅本身要 `federation:message`）：
+
+```javascript
+Tapp.federation.onMessage((ev) => { /* scope: channel | room */ });
+Tapp.federation.onChannelUpdate((ev) => { /* accepted | closed | disconnected */ });
+Tapp.federation.onRoomUpdate((ev) => { /* governance_changed | disconnected */ });
+```
+
+Channel/Room 文本消息后端载荷上限约 **10 MiB**；文件传输默认 chunk 约 **1 MiB** raw
+（base64 后约 1.37 MiB，低于联邦 inbox 体量上限）。参数与 REST 字段以
+`frontend/src/types/federation.ts` 与后端路由为准，勿从方法名臆造字段。
+
+---
+
+## Tapp 列表 API
+
+**权限**: `tappList:read`（list/get/getRecent）、`tappList:manage`（install/uninstall/start/stop/export）
+
+```javascript
+const items = await Tapp.tappList.list();
+const one = await Tapp.tappList.get("com.example.app");
+const recent = await Tapp.tappList.getRecent(10);
+
+// 商店安装（SDK 请求形状，见 resolveTappListInstallRequest / contentHandlers）：
+// catalog 引用只来自 storeSource，或 source 本身是 http(s) 目录 URL。
+// 裸数字源 id 不能单独放在 source 上（会 Invalid source）。
+await Tapp.tappList.install({
+  source: "store",
+  storeSource: "1", // 或完整 index.json URL；禁止 "store"/"direct"
+  tappId: "com.example.app",
+  permissions: ["storage"],
+});
+// 等价：source 为 http(s) catalog URL（可省略 storeSource）
+// await Tapp.tappList.install({
+//   source: "https://raw.githubusercontent.com/Myriad-You/tapp-store/main/index.json",
+//   tappId: "com.example.app",
+// });
+// ❌ 无效：{ source: "1", tappId } — 非 HTTP 的 source 不会当作 catalog
+
+// 直接安装（包体经 Bridge → installDirect → REST source:"direct"）：
+// await Tapp.tappList.install({
+//   source: "direct",
+//   manifest: { id: "com.example.app", name: "App", version: "1.0.0",
+//               category: "utility", main: "main.js", permissions: [] },
+//   code: "/* ... */",
+//   permissions: ["storage"],
+// });
+// ❌ 无效：source:"direct" 且缺少 manifest 或 code
+
+await Tapp.tappList.start("com.example.app");
+await Tapp.tappList.stop("com.example.app");
+await Tapp.tappList.uninstall("com.example.app");
+await Tapp.tappList.export("com.example.app");
+```
+
+注意：
+
+- **商店路径**：handler 解析后调用 `installFromStore({ source: catalogRef, … })`。
+  SDK 层 **catalog 引用** = `storeSource`，或当 `source` 为 `http(s)://…` 时用该 URL；
+  不要用裸 `source: "1"`。`storeSource` / catalog 不能是模式字面量 `"store"` / `"direct"`。
+  宿主再发 REST `source:"store"` + `storeSource: catalogRef`。后端拉包失败（如 502）或大包
+  （索引 `size` ≥ 1 MiB）时可回退浏览器下载 + REST `source:"direct"`。
+- **直接路径**：`source: "direct"` 时必须带 `manifest` + `code`（及可选资源）；走
+  `installDirect`，包体会经过 sandbox Bridge（与商店元数据-only 路径不同）。
+- **上传 `.tapp` 文件**仍走宿主 UI / `POST /api/tapps/install-file`，不经
+  `tappList.install`（见 [REST API](REST_API.md)、[文件格式](https://github.com/Myriad-You/Myriad/blob/preview/docs/features/TAPP_FILE_FORMAT.md)）。
+- 分享卡片安装必须带真实 catalog（`storeSource` 或 HTTP `source`），见 [STORE](STORE.md)。
+
+---
+
+## Brew 列表 API
+
+**权限**（按 action，见 `permissionConfig` / fixtures）：
+
+| 权限 | 典型方法（与 `fixtures/action_permissions.json` / `PERMISSION_MAP` 对齐） |
+| ---- | -------- |
+| `brew:read` | `list`, `get`, `sources`, `categories`, `stats`, `exportOpml` |
+| `brew:write` | `markRead`, `markUnread`, `star`, `unstar`, `markAllRead` |
+| `brew:comment` | `getComments`, `createComment`, `updateComment`, `deleteComment`, `getReplies`, `createReply` |
+| `brew:manage` | `discover`, `addSource`, `updateSource`, `deleteSource`, `refreshSource`, `importOpml`, `createCategory`, `deleteCategory` |
+
+Playground **临时预览不注册** brew handlers。完整 SDK（`Tapp.brewList`）仅在安装后可用：
+
+```javascript
+const items = await Tapp.brewList.list({ /* filters optional */ });
+const one = await Tapp.brewList.get(itemId);
+const cats = await Tapp.brewList.categories();
+const sources = await Tapp.brewList.sources();
+
+// 用户文件夹分类（需 brew:manage）
+await Tapp.brewList.createCategory({ name: "Later" });
+await Tapp.brewList.deleteCategory(categoryId);
+
+await Tapp.brewList.markRead(itemId);
+await Tapp.brewList.star(itemId);
+await Tapp.brewList.addSource({ url: "https://example.com/feed.xml" });
+await Tapp.brewList.exportOpml();
+```
+
+参数与 REST 字段以宿主 brew 服务类型为准；不要在预览中假设有 mock 数据。
 
 ---
 
@@ -658,10 +961,8 @@ const feed = await Tapp.federation.getFeed();
 await Tapp.component.registerTheme({
   id: "my-theme",
   name: "我的主题",
-  colors: {
-    primary: "#6366f1",
-    background: "#1a1a2e",
-  },
+  surface: "glass", // glass | solid | flat | outline
+  glow: "primary", // identity | primary | none
 });
 
 // 注册 AI Agent
@@ -673,10 +974,10 @@ await Tapp.component.registerAgent({
 });
 
 // 注销组件
-await Tapp.component.unregister("page", "my-page");
+await Tapp.component.unregister("theme", "my-theme");
 
-// 列出已注册组件
-const pages = await Tapp.component.list("page");
+// 列出已注册组件（theme | agent）
+const themes = await Tapp.component.list("theme");
 ```
 
 ---
@@ -711,12 +1012,16 @@ const shortcuts = await Tapp.shortcut.list();
 
 ---
 
-## 事件总线 API
+## 事件 API
 
-**权限**: `event:subscribe`, `event:publish`
+**权限**:
+- `event:publish` — `Tapp.event.publish`（经宿主桥接到服务端 Broker）
+- `event:subscribe` — 服务端 SSE 流 / Broker 订阅路径（`GET /api/tapp/events/stream` 等）；
+  也用于 `Tapp.background.require` / `release`（见下方后台需求 API）
 
 ```javascript
-// 订阅范围来自 Manifest events.subscribe，运行期只注册回调。
+// 本地 iframe 内监听：Tapp.event.on 只在沙箱内注册回调，不单独占用 bridge 权限条目。
+// 订阅范围仍来自 Manifest events.subscribe；跨 runtime 投递走宿主/SSE 的 event:subscribe。
 const unsubscribe = Tapp.event.on(
   "tapp.com.example.player.track.changed",
   (event) => console.log(event.payload),
@@ -731,21 +1036,28 @@ await Tapp.event.publish({
 unsubscribe();
 ```
 
-Event Broker 只提供在线 at-most-once 交付：`instance` 发给当前 runtime，`owner` 发给同一
-subject 下 Manifest 明确订阅的在线 Tapp。它没有 ACK、重试和离线积压；owner payload 只能是
-8 KiB 内的浅层状态元数据，跨 Tapp 正文必须使用 Data Exchange。`system.*` 仅由宿主发布。
+Event Broker 是在线 at-most-once Broker：`instance` 只发给当前 runtime，`owner` 发给同一
+subject 数据空间内、Manifest 明确订阅 topic 的在线 Page/Widget/headless。无 ACK、重试或
+离线积压；慢消费者队列满时事件会丢弃。`owner` payload 最大 8 KiB 且仅允许浅层状态元数据，
+`data/content/items/records/body/blob/bytes` 等正文键会被拒绝；跨 Tapp 数据必须走一次性授权。
+`system.*` 只能由宿主发布。当前可订阅 `system.theme.changed`、`system.network.changed`、
+`system.locale.changed`、`system.visibility.changed` 与 `system.navigation.changed`。
+
+游客 subject 由 HttpOnly HMAC 签名的浏览器 guest session 派生，不共享出口 IP；当前权限策略
+仍只允许游客发布 `instance` scope，`owner` 返回 `GUEST_OWNER_EVENT_UNAVAILABLE`。
 
 ---
 
 ## 后台需求 API
 
-**无需权限** - 声明 Tapp 的后台运行需求
+**权限**: `event:subscribe` — `require` / `release` 经 bridge 映射到该权限（见
+`permissionConfig.ts`）。`list` / `has` 为本地查询，不额外申请权限。
 
 ```javascript
-// 声明后台运行需求
+// 声明后台运行需求（需 event:subscribe）
 await Tapp.background.require("sync", "每5分钟同步数据");
 
-// 释放后台运行需求
+// 释放后台运行需求（需 event:subscribe）
 await Tapp.background.release("sync");
 
 // 获取当前所有后台需求
@@ -758,15 +1070,14 @@ const hasSync = await Tapp.background.has("sync");
 
 ### 需求类型
 
-| 类型             | 说明               |
-| ---------------- | ------------------ |
-| `widget`         | 有小组件在主页显示 |
-| `media`          | 媒体控制功能       |
-| `sync`           | 后台数据同步       |
-| `notification`   | 定时通知功能       |
-| `scheduler`      | 定时任务执行       |
-| `event-listener` | 跨 Tapp 事件监听   |
-| `realtime`       | 实时数据更新       |
+| 类型             | 说明             |
+| ---------------- | ---------------- |
+| `media`          | 媒体控制功能     |
+| `sync`           | 后台数据同步     |
+| `notification`   | 定时通知功能     |
+| `scheduler`      | 定时任务执行     |
+| `event-listener` | 跨 Tapp 事件监听 |
+| `realtime`       | 实时数据更新     |
 
 ---
 
@@ -888,9 +1199,133 @@ const unsubscribe = Tapp.scheduler.onTask("refresh", async (payload) => {
 ```
 
 `ai.generate` 后端操作要求当前 Runtime Grant、安装授权和 `manifest.ai` 同时包含
-`ai:generate` / V2 `generate` / `text` output。注册时检查一次，每次延迟执行前再次检查；执行
+`ai:generate` / Manifest `generate` / `text` output。注册时检查一次，每次延迟执行前再次检查；执行
 进入与 `Tapp.ai.tasks` 相同的共享并发、速率、calls、tokens 和 cooldown 账本。Declared API 的
 `ai:generate`、`ai:chat` builtin 也遵守相同规则。
 
 `fetch` 与声明式 HTTP API 仅连接解析后全部为公网的目标，DNS 在客户端中钉扎且不自动跟随
 重定向；Host/Connection 等路由或 hop-by-hop 头会被拒绝，响应体上限为 2 MiB。
+
+---
+
+## 声明式网络 API
+
+沙箱禁止 `fetch`、XHR 和 WebSocket。外部 HTTP 或受控 builtin 能力必须先写入
+`manifest.apis`，然后按名称调用：
+
+```javascript
+const result = await Tapp.api("profile", {
+  id: "42",
+  query: { include: "summary" },
+});
+
+// 查看 Manifest 当前声明且宿主可识别的 API
+const declaredApis = await Tapp.api.list();
+```
+
+```json
+{
+  "permissions": ["network:fetch"],
+  "apis": {
+    "profile": {
+      "type": "http",
+      "endpoint": "https://api.example.com/users/{{params.id}}",
+      "method": "GET",
+      "access": "protected",
+      "description": "读取用户资料"
+    }
+  }
+}
+```
+
+- 所有 `type: "http"` API 都要求 `network:fetch`；`public`/`protected` 只控制调用者范围。
+- 后端按当前用户与 Tapp owner 重新加载 Manifest，并执行模板参数、频率和出站安全校验。
+- Tapp 不能传入任意 URL，也不能使用历史文档中的 `Tapp.http.request()`。
+- 详细 Manifest 字段和 REST 链路见 [Manifest](MANIFEST.md#api-声明-apis) 与
+  [REST API](REST_API.md#manifest-声明-api)。
+
+## 文件与语音 API
+
+**权限**: `storage`（`file.download`）
+
+文件下载由宿主创建 Blob 并触发下载，不依赖 iframe 的 download sandbox 权限：
+
+```javascript
+await Tapp.file.download("hello\n", "hello.txt", "text/plain;charset=utf-8");
+```
+
+- 内容为字符串；编码后 Blob 大小上限 **10 MiB**（bridge 对 `file.download` 单独校验，
+  不走默认 ~1 MiB postMessage 上限）。
+- `filename` 不能含路径分隔或 `..`；可选 `mimeType` 字符串。
+
+语音能力需要对应权限：
+
+```javascript
+const voices = await Tapp.speech.getVoices();
+const status = await Tapp.speech.getStatus();
+const audio = await Tapp.speech.tts({ text: "你好" }); // speech:tts
+const text = await Tapp.speech.asr({ audio }); // speech:asr
+```
+
+语音服务统一要求登录（涉及付费供应商调用），因此不会向匿名访客下放 `speech:*`。
+
+## 包内资源 Assets API
+
+**权限**: public（仅可读本安装 `manifest.assets` 声明路径）
+
+用于游戏贴图、音频、wasm、关卡 JSON 等包内静态文件。不走 `Tapp.storage`。
+
+```javascript
+const paths = await Tapp.assets.list();
+
+// 在沙箱内创建 blob URL（可赋给 Image / Audio）
+const { url, mimeType, size } = await Tapp.assets.getUrl("assets/sprite.png");
+
+// 需要二进制时
+const { buffer, mimeType: mt } = await Tapp.assets.getArrayBuffer("assets/level.json");
+
+Tapp.assets.revoke(url);
+Tapp.assets.revokeAll(); // 也会在 onDestroy 时自动调用
+```
+
+后端入口：`GET /api/tapps/{tappId}/asset?path=assets/...`（返回 base64）。
+约定与配额见 [图形与轻量游戏](GRAPHICS.md)。
+
+播放包内音频还需申请 `media:audio`，以便 CSP `media-src` 允许 `blob:` / `data:`。
+
+## 能力边界与完整命名空间
+
+`generateFullSDK()` 用于 Page 和 headless core；`generateWidgetSDK()` 是缩小能力面的 Widget 版本。
+完整版当前包含以下命名空间：
+
+| 命名空间                                   | 主要能力                                            | 权限族                             |
+| ------------------------------------------ | --------------------------------------------------- | ---------------------------------- |
+| `storage`, `settings`                      | Tapp 私有键值存储与设置                             | `storage`                          |
+| `dataExchange`                             | 逐次授权的跨 Tapp 具名数据交换                      | Manifest + one-shot consent        |
+| `ui`, `animation`, `dynamicContent`, `dom` | 宿主 UI、主题、动画和安全 DOM helper                | `ui:*` 或 public                   |
+| `platform`, `data`                         | 平台数据读取、写入、转换和注册                      | `platform:*`                       |
+| `ai`, `report`                             | 服务端治理的 AI Task 与报告读写                     | `ai:*`, `report:*`                 |
+| `widget`                                   | 管理员动态注册与配置 Widget                         | `widget:register`                  |
+| `media`                                    | 播放器读取和控制                                    | `media:*`                          |
+| `context`, `user`                          | 应用、用户、导航、系统和地理上下文                  | public                             |
+| `component`, `shortcut`                    | 主题/Agent 组件和快捷键注册                         | `component:*`, `shortcut:register` |
+| `event`, `background`, `scheduler`         | 在线 Event Broker、常驻需求和持久化任务             | `event:*`（含 background.require/release→`event:subscribe`）、`scheduler:register` |
+| `agent`                                    | schema 约束的 Agent Interaction                     | Manifest + Runtime Grant           |
+| `api`                                      | Manifest 声明的 HTTP/builtin 能力                   | HTTP 需 `network:fetch`；`access` 仅控制调用者范围 |
+| `file`, `speech`                           | 文件下载、TTS 和 ASR                                | `storage`, `speech:*`              |
+| `assets`                                   | 包内静态资源 list/get/blob URL                      | public（限 manifest.assets）       |
+| `tappList`                                 | Tapp 查询、安装、启停、卸载与导出                   | `tappList:*`                       |
+| `brewList`                                 | Brew 列表、源、用户分类 create/delete、评论和 OPML  | `brew:*`                           |
+| `federation`                               | 身份、Feed、关注、Note/媒体发布、Channel、Room、Ring、信任和传输 | `federation:*`              |
+
+Widget SDK 只保留 Widget 渲染需要的生命周期、UI/主题、用户角色、存储、AI Task、平台读取、报告
+读取、媒体、背景需求、调度、声明式 API、上下文、DOM 和文件等子集。它不会自动拥有
+完整版的写入/管理能力。新增或调用 API 时必须核对：
+
+1. SDK 生成器是否暴露方法；
+2. `permissionConfig.ts` 是否声明 action → 权限；
+3. 当前 Page 或 Widget 宿主是否注册 handler；
+4. 后端路由是否执行身份、owner 和权限复核。
+
+`Tapp.context.getGeo()` 也是公开上下文方法；返回结果由后端地理信息服务决定。专业能力
+的请求/响应结构以对应前端服务类型和后端路由结构为准，不能从方法名猜测参数。

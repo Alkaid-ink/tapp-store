@@ -3,12 +3,13 @@
 本文档介绍 Tapp 的样式系统、CSS 变量、工具类和最佳实践。
 
 > **✨ 推荐实践**：虽然 Tapp 完全支持 Tailwind CSS，但我们**强烈建议使用语义化的原生 CSS**：
+>
 > - 更好的可维护性和可读性
 > - 更小的样式体积，无需 Tailwind 编译
 > - 更容易实现复杂的 hover/动画效果
 > - 支持 CSS 架构分离模式（`cssMode: separated`）
 >
-> 参考实现：查看 `com.myriad.hello-world` 和 `com.myriad.quick-notes` 示例。
+> 参考实现：查看 `com.myriad.hello-world` 和 `com.myriad.ai-chat` 示例。
 
 ## CSS 变量系统
 
@@ -16,18 +17,18 @@ Tapp 提供精简的 CSS 变量，主要用于壁纸色适配。其他样式请�
 
 ### 系统提供的变量
 
-| 变量 | 说明 | 示例值 |
-|------|------|--------|
-| `--tapp-primary` | 壁纸主色（从系统传入） | `#6366f1` |
-| `--tapp-primary-rgb` | 主色 RGB 分量 | `99, 102, 241` |
-| `--tapp-scale` | 容器缩放因子 | `1` |
-| `--tapp-font-scale` | 字体缩放因子 | `1` |
-| `--tapp-container-width` | 容器宽度 | `200px` |
-| `--tapp-container-height` | 容器高度 | `200px` |
-| `--tapp-base-font-size` | 基础字号 | `14px` |
-| `--tapp-is-compact` | 是否紧凑模式 | `0` 或 `1` |
-| `--tapp-is-mini` | 是否迷你模式 | `0` 或 `1` |
-| `--tapp-safe-inset-top/right/bottom/left` | 安全区域边距 | `0px` |
+| 变量                                      | 说明                   | 示例值         |
+| ----------------------------------------- | ---------------------- | -------------- |
+| `--tapp-primary`                          | 壁纸主色（从系统传入） | `#6366f1`      |
+| `--tapp-primary-rgb`                      | 主色 RGB 分量          | `99, 102, 241` |
+| `--tapp-scale`                            | 容器缩放因子           | `1`            |
+| `--tapp-font-scale`                       | 字体缩放因子           | `1`            |
+| `--tapp-container-width`                  | 容器宽度               | `200px`        |
+| `--tapp-container-height`                 | 容器高度               | `200px`        |
+| `--tapp-base-font-size`                   | 基础字号               | `14px`         |
+| `--tapp-is-compact`                       | 是否紧凑模式           | `0` 或 `1`     |
+| `--tapp-is-mini`                          | 是否迷你模式           | `0` 或 `1`     |
+| `--tapp-safe-inset-top/right/bottom/left` | 安全区域边距           | `0px`          |
 
 ### 使用示例
 
@@ -56,7 +57,9 @@ Tapp 提供精简的 CSS 变量，主要用于壁纸色适配。其他样式请�
 
 ```html
 <!-- ✅ 推荐：使用 Tailwind CSS -->
-<div class="bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-100">
+<div
+  class="bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-100"
+>
   内容
 </div>
 
@@ -89,17 +92,17 @@ Tapp 沙箱支持 Tailwind CSS，系统会**按需自动构建** CSS 样式。
 
 > **重要**：以下是 Tailwind 功能的支持情况：
 
-| 功能               | 支持情况       | 说明                                                |
-| ------------------ | -------------- | --------------------------------------------------- |
-| **尺寸任意值**     | ✅ 支持        | `w-[200px]`, `h-[100%]`, `gap-[10px]`               |
-| **间距任意值**     | ✅ 支持        | `p-[20px]`, `m-[1rem]`, `px-[10px]`                 |
-| **圆角任意值**     | ✅ 支持        | `rounded-[10px]`                                    |
-| **最大/最小尺寸**  | ✅ 支持        | `max-w-[300px]`, `min-h-[100px]`, `max-h-[50vh]`    |
-| **CSS 变量任意值** | ✅ 支持        | `bg-[var(--my-color)]`, `text-[var(--size)]`        |
-| **任意颜色**       | ⚠️ 部分支持   | 支持 CSS 变量，不支持直接 hex 如 `bg-[#1da1f2]`    |
-| **任意属性**       | ❌ 不支持      | `[mask-type:luminance]`，在 `styles.css` 中定义    |
-| **响应式断点**     | ❌ 不支持      | `sm:`, `md:`, `lg:`，使用 CSS 媒体查询或 JS 判断   |
-| **@apply**         | ❌ 不支持      | Tailwind 指令，直接写 CSS                          |
+| 功能               | 支持情况    | 说明                                             |
+| ------------------ | ----------- | ------------------------------------------------ |
+| **尺寸任意值**     | ✅ 支持     | `w-[200px]`, `h-[100%]`, `gap-[10px]`            |
+| **间距任意值**     | ✅ 支持     | `p-[20px]`, `m-[1rem]`, `px-[10px]`              |
+| **圆角任意值**     | ✅ 支持     | `rounded-[10px]`                                 |
+| **最大/最小尺寸**  | ✅ 支持     | `max-w-[300px]`, `min-h-[100px]`, `max-h-[50vh]` |
+| **CSS 变量任意值** | ✅ 支持     | `bg-[var(--my-color)]`, `text-[var(--size)]`     |
+| **任意颜色**       | ⚠️ 部分支持 | 支持 CSS 变量，不支持直接 hex 如 `bg-[#1da1f2]`  |
+| **任意属性**       | ❌ 不支持   | `[mask-type:luminance]`，在 `styles.css` 中定义  |
+| **响应式断点**     | ❌ 不支持   | `sm:`, `md:`, `lg:`，使用 CSS 媒体查询或 JS 判断 |
+| **@apply**         | ❌ 不支持   | Tailwind 指令，直接写 CSS                        |
 
 ### 🎯 推荐实践
 
@@ -114,9 +117,7 @@ Tapp 沙箱支持 Tailwind CSS，系统会**按需自动构建** CSS 样式。
 </div>
 
 <!-- ✅ 任意值语法（支持） -->
-<div class="w-[200px] h-[100px] p-[20px] rounded-[10px]">
-  任意尺寸和间距
-</div>
+<div class="w-[200px] h-[100px] p-[20px] rounded-[10px]">任意尺寸和间距</div>
 
 <!-- ✅ CSS 变量（支持） -->
 <div class="bg-[var(--tapp-primary)] text-[var(--my-text-size)]">

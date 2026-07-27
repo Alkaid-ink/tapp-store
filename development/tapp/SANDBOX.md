@@ -1,283 +1,162 @@
-# 安全沙箱
+# Tapp 安全沙箱
 
-本文档说明 Tapp 的安全机制和运行环境限制。
+本文说明当前 Tapp Page、Widget 与 headless core 的浏览器隔离边界。整体运行链路见
+[Tapp 架构](ARCHITECTURE.md)，可调用能力见 [SDK API](API_REFERENCE.md)。
 
-## 概述
+## 安全边界
 
-每个 Tapp 运行在严格隔离的 iframe 沙箱中，具有多层安全保护：
+Tapp 代码不会进入 Myriad 主页面的 JavaScript 上下文，而是在 `srcdoc` iframe 中运行。
+宿主按顺序建立以下边界：
 
-1. **iframe 沙箱属性**：限制 iframe 能力
-2. **内容安全策略 (CSP)**：控制资源加载和代码执行
-3. **全局对象保护**：阻止直接 DOM 操作
-4. **API 网关**：所有操作通过受控 SDK 进行
+1. iframe sandbox 只开放脚本和 pointer lock；
+2. nonce CSP 阻止未授权脚本、连接、媒体、子 frame 和表单提交；
+3. 安全包装器禁用网络、动态代码、本地存储、弹窗和直接父窗口操作；
+4. 随机会话 token 与 `event.source` 约束 `postMessage` 来源；
+5. `TappBridge` 对每个 action 做静态权限检查并只分发已注册 handler；
+6. 涉及数据、出站网络或持久化的调用由后端再次校验身份、owner 和权限。
 
----
+前端沙箱是纵深防御的一层，不是后端授权的替代品。
 
-## iframe 沙箱属性
+## iframe 属性
+
+当前宿主实际设置：
 
 ```html
 <iframe
-  sandbox="allow-scripts allow-forms allow-popups allow-same-origin allow-modals"
+  sandbox="allow-scripts allow-pointer-lock"
   referrerpolicy="no-referrer"
-  credentialless
 ></iframe>
 ```
 
-### 允许的能力
+- `allow-scripts` 是运行 Tapp 的必要能力。
+- `allow-pointer-lock` 用于游戏等交互。
+- 不开放 `allow-same-origin`。`srcdoc + allow-scripts + allow-same-origin` 会显著削弱
+  sandbox 隔离。
+- 不开放 popups、modals、forms、downloads 或 top navigation。需要通知、确认、全屏、
+  文件下载等能力时必须调用对应的 Tapp SDK，由宿主决定是否执行。
+- `allowFullscreen` 由宿主单独设置，但调用仍经过 `ui:fullscreen` 权限与 handler。
 
-| 属性                | 说明                   |
-| ------------------- | ---------------------- |
-| `allow-scripts`     | 允许执行 JavaScript    |
-| `allow-forms`       | 允许提交表单           |
-| `allow-popups`      | 允许弹出窗口           |
-| `allow-same-origin` | 允许同源访问           |
-| `allow-modals`      | 允许使用 alert/confirm |
+## CSP
 
-### 禁止的能力
+每个沙箱生成独立随机 nonce。当前默认策略等价于：
 
-| 能力                     | 说明                |
-| ------------------------ | ------------------- |
-| `allow-top-navigation`   | ❌ 不能导航顶级窗口 |
-| `allow-pointer-lock`     | ❌ 不能锁定鼠标指针 |
-| `allow-orientation-lock` | ❌ 不能锁定屏幕方向 |
-| `allow-presentation`     | ❌ 不能使用演示模式 |
-
----
-
-## 内容安全策略 (CSP)
-
-### 完整 CSP 配置
-
-```
-default-src 'self';
-script-src 'unsafe-inline' 'unsafe-eval' blob:;
-style-src 'unsafe-inline' *;
-img-src * data: blob:;
-media-src *;
-font-src * data:;
-connect-src *;
+```text
+script-src 'nonce-<random>' 'wasm-unsafe-eval';
+default-src 'none';
+style-src 'unsafe-inline' https://fonts.googleapis.com;
+img-src data: blob: <host-origin>;
+font-src data: https://fonts.gstatic.com;
+connect-src 'none';
 frame-src 'none';
 object-src 'none';
+media-src 'none';   /* 授予 media:audio 时为 blob: data: */
+worker-src 'none';
+form-action 'none';
 base-uri 'none';
+manifest-src 'none'
 ```
 
-### 策略说明
+- `script-src` 仅 nonce（+ 可选 `'wasm-unsafe-eval'`），不放行任何外部脚本 host（含
+  Tailwind CDN）。Tailwind 在安装时预编译为 CSS，经 `sandbox/styles.ts` 的
+  `TAILWIND_MAP` 注入。
+- `img-src` 仅 `data:`、`blob:` 与宿主同源；远程图片须经 `/api/proxy/image`。不放行
+  `https:` / `http:` 通配，避免通过第三方图片 URL query 外泄数据。沙箱包装器对
+  `Image` / `img.src` 与 CSP 对齐（data/blob/host/相对路径 `/`），但包装器是深度防御，
+  真正边界是 iframe sandbox + CSP + Bridge。
+- `'wasm-unsafe-eval'` 仅用于 WebAssembly 编译，不等于开放 `eval`。
+- `media:audio` 仅把 `media-src` 放宽到 `blob: data:`，不开放任意远程媒体。
+- Manifest 不能覆盖这份 CSP；如果确实需要新的资源能力，应修改并审计宿主策略，而不是让
+  单个 Tapp 放宽隔离。
 
-| 指令          | 值                              | 说明                         |
-| ------------- | ------------------------------- | ---------------------------- |
-| `default-src` | `'self'`                        | 默认只允许同源资源           |
-| `script-src`  | `'unsafe-inline' 'unsafe-eval'` | 允许内联脚本（必需）         |
-| `style-src`   | `'unsafe-inline' *`             | 允许内联样式和任意来源       |
-| `img-src`     | `* data: blob:`                 | 允许任意图片来源             |
-| `connect-src` | `*`                             | 允许连接任意后端（通过代理） |
-| `frame-src`   | `'none'`                        | ❌ 禁止嵌入 iframe           |
-| `object-src`  | `'none'`                        | ❌ 禁止 object/embed/applet  |
-| `base-uri`    | `'none'`                        | ❌ 禁止修改 base URI         |
+轻量游戏 / Canvas / 包内资源约定见 [图形与轻量游戏](GRAPHICS.md)。
 
----
+## 被禁用的浏览器能力
 
-## 全局对象保护
+安全包装器在 Tapp 代码执行前处理这些能力：
 
-Tapp 运行时会劫持危险的全局对象和方法：
+| 浏览器能力                                               | 当前行为                 | 使用方式                                      |
+| -------------------------------------------------------- | ------------------------ | --------------------------------------------- |
+| `fetch`、`XMLHttpRequest`、`WebSocket`、`EventSource`    | 禁用                     | Manifest `apis` + `Tapp.api()`                |
+| `localStorage`、`sessionStorage`、`indexedDB`、Cache API | 禁用或替换为空实现       | `Tapp.storage`                                |
+| `eval`、带源码的 `Function`、字符串形式的 timer          | 禁用                     | 使用预打包代码和函数回调                      |
+| `window.open`、`alert`、`confirm`、`prompt`、`print`     | 禁用                     | `Tapp.ui.showNotification/confirm` 等受控 API |
+| `window.parent/top/opener`                               | 限制                     | 只使用生成的 Tapp SDK                         |
+| 直接下载                                                 | sandbox 未开放 downloads | `Tapp.file.download()`                        |
 
-### 被阻止的操作
+部分浏览器属性不可重新定义，因此安全性不能依赖包装器单点；iframe sandbox、CSP、消息
+来源校验和后端检查共同构成边界。
 
-```javascript
-// ❌ 这些操作会被阻止或抛出错误
+## Bridge 消息验证
 
-// 网络请求 - 必须使用 Tapp.http
-fetch("https://api.example.com"); // 阻止
-XMLHttpRequest; // 阻止
+Tapp SDK 把调用转换为请求消息。宿主只接受同时满足以下条件的消息：
 
-// 存储 - 必须使用 Tapp.storage
-localStorage.setItem("key", "value"); // 无效
-sessionStorage.getItem("key"); // 无效
+- 消息结构、请求 ID、时间戳和 payload 合法；
+- `event.source` 是当前 iframe 的 `contentWindow`；
+- 消息携带该实例的随机 session token；
+- action 存在于权限映射中；
+- action 所需权限已出现在后端返回的 `granted_permissions` 中；
+- 当前 Page/Widget/headless 宿主注册了对应 handler。
 
-// 导航 - 禁止修改
-window.location.href = "https://evil.com"; // 阻止
-window.history.pushState(); // 阻止
+未知 action 默认拒绝。Page 与 Widget 注册的 handler 集不同，因此“SDK 上能看到方法”
+不等于每个运行模式都支持该方法；新增能力时要同步核对两类沙箱。
 
-// 窗口操作
-window.open("https://evil.com"); // 受限
-window.parent.postMessage(); // 需要特定格式
+### Payload 大小
 
-// Cookie
-document.cookie; // 不可访问（credentialless）
-```
+`TappBridge` 在校验阶段限制 request payload，防止内存攻击（实现见
+`frontend/src/tapp/runtime/TappBridge.ts`）：
 
-### 替代方案
+| action | 上限 | 说明 |
+| ------ | ---- | ---- |
+| **默认**（绝大多数 API） | JSON 序列化后约 **1 MiB + 64 KiB** envelope | 超限返回 `Payload too large` |
+| `file.download` | 内容 Blob **10 MiB**；`filename` ≤ 1024；可选 `mimeType` ≤ 256 | 不走默认 1 MiB；非法/过大返回 `Invalid or oversized file payload` |
+| `federation.uploadMedia` | raw 媒体按业务 **图片 10 MiB / 视频 50 MiB**；bridge 允许 data URL/base64 字符约 `ceil(50 MiB * 4/3) + 256` | 对齐后端 multipart 路由（body 上限 55 MiB）；字段 `data` 必填字符串 |
 
-| 被阻止的 API               | 替代方案                       |
-| -------------------------- | ------------------------------ |
-| `fetch` / `XMLHttpRequest` | Manifest `apis` + `Tapp.api()` |
-| `localStorage`             | `Tapp.storage.set/get()`       |
-| `sessionStorage`           | `Tapp.storage.set/get()`       |
-| `document.cookie`          | 不可用                         |
-| `window.open`              | `Tapp.ui.openUrl()`            |
+说明：
 
-`Tapp.storage` 按当前登录用户与 Tapp ID 隔离。即使运行的是公共 Tapp，每个用户仍只读写自己的
-存储，不会共享安装 owner 的数据。`_settings.`、`_component:`、`_shortcut:`、`_report:` 为
-宿主保留前缀；安装级 Manifest 设置只能通过 `Tapp.settings` 读取，且只有安装 owner 或管理员
-可以修改。访客没有服务端持久 storage。
+- 默认 1 MiB 针对的是 **postMessage JSON payload**，与 `Tapp.storage` 单值 1 MiB 是不同层，
+  但数量级一致，避免大 blob 经 bridge 灌入主线程。
+- **商店**安装：`tappList.install` 只传元数据（`source: "store"` + `storeSource`，或 HTTP
+  catalog `source`，加 `tappId`），包体不经 Bridge；由后端 REST `source=store` 下载，或宿主
+  在失败/大包时浏览器下载后再 REST `source=direct` 安装。
+- **SDK 直接安装**：`source: "direct"` 时 `manifest`/`code`/可选资源会经 Bridge 传到宿主
+  `installDirect`（体积受消息与配额约束，大资源包优先商店或 `install-file`）。
+- **`.tapp` 文件上传**：走宿主 `POST /api/tapps/install-file`，不经 sandbox Bridge。
+- Playground 临时预览的 storage 单值同样限制约 1 MiB（内存实现），且**不**提供
+  federation handlers。
 
----
+## 网络请求
 
-## DOM 安全
-
-### 危险方法
-
-```javascript
-// ❌ 直接使用 innerHTML 有 XSS 风险
-container.innerHTML = `<div>${userInput}</div>`;
-
-// ❌ 直接拼接 HTML
-element.insertAdjacentHTML("beforeend", userInput);
-```
-
-### 安全方法
-
-```javascript
-// ✅ 使用 SDK 提供的安全方法
-const div = Tapp.dom.createElement("div", { className: "safe" });
-Tapp.dom.setText(div, userInput); // 自动转义
-
-// ✅ 使用 textContent
-element.textContent = userInput;
-
-// ✅ 使用安全列表渲染
-Tapp.dom.renderList(container, items, (item) => {
-  return Tapp.dom.createElement("li", { text: item.name });
-});
-```
-
----
-
-## 权限系统
-
-Tapp 需要在 manifest 中声明所需权限：
-
-### 权限级别
-
-| 级别         | 说明                        | 示例权限                             |
-| ------------ | --------------------------- | ------------------------------------ |
-| `public`     | action 不要求 Manifest 权限 | `context.getUser`, `user.getRole`    |
-| `basic`      | 仍须申请并由宿主授予        | `storage`, `platform:read`           |
-| `elevated`   | 可由管理员向非管理员下放    | `ai:chat`, `event:publish`           |
-| `privileged` | 仅管理员                    | `tappList:manage`, `component:agent` |
-
-权限名使用冒号，例如 `platform:read`，不是旧文档中的点号形式。前端只做快速拒绝，后端会
-按 Runtime Grant、当前 subject、安装 owner 和最终授权再次校验。
-
-### 权限检查
-
-运行时会验证每个 API 调用的权限：
-
-```javascript
-// 如果未声明权限，API 调用会失败
-try {
-  await Tapp.ai.tasks.create({
-    version: 2,
-    operation: 'chat',
-    input: { messages: [...] },
-    output: { format: 'text' }
-  }); // 需要 manifest.ai 声明与 ai:chat 权限
-} catch (e) {
-  console.error("权限不足:", e.message);
-}
-```
-
----
-
-## API 声明系统
-
-### 基本结构
+不要把任意 URL 交给 SDK。先在 Manifest 声明固定能力：
 
 ```json
 {
   "permissions": ["network:fetch"],
   "apis": {
-    "data": {
+    "profile": {
       "type": "http",
-      "endpoint": "https://api.example.com/data",
+      "endpoint": "https://api.example.com/users/{{params.id}}",
       "method": "GET",
       "access": "protected",
-      "description": "获取数据"
+      "description": "读取指定用户资料"
     }
   }
 }
 ```
 
-沙箱按名称调用 `await Tapp.api("data", params)`；不接受任意 URL。
-
-### Spoof 模式
-
-区域伪装由命名 API 的字符串字段声明：
-
-```json
-{
-  "apis": {
-    "secret": {
-      "type": "http",
-      "endpoint": "https://api.example.com/secret",
-      "method": "GET",
-      "spoof": "japan"
-    }
-  }
-}
-```
-
-用户看到的信息：
-
-```
-API 访问：https://public.example.com/api
-方法：GET, POST
-```
-
----
-
-## 资源限制
-
-### 存储配额
-
-| 类型     | 限制           |
-| -------- | -------------- |
-| 存储空间 | 5 MB / Tapp    |
-| 键值对   | 1000 个 / Tapp |
-| 键长度   | 256 字符       |
-| 值大小   | 1 MB / 条      |
-
-### 执行限制
-
-| 类型         | 限制        |
-| ------------ | ----------- |
-| API 调用频率 | 100 次/分钟 |
-| 后台任务     | 10 个/Tapp  |
-| 定时任务     | 5 个/Tapp   |
-
----
-
-## 最佳实践
-
-### 1. 始终验证输入
+沙箱按名称调用：
 
 ```javascript
-function processUserInput(input) {
-  // 验证类型
-  if (typeof input !== "string") {
-    throw new Error("Invalid input type");
-  }
-
-  // 限制长度
-  if (input.length > 1000) {
-    input = input.substring(0, 1000);
-  }
-
-  // 使用安全方法渲染
-  Tapp.dom.setText(element, input);
-}
+const profile = await Tapp.api("profile", { id: "42" });
 ```
 
-### 2. 最小权限原则
+所有 HTTP API 都要求实时 `network:fetch`；`public`/`protected` 只决定调用者范围，并且都受 Manifest、输入模板、
+后端出站安全和共享频率限制约束。端点、请求头和模板参数会在后端解析，HTTP 请求经过 SSRF
+防护。系统不存在供 Tapp 使用的任意 URL 代理。
+
+## 权限
+
+Manifest 的 `permissions` 是申请集合；安装批准后写入 `approved_permissions`，运行时的
+`granted_permissions` 则由批准集与当前角色/下放策略动态求交集：
 
 ```json
 {
@@ -285,51 +164,62 @@ function processUserInput(input) {
 }
 ```
 
-### 3. 错误处理
+当前权限等级语义：
+
+| 等级         | 含义                                         |
+| ------------ | -------------------------------------------- |
+| `public`     | action 不要求 Manifest 权限                  |
+| `basic`      | 基础能力，仍须申请并被授予                   |
+| `elevated`   | 管理员可以通过权限下放配置授权给非管理员     |
+| `privileged` | 仅管理员，例如平台写入/注册和 Agent 组件注册 |
+
+前端显示的等级只用于说明和快速拒绝，后端动态授权结果才是最终事实。
+
+## DOM 与输入
+
+DOM 本身可在 iframe 内使用，但所有不可信内容都必须转义：
 
 ```javascript
-try {
-  const data = await Tapp.api("data", {});
-} catch (error) {
-  // 不要暴露敏感信息
-  Tapp.ui.showNotification({
-    type: "error",
-    message: "获取数据失败，请稍后重试",
-  });
+const item = Tapp.dom.createElement("li", { text: userInput });
+container.appendChild(item);
 
-  // 记录详细错误用于调试
-  console.error("API Error:", error.code);
-}
+// 或使用原生安全赋值
+container.textContent = userInput;
 ```
 
-### 4. 避免敏感数据泄露
+不要把外部输入直接拼进 `innerHTML` 或事件属性。`Tapp.dom.setSafeHtml()` 会把输入当文本
+转义，它不是 HTML sanitizer。
 
-```javascript
-// ❌ 不要在控制台打印敏感信息
-console.log("API Key:", apiKey);
-console.log("User Data:", userData);
+存储 key 只允许字母、数字、下划线、连字符、点和冒号，长度上限为 256，并拒绝路径
+遍历形式。后端会拒绝超过 1 MiB 的单值，并在事务内对同一当前用户与 Tapp 串行计算
+写入后的总量；超过 5 MiB 会返回 413。数据库触发器执行相同的 5 MiB 硬限制，覆盖其他
+内部写入路径；`Tapp.storage.usage()` 返回的 quota 因而也是实际安全边界。
 
-// ✅ 只打印必要的调试信息
-console.log("Request status:", response.status);
-```
+持久 storage 命名空间跟随**当前登录用户**（Runtime Grant 的 subject），即使运行的是站点
+公开安装也不会读取安装 owner 的 storage。每个已登录用户都可以读写自己的 `user_id + tapp_id`
+空间。`_settings.`、`_component:`、`_shortcut:`、`_report:` 是宿主保留前缀，不能通过
+`Tapp.storage` 读取、写入、列举或清除。Manifest 设置由安装 owner 或管理员写入，其他已登录
+运行者只能通过 `Tapp.settings` 读取声明过的设置项。
 
----
+## 开发检查清单
 
-## 安全事件处理
+- Manifest 只申请实际使用的权限。
+- 外部请求全部通过具名 `apis` 和 `Tapp.api()`。
+- Tapp 不依赖主页面 DOM、Cookie 或浏览器存储。
+- 不把密钥写入 Manifest、Tapp 代码、日志或参数。
+- Page、Widget、headless 模式分别验证所需 handler。
+- 用户输入和外部响应在进入 DOM 前完成类型、长度和内容校验。
+- 新增 SDK action 时同步更新权限映射、宿主 handler、后端校验和文档。
+- 若涉及 speech / brew / federation 宿主代理：先改
+  `docs/development/tapp/fixtures/action_permissions.json`（及需要时的
+  `host_route_permissions.json`），再改 `permissionConfig.ts` 与后端
+  `host_attribution`；跑
+  `node --experimental-strip-types --test src/tapp/runtime/permissionMapConsistency.test.ts`
+  与 `cargo test -p myriad-backend host_attribution`（或对应模块过滤）。
 
-如果检测到安全违规，系统会：
+## 已知控制台信息
 
-1. **阻止操作**：危险操作不会执行
-2. **记录日志**：违规行为会被记录
-3. **通知用户**：严重违规会通知用户
-4. **禁用 Tapp**：反复违规可能导致 Tapp 被禁用
-
-```javascript
-// 示例：违规日志
-{
-  "tappId": "com.example.bad-tapp",
-  "violation": "CSP_VIOLATION",
-  "blockedUri": "https://malicious.com/script.js",
-  "timestamp": "2024-01-15T10:30:00Z"
-}
-```
+卸载 iframe 时可能出现 blob URL 清理信息；某些浏览器也不允许重新定义 `top` 或
+`parent`。这些信息不能被简单当作安全结论：如果 Tapp 功能异常，应先确认 CSP 违规的
+具体指令、Bridge 返回的错误码，以及目标运行模式是否注册了 handler。详见
+[故障排除](TROUBLESHOOTING.md)。

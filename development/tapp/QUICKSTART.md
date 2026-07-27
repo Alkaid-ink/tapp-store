@@ -1,53 +1,47 @@
 # Tapp 快速入门
 
 Tapp (Third-party App) 是 Myriad 的扩展应用系统，允许开发者创建自定义小组件、工具和功能扩展。
+当前推荐使用 `@myriad/tapp-cli` 创建、校验和打包项目；Manifest 字段与 SDK 能力分别见
+[Manifest 配置](MANIFEST.md)和 [API 参考](API_REFERENCE.md)。CLI 的完整命令契约见
+[Myriad Tapp CLI](https://github.com/Myriad-You/Myriad/blob/preview/tools/tapp-cli/README.md)。
 
-## 5 分钟创建你的第一个 Tapp
+## For agents
 
-### 1. 创建 Manifest
+Agent 和 CI 应固定包版本、显式指定 `myriad-tapp` binary，并始终使用 `--json`：
 
-每个 Tapp 都需要一个 Manifest 配置文件：
-
-```json
-{
-  "id": "com.example.my-tapp",
-  "name": "我的应用",
-  "version": "1.0.0",
-  "description": "一个示例 Tapp 应用",
-  "main": "index.js",
-  "author": {
-    "name": "Your Name",
-    "email": "you@example.com"
-  },
-  "permissions": ["storage", "ui:notification"],
-  "icon": "🚀"
-}
+```bash
+npx --yes --package=@myriad/tapp-cli@0.1.0 myriad-tapp init ./my-tapp --type page
+npx --yes --package=@myriad/tapp-cli@0.1.0 myriad-tapp check ./my-tapp --json
+npx --yes --package=@myriad/tapp-cli@0.1.0 myriad-tapp pack ./my-tapp --json
 ```
 
-### 2. 编写代码
+任何非零退出状态都表示失败。`check` 返回状态 `1` 时，读取 `diagnostics`、修复项目并重新
+执行；只有 `check` 成功后才执行 `pack`。默认产物为
+`my-tapp/dist/{manifest.id}.tapp`。CLI 当前不负责登录 Myriad 或上传产物。
 
-```javascript
-// 当 Tapp 准备就绪时执行
-Tapp.lifecycle.onReady(async () => {
-  console.log("Tapp 已启动!");
+## For users
 
-  // 显示通知
-  await Tapp.ui.showNotification({
-    title: "欢迎",
-    message: "应用已启动",
-    type: "success",
-  });
-});
+需要 Node.js 20 或更新版本。全局安装固定版本后，创建一个 Page、Widget 或两者兼有的
+starter：
 
-// 当 Tapp 销毁时执行
-Tapp.lifecycle.onDestroy(() => {
-  console.log("Tapp 已停止");
-});
+```bash
+npm install --global @myriad/tapp-cli@0.1.0
+myriad-tapp init ./my-tapp --type page
 ```
 
-### 3. 安装
+编辑生成的 `manifest.json`、`main.js`、模板和样式，然后校验权限并打包：
 
-在 Tapp 管理页面点击"自定义安装"，粘贴 Manifest 和代码即可。
+```bash
+cd ./my-tapp
+myriad-tapp check .
+myriad-tapp permissions .
+myriad-tapp pack .
+```
+
+成功后，在 Myriad 的 Tapp 管理页面选择安装操作，上传
+`dist/{manifest.id}.tapp`。服务器通过 `POST /api/tapps/install-file` 安装该文件；浏览器
+会处理登录 Cookie 和 CSRF token。接口细节见 [Tapp REST API](REST_API.md#需要登录的变更路由)，
+包格式见 [`.tapp` 文件格式](https://github.com/Myriad-You/Myriad/blob/preview/docs/features/TAPP_FILE_FORMAT.md)。
 
 ---
 
@@ -57,7 +51,7 @@ Tapp 使用**分离模式**，将代码分为三部分：
 
 ```
 TappCodeStructure {
-  core: string    // 核心代码：共享工具函数
+  core: string    // 共享逻辑；也是 headless 后台入口
   widget?: string // 小组件代码：Widget 渲染逻辑
   page?: string   // 页面代码：页面渲染 + 生命周期
 }
@@ -71,10 +65,15 @@ TappCodeStructure {
 
 ### 代码加载规则
 
-| 模式        | 加载的代码      | 执行内容                      |
-| ----------- | --------------- | ----------------------------- |
-| Widget 模式 | `core + widget` | 只渲染 Widget，跳过 `onReady` |
-| Page 模式   | `core + page`   | 执行完整生命周期，渲染页面    |
+| 模式          | 加载的代码                     | 执行内容                                      |
+| ------------- | ------------------------------ | --------------------------------------------- |
+| Widget 模式   | `core + widget`                | Widget 精简 SDK、生命周期、模板与 `render`    |
+| Page 模式     | `core + page` 或 `pageModules` | 完整 SDK、生命周期和页面 UI                   |
+| Headless 模式 | 仅 `core`                      | 完整 Bridge 与生命周期，无 Page/Widget UI     |
+
+**三个模式都会触发** `Tapp.lifecycle`（含 `onReady` / `onDestroy` / pause/resume），不能把
+“是否有 onReady”当作代码分层边界。共享与后台逻辑放在 `core`；可见界面放在
+`widget` / `page`（Widget 以 `Tapp.widgets[id].render` 为主，Page 可在 onReady 中挂载根 UI）。
 
 ### 代码结构示例
 
@@ -101,7 +100,7 @@ Tapp.widgets['my-widget'] = {
 };
 `;
 
-// Page 代码 - 页面渲染 + 生命周期
+// Page 代码 - 页面渲染（onReady 在所有模式都有；此处用它挂载 Page UI）
 const PAGE_CODE = `
 Tapp.pages['my-page'] = {
   render: async function(container) {
@@ -110,13 +109,155 @@ Tapp.pages['my-page'] = {
   }
 };
 
-// 生命周期（仅 Page 模式执行）
 Tapp.lifecycle.onReady(async function() {
   var container = document.getElementById('tapp-root');
   await Tapp.pages['my-page'].render(container);
 });
 `;
 ```
+
+---
+
+## 渲染模式
+
+Tapp 支持两种渲染模式，根据你的需求选择：
+
+### 1. 纯 JS 模式（Pure JS）
+
+代码完全通过 JavaScript 动态生成 DOM。适合简单应用或需要高度动态内容的场景。
+
+```javascript
+Tapp.widgets["my-widget"] = {
+  render: function (container, props) {
+    // 完全通过 JS 生成 HTML
+    container.innerHTML = `
+      <div class="glass rounded-xl p-4">
+        <h3>${props.title || "标题"}</h3>
+        <button id="my-btn">点击</button>
+      </div>
+    `;
+    // 绑定事件
+    container.querySelector("#my-btn").addEventListener("click", function () {
+      alert("Clicked!");
+    });
+  },
+};
+```
+
+### 2. 混合模式（Hybrid）
+
+HTML 模板定义结构，JS 只负责事件绑定和数据填充。**推荐用于商店发布的 Tapp**。
+
+**优势**：
+
+- 模板与逻辑分离，更易维护
+- 支持不同尺寸使用不同模板
+- 模板可被设计工具预览
+
+**文件结构**：
+
+```
+com.example.my-tapp/
+├── manifest.json       # 必需：应用配置
+├── main.js             # 必需：JS 代码
+├── page.html           # 可选：页面模板
+├── styles.css          # 可选：自定义样式
+├── widget-2x2.html     # 可选：2x2 尺寸模板
+├── widget-4x2.html     # 可选：4x2 尺寸模板
+└── widget-4x4.html     # 可选：4x4 尺寸模板
+```
+
+**manifest.json 配置**：
+
+```json
+{
+  "id": "com.example.my-tapp",
+  "main": "main.js",
+  "styles": "styles.css",
+  "pageTemplate": "page.html",
+  "widgets": [
+    {
+      "id": "my-widget",
+      "defaultSize": "2x2",
+      "sizes": ["2x2", "4x2", "4x4"],
+      "templates": {
+        "2x2": "widget-2x2.html",
+        "4x2": "widget-4x2.html",
+        "4x4": "widget-4x4.html"
+      }
+    }
+  ]
+}
+```
+
+**widget-2x2.html 示例**：
+
+```html
+<div
+  class="h-full w-full flex flex-col p-3 glass rounded-xl"
+  data-widget-root="true"
+>
+  <div class="flex items-center gap-2 mb-2">
+    <span class="text-lg">🤖</span>
+    <span class="font-semibold text-sm">我的应用</span>
+  </div>
+  <div class="flex-1 overflow-auto" data-content="main">
+    <!-- JS 会填充这里 -->
+  </div>
+  <button
+    data-action="refresh"
+    class="mt-2 px-3 py-1 bg-indigo-500 text-white rounded-lg text-sm"
+  >
+    刷新
+  </button>
+</div>
+```
+
+**main.js 混合模式示例**：
+
+```javascript
+Tapp.widgets["my-widget"] = {
+  render: function (container, props) {
+    // 模板已由系统加载到 container 中
+    // 只需绑定事件和填充数据
+
+    var contentEl = container.querySelector('[data-content="main"]');
+    var refreshBtn = container.querySelector('[data-action="refresh"]');
+
+    if (contentEl) {
+      contentEl.textContent = "动态内容...";
+    }
+
+    if (refreshBtn) {
+      refreshBtn.addEventListener("click", function () {
+        loadData();
+      });
+    }
+
+    function loadData() {
+      // 加载数据逻辑
+    }
+  },
+};
+```
+
+> **重要**：使用 `data-*` 属性标记需要 JS 操作的元素，避免使用硬编码的 ID 选择器。
+
+---
+
+## 商店发布（摘要）
+
+完整目录协议、源管理、服务端/浏览器安装链路与检查清单见 **[Tapp 商店](STORE.md)**。
+
+最少注意：
+
+1. 商店 `index.json` 的 `download.code` 必须能下载到与 `manifest.main` **同一份**入口代码（路径字符串不必相同）。
+2. Manifest 声明的 `styles` / `pageTemplate` / Widget 模板 / `pageStyles` 等，索引 `download` 表与磁盘文件必须齐全。
+3. 索引与 Manifest 的 `version`、`category` 必须一致；`category` 用稳定用途 ID（见 [MANIFEST](MANIFEST.md#应用分类)）。
+4. 二进制贴图等走 `manifest.assets`，**不要**写进 `download` 表；路径须在包根下的 `assets/`。
+5. 大包在索引填写真实 `size`（字节），≥ 1 MiB 时宿主走客户端下载以显示进度。
+
+官方目录仓库：[Myriad-You/tapp-store](https://github.com/Myriad-You/tapp-store)。
 
 ---
 
@@ -203,6 +344,16 @@ Tapp.widgets['my-widget'] = {
 
 Tapp 默认在用户离开运行页面后会被**冻结**（暂停执行）。如果 Tapp 需要在后台持续运行，必须**声明后台运行需求**。
 
+需要在应用重载后、尚未打开 Page/Widget 时就启动 core 的任务，应在 manifest 中声明需求：
+
+```json
+{
+  "backgroundRequirements": ["scheduler", "sync"]
+}
+```
+
+运行时的 `Tapp.background.require/release` 适合动态增减需求；manifest 声明则负责首次启动和刷新后的恢复。两类来源独立计数，`release` 不会取消 manifest 的常驻声明。后台实例只加载共享 core，不加载 Page HTML/CSS 或 Widget 视图代码。
+
 ### 后台需求类型
 
 | 类型             | 说明                     | 典型场景                 |
@@ -231,8 +382,10 @@ Tapp.lifecycle.onReady(async function () {
 ## 下一步
 
 - [Manifest 配置](./MANIFEST.md) - 完整的配置选项说明
+- [Tapp 商店](./STORE.md) - 远程目录、安装与发布
 - [API 参考](./API_REFERENCE.md) - 所有可用 API 的详细文档
 - [小组件开发](./WIDGET.md) - 创建漂亮的 Widget
 - [页面样式规范](./PAGE.md) - 页面布局和深色模式样式
 - [样式规范](./STYLING.md) - Glass Morphism 设计规范
 - [安全沙箱](./SANDBOX.md) - 沙箱限制和安全机制
+- [故障排除](./TROUBLESHOOTING.md) - 安装与运行时问题

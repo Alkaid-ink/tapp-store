@@ -1,155 +1,170 @@
 # Myriad Tapp Store
 
-官方 Tapp 应用商店，托管在 GitHub 上。
+官方 **远程 Tapp 目录**，以静态 Git 仓库托管。Myriad 实例通过商店源 URL 拉取 `index.json`，再按 `download` 与 `manifest.assets` 安装应用。
 
-## 使用方法
+| 项 | 值 |
+| -- | -- |
+| 目录 URL（Myriad 预置官方源） | `https://raw.githubusercontent.com/Myriad-You/tapp-store/main/index.json` |
+| `base_url` | `https://raw.githubusercontent.com/Myriad-You/tapp-store/main` |
+| Myriad 权威文档 | [Tapp 商店](https://github.com/Myriad-You/Myriad/blob/preview/docs/development/tapp/STORE.md) · [Tapp 开发索引](https://github.com/Myriad-You/Myriad/blob/preview/docs/development/TAPP_DEVELOPMENT.md) |
 
-### 添加应用源
+> **开发/运行时契约以 Myriad 主仓库为准。** 本仓库的 `development/` 为面向商店贡献者的镜像与摘要，可能滞后；冲突时以 Myriad `docs/development/tapp/` 为准。
 
-在 Myriad 应用中添加以下应用源 URL：
+## 在 Myriad 中使用
 
-```
-https://raw.githubusercontent.com/Myriad-You/tapp-store/main/index.json
-```
+1. 新实例迁移会预置上述官方源（`official=true`）。
+2. 管理员也可在 Tapp Store 设置中添加第三方目录 URL（须指向可公开 GET 的 `index.json`）。
+3. 用户在商店 UI 浏览列表（浏览器直连索引）；安装时优先由 **后端** 出站下载，失败或大包时回退为浏览器下载 + direct 安装。
 
-### API 结构
+细节见 Myriad [STORE.md](https://github.com/Myriad-You/Myriad/blob/preview/docs/development/tapp/STORE.md)。
 
-#### 获取应用列表
+## 仓库结构
 
-```
-GET {base_url}/index.json
-```
-
-返回所有应用的索引信息。
-
-#### 获取应用详情
-
-```
-GET {base_url}/apps/{app_id}/manifest.json
-```
-
-返回应用的完整清单。
-
-#### 下载应用代码
-
-```
-GET {base_url}/apps/{app_id}/index.js
-```
-
-返回应用的 JavaScript 代码。
-
-## 文件结构
-
-```
+```text
 tapp-store/
-├── index.json              # 应用索引（必需）
-├── categories.json         # 分类定义
-├── README.md               # 本文件
-└── apps/
-    └── {app_id}/
-        ├── manifest.json   # 应用清单（必需）
-        ├── index.js        # 应用代码（必需）
-        ├── README.md       # 应用说明
-        └── icon.png        # 应用图标（可选）
+├── index.json              # 目录入口（必需）
+├── categories.json         # UI 分类元数据（可选；安装权威是 apps[].category）
+├── README.md
+├── apps/
+│   └── {app_id}/
+│       ├── manifest.json   # 必需
+│       ├── main.js         # 入口（或与 download.code 一致的 index.js 等）
+│       ├── page.html / page.css / widget.css / …
+│       ├── assets/         # manifest.assets 二进制
+│       ├── i18n/
+│       ├── page/           # pageModules
+│       └── README.md
+└── development/            # 贡献者文档镜像（见下）
 ```
 
-## index.json 结构
+## `index.json` 协议（摘要）
 
-```jsonc
+### 顶层
+
+| 字段 | 说明 |
+| ---- | ---- |
+| `name` | 商店名称 |
+| `version` | 目录版本（元数据） |
+| `api_version` | 协议提示（当前官方 `"2"`） |
+| `base_url` | 解析相对路径的根，无尾斜杠 |
+| `updated_at` | ISO 更新时间 |
+| `apps` | 应用数组（必需） |
+| `maintainer` | 可选 |
+
+### 每个 `apps[]` 条目
+
+| 字段 | 必填 | 说明 |
+| ---- | ---- | ---- |
+| `id` | ✅ | 与 `manifest.id` 相同 |
+| `name` / `version` / `description` | ✅ | 展示；`version` 与 Manifest 同步 |
+| `author` | ✅ | `{ name, email?, url? }` |
+| `category` | ✅ | 稳定用途 ID（见下）；**必须与 Manifest 一致** |
+| `permissions` | ✅ | 申请权限 |
+| `download` | ✅ | 相对 `base_url` 的路径表 |
+| `locales` | ❌ | BCP-47 → `{ name?, description? }` |
+| `long_description` / `tags` / `icon` / `icon_svg` / `theme_color` | ❌ | 展示 |
+| `size` | ❌ | 字节；**≥ 1 MiB 时 Myriad 走客户端下载进度** |
+| `featured` / `verified` | ❌ | UI 徽章 |
+
+### `download` 键
+
+| 键 | 说明 |
+| -- | ---- |
+| `manifest` / `code` | 必需 |
+| `readme` | 可选 |
+| `styles` / `widget_styles` / `page_styles` | CSS |
+| `page_template` | Page HTML |
+| `widget_templates` | `widgetId → { size → path }` |
+| `i18n` | `lang → path` |
+| `page_modules` | **安装后文件名** → 商店路径 |
+
+**二进制资源不要写入 `download`。** 声明在 `manifest.assets`，安装器拼：
+
+```text
+{base_url}/{packageRoot}/{assetPath}
+# packageRoot = download.code 的父目录，例如 apps/com.myriad.doudizhu
+```
+
+Manifest 若声明了 `pageStyles` / `pageTemplate`，索引必须提供对应 `page_styles` / `page_template` 且文件可下载，否则安装失败。
+
+### 分类（稳定 ID）
+
+| ID | 用途 |
+| -- | ---- |
+| `ai` | AI 应用 |
+| `data` | 数据处理与展示 |
+| `developer` | 开发工具 |
+| `game` | 游戏（注意是 `game` 不是 `games`） |
+| `media` | 音频/视频等媒体 |
+| `productivity` | 效率 / 笔记 |
+| `social` | 社交协作 |
+| `utility` | 其他通用工具 |
+
+运行形态（Page / Widget / headless）与 demo/test 阶段用 Manifest 字段或 `tags` 表达，不要塞进 `category`。
+
+### 最小示例
+
+```json
 {
-  "$schema": "https://myriad.app/schemas/tapp-store-v1.json",
-  "name": "商店名称",
-  "version": "1.0.0",
-  "api_version": "1",
-  "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2025-12-04T00:00:00Z",
-  "maintainer": {
-    "name": "Myriad Team",
-    "email": "tapp@myriad.app",
-    "url": "https://github.com/Myriad-You"
-  },
+  "name": "Example Store",
+  "api_version": "2",
+  "base_url": "https://raw.githubusercontent.com/org/repo/main",
   "apps": [
     {
-      // 必需字段
-      "id": "com.example.app", // 应用唯一 ID（反向域名格式）
-      "name": "应用名称",
+      "id": "com.example.notes",
+      "name": "Notes",
       "version": "1.0.0",
-      "description": "简短描述",
-      "author": { "name": "作者" },
-      "category": "productivity", // 分类
-      "permissions": ["storage"], // 所需权限
-      "icon": "📱", // Emoji 图标
+      "description": "Notes Tapp",
+      "author": { "name": "Example" },
+      "category": "productivity",
+      "permissions": ["storage", "widget:register"],
       "download": {
-        "manifest": "apps/com.example.app/manifest.json",
-        "code": "apps/com.example.app/index.js"
-      },
-
-      // 可选字段
-      "long_description": "详细描述...",
-      // name/description 的多语言覆盖（BCP-47 键；未命中回退顶层中文）
-      "locales": {
-        "en-US": { "name": "App Name", "description": "Short description" },
-        "ja-JP": { "name": "アプリ名", "description": "短い説明" }
-      },
-      "license": "MIT",
-      "homepage": "https://...",
-      "repository": "https://...",
-      "tags": ["标签1", "标签2"],
-      "theme_color": "#FF66AB",
-      "screenshots": ["url1", "url2"],
-      "size": 12345, // 字节
-      "featured": true, // 是否推荐
-      "verified": true, // 是否官方验证
-      "created_at": "2025-12-04T00:00:00Z",
-      "updated_at": "2025-12-04T00:00:00Z"
+        "manifest": "apps/com.example.notes/manifest.json",
+        "code": "apps/com.example.notes/main.js"
+      }
     }
   ]
 }
 ```
 
-## 分类
-
-| ID             | 名称     | 描述                 |
-| -------------- | -------- | -------------------- |
-| `productivity` | 效率工具 | 提升工作效率的工具   |
-| `ai`           | AI 应用  | 人工智能相关应用     |
-| `developer`    | 开发工具 | 开发者工具           |
-| `game`         | 游戏     | 休闲娱乐游戏         |
-| `data`         | 数据管理 | 数据处理和展示       |
-| `media`        | 媒体     | 音频、视频和媒体体验 |
-| `social`       | 社交     | 社交相关功能         |
-| `utility`      | 实用工具 | 通用工具类           |
-
-`category` 使用稳定 ID，不写本地化名称。每个应用的 `index.json` 分类必须与
-对应 `manifest.json` 一致，否则 Myriad 后端会拒绝安装。Page / Widget 运行形态和
-demo / test 发布阶段使用各自的 Manifest 字段或标签表达，不作为应用分类。
-
-## 权限说明
-
-| 权限              | 描述         | 级别     |
-| ----------------- | ------------ | -------- |
-| `storage`         | 本地数据存储 | public   |
-| `ui:notification` | 显示通知     | public   |
-| `ui:theme`        | 读取主题设置 | public   |
-| `widget:register` | 注册小组件   | basic    |
-| `component:page`  | 注册页面     | basic    |
-| `network:fetch`   | 发起网络请求 | elevated |
-| `ai:generate`     | 调用 AI 生成 | elevated |
-| `media:read`      | 读取媒体信息 | basic    |
-| `media:control`   | 控制媒体播放 | elevated |
-| `ui:fullscreen`   | 全屏模式     | basic    |
-
 ## 贡献应用
 
-1. Fork 本仓库
-2. 在 `apps/` 目录下创建应用文件夹
-3. 添加 `manifest.json`、`index.js` 和 `README.md`
-4. 在 `index.json` 中添加应用条目
-5. 提交 Pull Request
+1. Fork 本仓库。
+2. 在 `apps/{id}/` 添加完整包文件（建议先用 Myriad [`@myriad/tapp-cli`](https://github.com/Myriad-You/Myriad/tree/preview/tools/tapp-cli) 在本地 `check` / `pack`）。
+3. 更新根目录 `index.json`：版本、权限、`download` 全路径、`category`、`size`（大包必填）、`locales`。
+4. 确认 **索引 `category` / `version` 与 `manifest.json` 一致**。
+5. 提交 Pull Request。
 
-## 开发指南
+### 发布检查清单
 
-参考 [Tapp 开发文档](../development/TAPP_DEVELOPMENT.md) 了解如何开发 Tapp 应用。
+- [ ] `download.manifest` / `download.code` 可公开 GET
+- [ ] Manifest 声明的 page/widget CSS、HTML 模板均在 `download` 中有路径
+- [ ] `page_modules` 的键是安装后文件名
+- [ ] `manifest.assets` 均在 `{packageRoot}/assets/...`
+- [ ] 分类与版本双端一致
+- [ ] 路径大小写与 Git 一致
+
+## 当前应用
+
+以 `index.json` 的 `apps` 为准，包括但不限于：
+
+| ID | 说明 |
+| -- | ---- |
+| `com.myriad.music-player` | 系统音乐控制 |
+| `com.myriad.quick-notes` | 便签 + Widget |
+| `com.myriad.config-generator` | 部署配置生成 |
+| `com.myriad.doudizhu` | 斗地主（含 assets） |
+| `com.myriad.aro` | 社交中心 |
+
+## 开发者文档
+
+| 路径 | 说明 |
+| ---- | ---- |
+| [development/TAPP_DEVELOPMENT.md](./development/TAPP_DEVELOPMENT.md) | 文档索引与 Myriad 链接 |
+| [development/tapp/STORE.md](./development/tapp/STORE.md) | 商店协议全文（与 Myriad 同步） |
+| [development/tapp/](./development/tapp/) | Manifest / SDK / 沙箱等镜像 |
+
+完整运行时与后端边界请读 Myriad 主仓库文档，不要仅依赖本镜像。
 
 ## 许可证
 

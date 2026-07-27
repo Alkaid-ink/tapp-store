@@ -2,6 +2,8 @@
 
 本文档基于 Myriad 系统内置小组件的实际实现，提供完整的风格规范和开发指南。
 
+> 📌 本文档内容参考系统小组件：QuickStatsWidget、WeatherWidget、WelcomeWidget、QuoteWidget、MusicPlayerWidget 等。
+
 > **✨ 样式推荐**：虽然小组件完全支持 Tailwind CSS，但我们**强烈建议使用语义化的原生 CSS**：
 >
 > - 更好的可维护性，避免冗长的 Tailwind 类名列表
@@ -10,8 +12,6 @@
 > - 支持 CSS 架构分离模式（Widget 专用样式文件）
 >
 > 详见 [样式规范 - 推荐原生 CSS](STYLING.md#-推荐语义化原生-css)。
-
-> 📌 本文档内容参考系统小组件：QuickStatsWidget、WeatherWidget、WelcomeWidget、QuoteWidget、MusicPlayerWidget 等。
 
 ---
 
@@ -25,12 +25,14 @@
 | **实例设置**       | ✅ 当前 Widget 实例 API                        | ❌ 仅 Widget 沙箱        |
 | **UI/用户/上下文** | ✅ 主题、通知、语言、角色和运行上下文          | ✅ 另含 fullscreen/title |
 | **DOM**            | ✅ 与 Full 共用安全 helper                     | ✅ 相同                  |
+| **包内资源**       | ✅ `Tapp.assets`（list / getUrl / getArrayBuffer / revoke） | ✅ 相同       |
 | **AI**             | ✅ Manifest 声明的 AI Task                     | ✅ 相同                  |
 | **平台数据/报告**  | ✅ 只读                                        | ✅ 读写                  |
 | **媒体/语音/动画** | ✅ 按 Manifest 权限                            | ✅ 相同                  |
 | **事件/数据交换**  | ✅ Event、一次性授权 Data Exchange、Agent 交互 | ✅ 相同                  |
 | **后台需求/调度**  | ✅ 完整                                        | ✅ 相同                  |
 | **声明 API**       | ✅ `Tapp.api()` 与 `Tapp.api.list()`           | ✅ 相同                  |
+| **生命周期**       | ✅ `onReady` / `onDestroy` / pause / resume    | ✅ 相同                  |
 | **管理/联邦能力**  | ❌ Tapp/Brew 管理、组件、快捷键、Federation 等 | ✅ 按权限提供            |
 
 Widget 不是纯静态展示层：共享 core 可在其中使用事件、调度和数据交换。但宿主不会给 Widget
@@ -51,7 +53,16 @@ Tapp.widgets["my-widget"] = {
 };
 ```
 
-> **注意**：Widget 模式下不会执行 `Tapp.lifecycle.onReady()`。
+> **生命周期**：Widget SDK **会**在 document load 后触发 `Tapp.lifecycle.onReady`（以及
+> pause/resume/destroy）。可见 UI 仍应主要通过 `Tapp.widgets[id].render(container, props)`
+> 由宿主驱动；`onReady` 适合初始化订阅、预取数据或配合 core 的共享逻辑，不要假设只有
+> Page 模式才有 onReady。
+
+Manifest 顶层 `settings` 由整个 Tapp 共享；`widgets[].settings` 则为每个 Dashboard
+实例独立保存。Widget 可读取 `props.config` 或 `Tapp.widget.getInstanceSettings()`，并用
+`Tapp.widget.updateInstanceSettings(patch)` 更新已声明字段。数据准备完成后可调用
+`Tapp.widget.invalidate(reason)` 请求宿主刷新。storage 的跨 Page/Widget/headless 变化可用
+`Tapp.storage.onChanged(callback)` 订阅。
 
 ---
 
@@ -59,17 +70,17 @@ Tapp.widgets["my-widget"] = {
 
 渲染函数接收的 `props` 对象：
 
-| 属性           | 类型    | 说明                         |
-| -------------- | ------- | ---------------------------- |
-| `size`         | string  | 当前尺寸 ('1x1', '2x2' 等)   |
-| `config`       | object  | 用户配置                     |
-| `isEditMode`   | boolean | 是否处于编辑模式             |
-| `isPreview`    | boolean | 是否预览模式                 |
-| `theme`        | string  | 当前主题 ('light' \| 'dark') |
-| `primaryColor` | string  | 系统主题色（如 #8b5cf6）     |
-| `scale`        | number  | 缩放比例（0.1-2）            |
-| `fontScale`    | number  | 字体缩放（0.6-1.2）          |
-| `locale`       | string  | 用户语言（如 'zh-CN'）       |
+| 属性           | 类型    | 说明                          |
+| -------------- | ------- | ----------------------------- |
+| `size`         | string  | 当前尺寸 ('1x1', '2x2' 等)    |
+| `config`       | object  | 当前 Dashboard 实例的有效配置 |
+| `isEditMode`   | boolean | 是否处于编辑模式              |
+| `isPreview`    | boolean | 是否预览模式                  |
+| `theme`        | string  | 当前主题 ('light' \| 'dark')  |
+| `primaryColor` | string  | 系统主题色（如 #8b5cf6）      |
+| `scale`        | number  | 缩放比例（0.1-2）             |
+| `fontScale`    | number  | 字体缩放（0.6-1.2）           |
+| `locale`       | string  | 用户语言（如 'zh-CN'）        |
 
 ---
 
@@ -107,10 +118,31 @@ Tapp.widgets["my-widget"] = {
   background: rgba(255, 255, 255, 0.03);
 }
 
+.stats-widget-glow {
+  position: absolute;
+  right: -2rem;
+  top: -2rem;
+  width: 8rem;
+  height: 8rem;
+  border-radius: 50%;
+  filter: blur(64px);
+  opacity: 0.1;
+  pointer-events: none;
+}
+
+.stats-widget-content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+}
+
 .stats-widget-value {
   font-size: 30px;
   font-weight: 900;
   color: #1f1f1f;
+  line-height: 1;
 }
 
 .dark .stats-widget-value {
@@ -122,9 +154,12 @@ Tapp.widgets["my-widget"] = {
 // 简洁的 JS
 container.innerHTML = `
   <div class="stats-widget">
-    <span class="stats-widget-value" style="font-size: ${30 * fontScale}px;">
-      ${value}
-    </span>
+    <div class="stats-widget-glow" style="background: ${themeColor}"></div>
+    <div class="stats-widget-content">
+      <span class="stats-widget-value" style="font-size: ${30 * fontScale}px;">
+        ${value}
+      </span>
+    </div>
   </div>
 `;
 ```
@@ -771,6 +806,10 @@ Tapp.lifecycle.onReady(async () => {
   ]
 }
 ```
+
+两种注册不是同一生命周期：Manifest Widget 在安装/更新时由后端完整对账，删除声明会删除
+注册；`Tapp.widget.register()` 是当前 sandbox 的动态注册，调用必须携带宿主管理的 Runtime
+Grant，且不能覆盖或注销 Manifest Widget。静态 Widget 优先写入 Manifest。
 
 ---
 

@@ -1,467 +1,439 @@
-# REST API 端点
+# Tapp REST API
 
-本文档列出所有可供 Tapp 调用的后端 REST API 端点。
+本文记录当前宿主调用的 Tapp 后端路由。第三方 Tapp 代码通常应使用
+[Tapp SDK](API_REFERENCE.md)，不要直接拼接这些 URL；SDK 会处理身份、CSRF、字段转换、
+权限预检和错误解包。
 
-## 概述
+架构与安全边界见 [Tapp 架构](ARCHITECTURE.md)。路由权威来源是
+`backend/src/main.rs`、`backend/src/api/tapp_store.rs` 和
+`backend/src/api/tapp_scheduler.rs`。
 
-所有 API 请求需要包含有效的认证信息。Tapp 通过 SDK 发起请求时，系统会自动注入认证头。
+## 请求约定
 
 ### 基础 URL
 
+浏览器同源调用 `/api/...`。开发环境由 Astro 把 `/api/*` 转发到后端；生产环境由
+Myriad proxy 转发，不要在 Tapp 中硬编码后端端口。
+
+### 身份与 CSRF
+
+- 登录态使用 HttpOnly 会话 Cookie，前端请求设置 `credentials: "include"`。
+- GET/HEAD/OPTIONS 以外的变更请求需要 `X-CSRF-Token`。
+- CSRF token 从 `GET /api/csrf-token` 获取。
+- 标为“可选认证”的路由仍会根据当前身份、Tapp owner 和最终授权返回不同结果。
+- Tapp 沙箱运行时请求还必须携带宿主持有的 `X-Tapp-Runtime-Grant`。该值不能交给 iframe；
+  它绑定 subject、owner、Tapp、具体 runtime 和最终权限，5 分钟过期。
+- 不要把旧文档中的 Bearer token 示例用于当前浏览器宿主。
+
+```javascript
+const csrf = await fetch("/api/csrf-token", {
+  credentials: "include",
+}).then((response) => response.json());
+
+await fetch("/api/tapps/com.example.app/start", {
+  method: "POST",
+  credentials: "include",
+  headers: { "X-CSRF-Token": csrf.csrf_token },
+});
 ```
-/api
-```
 
-### 认证方式
+### 响应格式
 
-- JWT Token（自动处理）
-- Tapp ID 验证（自动处理）
-
----
-
-## Tapp 管理
-
-### 获取 Tapp 列表
-
-```http
-GET /api/tapps
-```
-
-**响应**：
+Tapp 管理接口大多返回：
 
 ```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "com.example.my-tapp",
-      "name": "我的 Tapp",
-      "version": "1.0.0",
-      "enabled": true
-    }
-  ]
+{ "success": true, "data": {} }
+```
+
+错误通常是：
+
+```json
+{ "success": false, "error": "message" }
+```
+
+并非所有历史接口都使用同一个 envelope：资源接口返回资源对象，scheduler 返回
+`{success, task/tasks/...}`，部分运行时接口也直接返回业务字段。调用方必须同时检查 HTTP
+状态和该端点的具体响应；不要假设存在统一的 `error.code/details` 结构。
+
+## 应用管理 `/api/tapps`
+
+### 可选认证的读取路由
+
+| 方法 | 路径                            | 说明                                         |
+| ---- | ------------------------------- | -------------------------------------------- |
+| GET  | `/api/tapps`                    | 可见 Tapp 摘要；管理员 Tapp + 当前用户 Tapp  |
+| GET  | `/api/tapps/details`            | 批量详情、Manifest、状态和当前角色的最终授权 |
+| GET  | `/api/tapps/widgets`            | 所有可见的已注册 Widget                      |
+| GET  | `/api/tapps/store/sources`      | 已启用的商店源                               |
+| GET  | `/api/tapps/{tappId}`           | Tapp 详情、Manifest、状态和最终授权          |
+| GET  | `/api/tapps/{tappId}/code`      | 主代码文本                                   |
+| GET  | `/api/tapps/{tappId}/resources` | 代码、CSS、HTML、i18n、Page 模块等资源对象   |
+| GET  | `/api/tapps/{tappId}/asset?path=` | Manifest 声明的包内资源（base64）          |
+| GET  | `/api/tapps/{tappId}/export`    | 导出 `.tapp` ZIP                             |
+
+读取与运行时授权优先当前用户的私有安装；未安装私有副本时再使用站点公开（管理员）安装。
+公开与私有副本可双向并存；安装冲突只检查操作者可修改的 owner 命名空间。
+
+Storage 按当前登录 subject 命名空间隔离：打开公开安装时，每个用户读写自己的
+`user_id + tapp_id` 数据，不会读取站点 owner 的 storage。安装级 Manifest 设置仍由安装
+owner 或管理员写入，其他已登录用户只读声明过的键。
+
+`/details` 是 `TappRuntime` 的启动同步接口。它固定执行管理员集合与当前用户集合查询，
+同 ID 时保留用户私有版本，并对每项应用与单项 `/api/tapps/{tappId}` 相同的动态角色权限过滤，
+用于避免列表后逐项读取详情的 N+1 请求。列表项使用 camelCase；详情沿用历史 snake_case。
+
+`/resources` 当前返回 snake_case 字段，`TappApiService.getTappResources` 会转换为：
+
+```typescript
+interface TappResources {
+  code: string;
+  styles?: string;
+  widgetStyles?: string;
+  pageStyles?: string;
+  widgetCSS?: string;
+  pageCSS?: string;
+  widgetTemplates?: Record<string, Record<string, string>>;
+  pageTemplate?: string;
+  cssMode?: "unified" | "separated";
+  i18n?: Record<string, unknown>;
+  pageModules?: Record<string, string>;
+  pageModuleOrder?: string[];
 }
 ```
 
-### 获取 Tapp 详情
+### 可选认证的 subject 路由
 
-```http
-GET /api/tapps/{id}
+以下路由挂在 `optional_auth` 上：始终注入真实用户 Claims 或稳定 guest Claims。
+
+| 方法 | 路径                                 | 说明 |
+| ---- | ------------------------------------ | ---- |
+| GET  | `/api/tapps/recent?limit=10`         | 可选认证：按 **当前 subject**（`tapp_user_activities.user_id`）返回最近运行；`limit` 默认 10（1–50）。游客 subject 无 start 活动，结果为 `[]`。 |
+
+### 需要登录的变更路由
+
+| 方法   | 路径                                 | 说明                                    |
+| ------ | ------------------------------------ | --------------------------------------- |
+| POST   | `/api/tapps/install`                 | direct/store 统一安装                   |
+| POST   | `/api/tapps/install-file`            | multipart 上传 `.tapp`，字段名 `file`   |
+| POST   | `/api/tapps/cleanup-temporary`       | 清理当前用户临时 Tapp                   |
+| POST   | `/api/tapps/{tappId}/update`         | direct/store 更新，保留用户数据         |
+| POST   | `/api/tapps/{tappId}/start`          | 持久化 owner 自己的 running 状态        |
+| POST   | `/api/tapps/{tappId}/stop`           | 停止 owner 安装并撤销对应 Runtime Grant |
+| DELETE | `/api/tapps/{tappId}?keep_data=true` | 卸载；可选保留存储/设置                 |
+
+直接安装请求：
+
+```json
+{
+  "source": "direct",
+  "manifest": {
+    "id": "com.example.app",
+    "name": "App",
+    "version": "1.0.0",
+    "category": "utility",
+    "main": "main.js",
+    "permissions": []
+  },
+  "code": "console.log('hello')",
+  "styles": "...",
+  "pageTemplate": "...",
+  "widgetTemplates": { "clock": { "2x2": "..." } },
+  "widgetCss": "...",
+  "pageCss": "...",
+  "i18n": { "zh-CN": {} },
+  "pageModules": { "index.js": "..." },
+  "permissions": []
+}
 ```
 
-### 安装 Tapp
+商店安装请求：
 
-```http
-POST /api/tapps/install
-Content-Type: application/json
-
+```json
 {
   "source": "store",
-  "tappId": "com.example.tapp"
+  "storeSource": "1",
+  "tappId": "com.example.app",
+  "permissions": ["storage"]
 }
 ```
 
-### 卸载 Tapp
+`permissions` 是用户同意的申请子集，不是当前有效授权；后端先与 Manifest 求交集并保存为
+`approved_permissions`，再按当前实时角色和动态权限配置生成对调用者可见的有效权限。
 
-```http
-DELETE /api/tapps/{id}
-```
+安装/更新资源先进入 staging，校验后原子替换在线目录；数据库失败恢复旧目录。卸载把文件
+移入隔离目录后，在一个事务中清理安装记录、Manifest/动态 Widget、调度任务及执行历史；
+`keep_data=true` 只保留 storage，不保留任务或 Widget。相同公开 `tappId` 的最终冲突复核、
+文件切换和数据库变更由 PostgreSQL advisory transaction lock 串行化，跨后端副本也不能并发覆盖。
+激活目录包含与数据库 `updated_at` 对应的内部代际标记；启动时会恢复被进程退出打断的
+rename/commit 窗口，该标记不会进入导出的 `.tapp` 包。
+所有当前管理员都操作首次站点管理员对应的规范公开 owner；普通用户仍写入自己的临时 owner。
+管理员身份不会让 Runtime 自动读取其他普通用户的私有安装。
 
-### 启用/禁用 Tapp
+### Runtime Grant
 
-```http
-PUT /api/tapps/{id}/toggle
-Content-Type: application/json
+以下路由使用可选认证，因此游客运行管理员共享 Tapp 时也能获得绑定稳定 guest subject 的
+Grant；游客仍不能借此访问普通用户的临时安装。
 
-{
-  "enabled": true
-}
-```
+| 方法   | 路径                                             | 说明                         |
+| ------ | ------------------------------------------------ | ---------------------------- |
+| POST   | `/api/tapps/{tappId}/runtime-grants`             | 为 Page/Widget/headless 签发 |
+| POST   | `/api/tapps/{tappId}/runtime-grants/authorize`   | 宿主本地敏感能力实时复核     |
+| DELETE | `/api/tapps/{tappId}/runtime-grants/{runtimeId}` | 销毁实例时撤销               |
 
----
+签发 body 为 `{ "instanceId": "page_...", "kind": "page" }`；`kind` 还可以是
+`widget` 或 `headless`。令牌只返回宿主一次，服务端仅存 SHA-256。停止、更新、卸载会撤销
+相关 Grant。Grant 哈希与 TTL 租约存储在 PostgreSQL，可由任意副本校验；只有被撤销或到期的
+Grant 才返回 `INVALID_RUNTIME_GRANT`。
+每次使用 Grant 时还会重新核对当前可见安装 owner，并以当前角色、动态权限配置和安装授权
+收缩权限；owner 改变的旧 Grant 会返回 `INVALID_RUNTIME_GRANT`，由宿主执行一次重签重试。
 
-## Tapp 存储
+### 设置、Widget 与存储
 
-这些路由要求登录身份、匹配当前 Tapp 和 subject 的 Runtime Grant，以及 `storage` 权限。
-公共 Tapp 仍按当前登录用户的 `user_id + tapp_id` 隔离，不会读取安装 owner 的私有存储。
+| 方法   | 路径                                     | 说明                                        |
+| ------ | ---------------------------------------- | ------------------------------------------- |
+| GET    | `/api/tapps/{tappId}/settings/{key}`     | 登录宿主读取 Manifest 声明的设置            |
+| POST   | `/api/tapps/{tappId}/settings/{key}`     | 登录宿主写入 Manifest 声明的设置            |
+| GET    | `/api/tapps/{tappId}/settings`           | 一次读取全部已保存的 Manifest 声明设置       |
+| POST   | `/api/tapps/{tappId}/widgets`            | 管理员以 Runtime Grant 注册/更新动态 Widget |
+| DELETE | `/api/tapps/{tappId}/widgets/{widgetId}` | 管理员以 Runtime Grant 注销动态 Widget      |
+| GET    | `/api/tapps/{tappId}/storage`            | 列出 key                                    |
+| DELETE | `/api/tapps/{tappId}/storage`            | 清空存储                                    |
+| GET    | `/api/tapps/{tappId}/storage/entries`    | 一次返回全部键值                            |
+| GET    | `/api/tapps/{tappId}/storage/usage`      | 一次统计使用字节                            |
+| GET    | `/api/tapps/{tappId}/storage/{key}`      | 读取值                                      |
+| POST   | `/api/tapps/{tappId}/storage/{key}`      | 写入值                                      |
+| DELETE | `/api/tapps/{tappId}/storage/{key}`      | 删除值                                      |
 
-| 方法   | 路径                                          | 说明                       |
-| ------ | --------------------------------------------- | -------------------------- |
-| GET    | `/api/tapps/{tappId}/storage`                 | 列出当前用户的 key         |
-| DELETE | `/api/tapps/{tappId}/storage`                 | 清空当前用户的存储         |
-| GET    | `/api/tapps/{tappId}/storage/entries`         | 一次返回全部键值           |
-| GET    | `/api/tapps/{tappId}/storage/usage`           | 返回 used 与 quota 字节数  |
-| GET    | `/api/tapps/{tappId}/storage/{key}`           | 读取值                     |
-| POST   | `/api/tapps/{tappId}/storage/{key}`           | 写入 JSON 值               |
-| DELETE | `/api/tapps/{tappId}/storage/{key}`           | 删除值                     |
-| GET    | `/api/tapps/{tappId}/settings`                | 读取全部已保存的安装设置   |
-| GET    | `/api/tapps/{tappId}/settings/{key}`          | 读取 Manifest 声明的设置   |
-| POST   | `/api/tapps/{tappId}/settings/{key}`          | owner 或管理员修改安装设置 |
+settings 路由是安装级配置控制面，只接受已登录会话与当前 Manifest 的真实 key，不接受
+`X-Tapp-Runtime-Grant` 代替登录，也不能访问任意 storage key。读取允许当前安装的已登录
+运行者；写入仅允许安装 owner 或当前管理员，且值必须符合声明的 type、select options 与
+number min/max；游客只使用 Manifest 默认值。
+`storage` 路由同样要求登录身份和 Runtime Grant；访客 Grant 不包含 `storage`，因此沙箱内
+的 `Tapp.storage` 不能为访客创建持久数据。通用 storage 使用当前 subject 命名空间，并拒绝
+访问 `_settings.`、`_component:`、`_shortcut:`、`_report:` 等宿主保留键。
+同理，平台数据、报告读取、统一通知、组件/快捷键注册、scheduler、语音服务和 Brew 写入/评论
+都要求持久登录主体，不会被签入访客 Grant；动态 Widget 注册与注销进一步限制为当前管理员。
+Manifest Widget 由安装/更新自动对账；动态 Widget 路由要求 `widget:register` 同时存在于
+Runtime Grant、安装授权和当前管理员角色，并拒绝覆盖/删除 Manifest 来源的注册。动态行记录
+Runtime Grant 的安装 owner，只返回给注册主体；公共安装卸载时会清理绑定该 owner 的动态
+Widget 和所有主体为该公共安装创建的 scheduler 任务。
+普通用户安装带 Widget 声明的 Tapp 时不会被拒绝；权限过滤只移除其管理员专属的
+`widget:register` 能力，应用其余部分继续安装并运行。
 
-通用 storage 拒绝 `_settings.`、`_component:`、`_shortcut:`、`_report:` 等宿主保留前缀。
-安装设置只能通过 settings 路由读取；普通已登录运行者只读，访客没有服务端持久 storage。
+注意写入方法是 `POST`，不是旧文档中的 `PUT`。
+Widget 注册 body 除 `id`、`name`、`default_size`、`sizes` 等元数据外，还可包含
+`settings` 与 `refresh_policy`；后端会执行与 Manifest 相同的字段、类型、范围和刷新间隔
+校验，并将其保存到 Widget 注册记录。
 
----
+### 商店源管理
 
-## 平台数据
+| 方法   | 路径                                  | 说明                         |
+| ------ | ------------------------------------- | ---------------------------- |
+| GET    | `/api/tapps/store/sources`            | 列出全部源（公开；见可选认证读取表） |
+| POST   | `/api/tapps/store/sources`            | 添加源；handler 内检查管理员 |
+| POST   | `/api/tapps/store/sources/{sourceId}` | 更新源；handler 内检查管理员 |
+| DELETE | `/api/tapps/store/sources/{sourceId}` | 删除源；handler 内检查管理员 |
 
-### 获取平台数据
+不存在 `/api/tapp-store/...` 路由。
 
-```http
-GET /api/platforms/{platform}/data
-```
+**商店安装语义**（完整协议见 [Tapp 商店](STORE.md)）：
 
-**参数**：
+- `source: "store"` 时 `storeSource` 必须是已配置源的 **数字 id**、完整 `index.json` URL，或可规范化匹配到已配置源的 base URL；禁止传字面量 `"store"` / `"direct"`。
+- 后端从该源拉 `index.json` 与 `download` / `manifest.assets` 文件，校验索引与 Manifest 的 `category` 一致后进入与 direct 相同的 staging 安装。
+- 浏览器侧列表经 `RemoteStoreService` 直连远程索引；后端 502 / 大包（索引 `size` ≥ 1 MiB）时宿主回退为浏览器下载 + `source: "direct"`。
+- 官方源由迁移预置：`https://raw.githubusercontent.com/Myriad-You/tapp-store/main/index.json`（`official=true`，URL 不可改）。
 
-| 参数       | 类型   | 说明                                       |
-| ---------- | ------ | ------------------------------------------ |
-| `platform` | string | 平台标识：steam, bangumi, netease, spotify |
-| `limit`    | number | 返回数量限制（默认 50）                    |
-| `offset`   | number | 偏移量                                     |
-| `type`     | string | 数据类型筛选                               |
+## 运行时 `/api/tapp`
 
-**示例**：
+这些端点主要由 Bridge handler 经 `TappApiService` 调用。除了路由中间件，handler 还应
+校验 Tapp ID、owner、安装批准集与当前动态有效权限。
 
-```http
-GET /api/platforms/steam/data?limit=20&type=game
-```
+### 平台、AI 与数据
 
-**响应**：
+| 方法   | 路径                                                     | 身份     | SDK 能力                        |
+| ------ | -------------------------------------------------------- | -------- | ------------------------------- |
+| GET    | `/api/tapp/platform/{platform}/data`                     | 登录     | `Tapp.platform.getData`         |
+| GET    | `/api/tapp/platform/{platform}/stats`                    | 登录     | `Tapp.platform.getStats`        |
+| GET    | `/api/tapp/platform/{platform}/distribution/{dimension}` | 登录     | `Tapp.platform.getDistribution` |
+| POST   | `/api/tapp/platform/items`                               | 登录     | `Tapp.platform.addItem`         |
+| POST   | `/api/tapp/platform/items/batch`                         | 登录     | `Tapp.platform.addItems`        |
+| POST   | `/api/tapp/ai/v2/tasks`                                  | 可选认证 | 创建 AI 任务                    |
+| GET    | `/api/tapp/ai/v2/tasks/{taskId}`                         | 可选认证 | 读取任务快照                    |
+| DELETE | `/api/tapp/ai/v2/tasks/{taskId}`                         | 可选认证 | 取消非终态任务                  |
+| GET    | `/api/tapp/ai/v2/tasks/{taskId}/events`                  | 可选认证 | SSE token/progress/state        |
+| GET    | `/api/tapp/ai/v2/usage`                                  | 可选认证 | 权威 calls/tokens/cooldown      |
+| GET    | `/api/tapp/ai/v2/ledger`                                 | 登录     | 宿主 UI 专用，无 SDK 暴露       |
+| POST   | `/api/tapp/data/transform`                               | 登录     | `Tapp.data.transform`           |
+
+AI 权限、每分钟速率、每日 calls/tokens 与 cooldown 全由后端执行。配额在模型调用前事务预留、
+完成后按实际估算结算、失败/取消释放未消耗 token；calls 仍记录一次尝试。AI Task 还校验
+Manifest operation/model tier/context/output 声明，并将任务绑定 subject、安装 owner 和 Tapp。
+访客除浏览器 session 配额外，还受匿名 IP 指纹日预算、匿名分钟限流和全站访客日预算约束；
+服务端只保存单向摘要，不保存原始 IP。
+最终任务注册在 subject advisory-lock 事务中原子检查并发数、保留数和幂等键；未成功注册的
+请求完整回滚 calls/token 预留，不会留下只计费但未执行的任务。
+
+除按日聚合的配额计数外，每次受治理的 AI 调用（完成/失败/取消）都会追加一条
+`tapp_ai_cost_ledger` 流水：subject、安装 owner、Tapp、任务、来源（runtime 或
+internal 宿主适配器）、operation、provider/model、输入/输出 token 估算与终态。账本
+append-only、不随每日重置，`GET /api/tapp/ai/v2/ledger` 供登录用户读取本人逐次流水与
+按 Tapp 汇总；该端点是宿主 UI 能力，不进入沙箱 SDK。`cost_micro_usd` 列预留给后续
+接入定价源，当前为 NULL。
+
+### One-shot Data Exchange
+
+四个端点都接受真实用户或稳定 guest Claims，并强制校验 `X-Tapp-Runtime-Grant`：
+
+| 方法   | 路径                                                     | 说明                         |
+| ------ | -------------------------------------------------------- | ---------------------------- |
+| POST   | `/api/tapp/data-exchange/requests`                       | 校验双方 Manifest 并准备请求 |
+| POST   | `/api/tapp/data-exchange/requests/{requestId}/authorize` | 宿主确认后签发一次性 Grant   |
+| DELETE | `/api/tapp/data-exchange/requests/{requestId}`           | 拒绝/关闭并撤销请求或 Grant  |
+| POST   | `/api/tapp/data-exchange/consume`                        | 提供方提交并原子消费 Grant   |
+
+准备请求 body 为 `{targetTappId, exportId, params, purpose}`。只有调用方声明 import、提供方
+声明同名 export、双方可由同一 subject 访问时才返回包含 `params` 的弹窗元数据。授权端点只
+允许原 requester runtime 调用；返回的一次性 token 60 秒过期且留在宿主。DELETE 在授权前
+删除 prepared request，授权后按 requestId 删除活动 Grant。runtime 撤销、Tapp 停止、更新和
+卸载也会清理 requester 状态；提供方 Tapp 停止或卸载会清理指向它的请求与 Grant。consume
+必须携带匹配 Tapp ID、subject 与安装 owner 的 provider Runtime Grant，服务端先删除一次性 token，再验证响应 schema、
+`maxBytes` 和 `maxRecords`，因此失败
+也不能重放。详细 SDK 契约见 [Data Exchange API](API_REFERENCE.md#跨-tapp-data-exchange-api)。
+
+### Event Broker 与 Agent Interaction
+
+| 方法 | 路径                                           | 说明                       |
+| ---- | ---------------------------------------------- | -------------------------- |
+| POST | `/api/tapp/events/publish`                     | 发布 Manifest 声明 topic   |
+| GET  | `/api/tapp/events/stream`                      | 当前 runtime 在线 SSE      |
+| GET  | `/api/tapp/agent/v2/interactions/stream`       | 接收待处理 Interaction     |
+| GET  | `/api/tapp/agent/v2/interactions/{id}`         | 读取状态快照               |
+| POST | `/api/tapp/agent/v2/interactions/{id}/accept`  | 当前 runtime 接受          |
+| POST | `/api/tapp/agent/v2/interactions/{id}/result`  | schema 校验后提交结果      |
+| POST | `/api/tapp/agent/v2/interactions/{id}/reject`  | 拒绝并终止                 |
+| POST | `/api/tapp/agent/v2/interactions/{id}/intents` | 宿主确认后记录 intent 授权 |
+
+Event Broker 仅在线 at-most-once，不做积压；SSE 在 Runtime Grant 到期时关闭，由宿主刷新 Grant 后
+重连。Agent Interaction 由可信 Agent 执行代码在后端创建，Tapp 不能伪造 source/task；只有实际
+accept 的 runtime 可提交结果，结果会恢复持久化的原 Agent 任务；intent 经授权后由受支持的
+宿主 adapter 执行。Runtime Grant、Data Exchange、Event、Agent interaction 和 AI task 使用
+PostgreSQL TTL registry/mailbox；`pg_notify` 只作唤醒提示，消费者可从 mailbox 补读。
+Interaction 的动作截止时间独立于终态保留时间；所有副本都可运行过期扫描，但数据库 CAS 只
+允许一个副本写入 `expired` 并恢复原任务。
+
+### Federation
+
+| 方法 | 路径                         | 身份 | 说明 |
+| ---- | ---------------------------- | ---- | ---- |
+| GET  | `/api/tapp/federation/feed`  | 可选认证 + Runtime Grant | 需 Grant 含 `federation:read`。游客只返回公开活动（`audience: "public"`）；已登录用户返回公开 Feed 与个人时间线的合并结果（`audience: "public+personal"`，同 `activity_id` 时个人条目优先，整体按时间新到旧，条数有上限）。响应形如 `{ items, total, audience }`。 |
+
+联邦写操作、消息、私有 Room 与文件等仍走各自 SDK/宿主路径，且对游客不可用；见
+[ARCHITECTURE 所有权与可见性](ARCHITECTURE.md#所有权与可见性)。Brew / 语音 / 联邦 REST
+宿主代理路径已统一按 Grant 归因：带 `X-Tapp-Runtime-Grant` 的请求在服务端按路由强制 Tapp
+权限并记录归因日志（共享 `host_attribution` 中间件；路由→权限表见
+`docs/development/tapp/fixtures/host_route_permissions.json`，**先改 fixture 再改映射**）；联邦 E2E 密钥交换与 Channel/Room
+WebSocket 升级不能携带 Grant 头，因此 Tapp Bridge 先调用
+`POST /api/federation/channels/{channelId}/ws-ticket` 或
+`POST /api/federation/rooms/{roomId}/ws-ticket`（要求 `federation:message`），再把一次性
+`tapp_ws_ticket` 放入对应升级 URL。票据过期、复用、subject 或目标不匹配都会失败关闭，宿主 UI
+不带票据的 Claims-only WebSocket 语义保持不变。独立 AI 费用账本见 `/api/tapp/ai/v2/ledger`。
+
+### 上下文与媒体
+
+| 方法 | 路径                           | 身份                     |
+| ---- | ------------------------------ | ------------------------ |
+| GET  | `/api/tapp/context/app`        | 可选认证                 |
+| GET  | `/api/tapp/context/user`       | 可选认证                 |
+| GET  | `/api/tapp/context/player`     | 可选认证                 |
+| GET  | `/api/tapp/context/navigation` | 可选认证                 |
+| GET  | `/api/tapp/context/system`     | 可选认证                 |
+| GET  | `/api/tapp/context/geo`        | 公开                     |
+| POST | `/api/tapp/media/control`      | 可选认证 + 权限          |
+| GET  | `/api/tapp/media/status`       | 可选认证 + 权限          |
+| POST | `/api/tapp/notifications`      | 登录 + `ui:notification` |
+
+Tapp 通知进入 Myriad 的统一通知流，不存在独立的 Tapp-only toast 通道。
+
+### 报告、组件、快捷键和事件
+
+| 方法           | 路径                                                          |
+| -------------- | ------------------------------------------------------------- |
+| POST           | `/api/tapp/reports`                                           |
+| GET            | `/api/tapp/report-catalog`                                    |
+| GET            | `/api/tapp/report-catalog/{reportId}`                         |
+| GET            | `/api/tapp/report-catalog/platform/{platform}`                |
+| GET            | `/api/tapp/reports/tapp/{tappId}`                             |
+| GET/PUT/DELETE | `/api/tapp/reports/{tappId}/{reportId}`                       |
+| POST           | `/api/tapp/components/register`                               |
+| DELETE         | `/api/tapp/components/{tappId}/{componentType}/{componentId}` |
+| GET            | `/api/tapp/components/{tappId}`                               |
+| GET            | `/api/tapp/components/all/{componentType}`                    |
+| POST           | `/api/tapp/shortcuts/register`                                |
+| DELETE         | `/api/tapp/shortcuts/{tappId}/{shortcutId}`                   |
+| GET            | `/api/tapp/shortcuts`                                         |
+
+这些路由都需要登录；具体能力还受 `report:*`、`component:*` 与 `shortcut:register` 等最终授权约束。
+
+### 指标与限流
+
+| 方法 | 路径                            |
+| ---- | ------------------------------- |
+| GET  | `/api/tapp/metrics`             |
+| GET  | `/api/tapp/rate-limit/{tappId}` |
+
+不要依赖旧文档中的固定“每分钟 N 次”和 `X-RateLimit-*` 表格；实际限制由当前后端配置、
+用户角色和具体 handler 决定。窗口计数位于 PostgreSQL 共享 registry，以
+`subject + Tapp + operation` 隔离并原子递增；所有后端副本共用同一额度。registry 不可用时
+受限操作返回 `503 RATE_LIMITER_UNAVAILABLE`，不会绕过限制。
+
+## 调度器
+
+全部需要登录；注册还检查 `scheduler:register`、Tapp 所有权、scope 和 backendActions。
+AI backendAction 还要求 Manifest AI `generate` 声明；每次执行前重验安装授权，并进入统一
+AI Task registry 与配额账本。
+`fetch` 使用公网 DNS 钉扎、禁止重定向和 2 MiB 流式响应上限。
+
+| 方法     | 路径                                                  | 说明                        |
+| -------- | ----------------------------------------------------- | --------------------------- |
+| GET      | `/api/tapp/scheduler/tasks?tapp_id=...`               | 当前用户任务列表            |
+| POST     | `/api/tapp/scheduler/tasks`                           | 注册任务                    |
+| GET      | `/api/tapp/scheduler/{tappId}/tasks`                  | 指定 Tapp 任务              |
+| GET      | `/api/tapp/scheduler/{tappId}/tasks/{taskId}`         | 单个任务                    |
+| DELETE   | `/api/tapp/scheduler/{tappId}/tasks/{taskId}`         | 注销任务                    |
+| POST     | `/api/tapp/scheduler/{tappId}/tasks/{taskId}/enable`  | 启用                        |
+| POST     | `/api/tapp/scheduler/{tappId}/tasks/{taskId}/disable` | 禁用                        |
+| POST     | `/api/tapp/scheduler/{tappId}/tasks/{taskId}/trigger` | 手动触发                    |
+| GET (WS) | `/api/tapp/scheduler/ws`                              | frontend 任务推送与完成回执 |
+
+Scheduler WS presence 与 frontend 消息使用 PostgreSQL TTL registry/mailbox，而不是进程内广播。
+连接每 20 秒续租，服务端按 connection 原子领取消息；发送中断会重新入队。这样任务 worker 与
+WebSocket 位于不同后端副本时仍可投递，每个标签页都能按自己的 Tapp 回调决定是否处理，执行
+终态由数据库 CAS 去重。管理员
+`GET /api/tapp/metrics` 可查看在线 subject、mailbox 深度以及投递/失败/回退/完成/超时计数。
+其中在线 subject 与 mailbox 深度来自共享数据库，`processCounters` 明确只表示当前后端副本，
+部署侧应按实例采集后聚合。
+
+注册请求使用 snake_case（SDK 会转换）：
 
 ```json
 {
-  "success": true,
-  "data": [
-    {
-      "id": "12345",
-      "name": "游戏名称",
-      "type": "game",
-      "platform": "steam",
-      "metadata": {}
-    }
-  ],
-  "pagination": {
-    "total": 100,
-    "limit": 20,
-    "offset": 0
-  }
+  "tapp_id": "com.example.app",
+  "task_id": "daily-sync",
+  "name": "每日同步",
+  "schedule_type": "daily",
+  "schedule": { "time": "09:00" },
+  "execution_target": "frontend",
+  "missed_policy": "run-once",
+  "scope": "user",
+  "retry": { "maxRetries": 2, "retryDelay": 5000 }
 }
 ```
 
-### 获取平台统计
-
-```http
-GET /api/platforms/{platform}/stats
-```
-
-**响应**：
-
-```json
-{
-  "success": true,
-  "data": {
-    "total": 150,
-    "by_type": {
-      "game": 120,
-      "dlc": 30
-    },
-    "last_sync": "2024-01-15T10:30:00Z"
-  }
-}
-```
-
-### 同步平台数据
-
-```http
-POST /api/platforms/{platform}/sync
-```
-
-**权限**：需要 `platform.write` 权限
-
----
-
-## AI 服务
-
-### 聊天补全
-
-```http
-POST /api/ai/chat
-Content-Type: application/json
-
-{
-  "messages": [
-    { "role": "system", "content": "你是一个助手" },
-    { "role": "user", "content": "你好" }
-  ],
-  "options": {
-    "temperature": 0.7,
-    "max_tokens": 1000
-  }
-}
-```
-
-**响应**：
-
-```json
-{
-  "success": true,
-  "data": {
-    "content": "你好！有什么可以帮你的？",
-    "usage": {
-      "prompt_tokens": 20,
-      "completion_tokens": 15,
-      "total_tokens": 35
-    }
-  }
-}
-```
-
-### 流式聊天
-
-```http
-POST /api/ai/chat/stream
-Content-Type: application/json
-
-{
-  "messages": [...],
-  "options": {...}
-}
-```
-
-**响应**：Server-Sent Events (SSE)
-
-```
-data: {"content": "你", "done": false}
-data: {"content": "好", "done": false}
-data: {"content": "！", "done": true}
-```
-
-### 嵌入向量
-
-```http
-POST /api/ai/embeddings
-Content-Type: application/json
-
-{
-  "input": "要转换的文本"
-}
-```
-
----
-
-## 报告服务
-
-### 获取报告
-
-```http
-GET /api/reports?type={type}&period={period}
-```
-
-**参数**：
-
-| 参数     | 类型   | 说明                                |
-| -------- | ------ | ----------------------------------- |
-| `type`   | string | 报告类型：gaming, music, anime, all |
-| `period` | string | 周期：week, month, year             |
-
-**响应**：
-
-```json
-{
-  "success": true,
-  "data": {
-    "type": "gaming",
-    "period": "week",
-    "start_date": "2024-01-08",
-    "end_date": "2024-01-14",
-    "summary": {
-      "total_hours": 25.5,
-      "games_played": 5
-    },
-    "details": [...]
-  }
-}
-```
-
-### 生成报告
-
-```http
-POST /api/reports/generate
-Content-Type: application/json
-
-{
-  "type": "gaming",
-  "period": "month"
-}
-```
-
-**权限**：需要 `report.write` 权限
-
----
-
-## 定时任务
-
-### 注册定时任务
-
-```http
-POST /api/tapp/{tappId}/scheduler/tasks
-Content-Type: application/json
-
-{
-  "id": "daily-sync",
-  "type": "interval",
-  "interval_seconds": 3600,
-  "handler": "handleSync",
-  "enabled": true
-}
-```
-
-### 获取任务列表
-
-```http
-GET /api/tapp/{tappId}/scheduler/tasks
-```
-
-**响应**：
-
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "daily-sync",
-      "type": "interval",
-      "interval_seconds": 3600,
-      "next_run": "2024-01-15T11:00:00Z",
-      "last_run": "2024-01-15T10:00:00Z",
-      "enabled": true
-    }
-  ]
-}
-```
-
-### 触发任务执行
-
-```http
-POST /api/tapp/{tappId}/scheduler/tasks/{taskId}/trigger
-```
-
-### 更新任务
-
-```http
-PUT /api/tapp/{tappId}/scheduler/tasks/{taskId}
-Content-Type: application/json
-
-{
-  "enabled": false
-}
-```
-
-### 删除任务
-
-```http
-DELETE /api/tapp/{tappId}/scheduler/tasks/{taskId}
-```
-
-### 获取执行历史
-
-```http
-GET /api/tapp/{tappId}/scheduler/tasks/{taskId}/history
-```
-
----
-
-## 用户与认证
-
-### 获取当前用户
-
-```http
-GET /api/auth/me
-```
-
-**响应**：
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "user123",
-    "username": "example",
-    "role": "user",
-    "preferences": {}
-  }
-}
-```
-
-### 获取用户角色
-
-```http
-GET /api/auth/role
-```
-
-**响应**：
-
-```json
-{
-  "success": true,
-  "data": {
-    "role": "admin",
-    "permissions": ["admin.access", "tapp.manage"]
-  }
-}
-```
-
----
-
-## Tapp 商店
-
-### 获取商店来源
-
-```http
-GET /api/tapp-store/sources
-```
-
-**响应**：
-
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "official",
-      "name": "官方商店",
-      "url": "https://store.myriad.app",
-      "enabled": true
-    }
-  ]
-}
-```
-
-### 添加商店来源
-
-```http
-POST /api/tapp-store/sources
-Content-Type: application/json
-
-{
-  "name": "自定义商店",
-  "url": "https://my-store.example.com"
-}
-```
-
-### 获取商店 Tapp 列表
-
-```http
-GET /api/tapp-store/tapps?source={sourceId}
-```
-
-### 获取商店 Tapp 详情
-
-```http
-GET /api/tapp-store/tapps/{tappId}?source={sourceId}
-```
-
----
+`execution_target` 为 `backend` 或 `both` 时必须提供非空 `backend_actions`；global scope 仅
+当前仍为管理员的用户可注册。frontend 执行通过 WS 下发，直到沙箱回调上报完成前，执行
+记录保持 running。`maxRetries` 范围为 0–2，`retryDelay` 范围为 0–60000 ms（0 按 1 秒执行）；
+单个任务最多 8 个串行 `backend_actions`。领取租约还会计入最多 5 次补偿执行，按这些边界
+动态计算为 15–360 分钟。
 
 ## Manifest 声明 API
 
@@ -470,56 +442,25 @@ GET /api/tapp-store/tapps/{tappId}?source={sourceId}
 | GET  | `/api/tapp/{tappId}/apis`          | 列出当前上下文可用的命名 API  |
 | POST | `/api/tapp/{tappId}/api/{apiName}` | 执行 Manifest `apis[apiName]` |
 
-请求体为 `{ "params": { "city": "Tokyo" } }`。这不是任意 URL 代理；旧的
-`POST /api/tapp/{tappId}/proxy` 不存在。后端负责权限、模板注入、SSRF 防护与缓存隔离。
-
----
-
-## 错误响应
-
-所有 API 在错误时返回统一格式：
+请求体：
 
 ```json
-{
-  "success": false,
-  "error": {
-    "code": "PERMISSION_DENIED",
-    "message": "缺少所需权限",
-    "details": {
-      "required": "platform.write",
-      "tappId": "com.example.tapp"
-    }
-  }
-}
+{ "params": { "city": "Tokyo" } }
 ```
 
-### 常见错误码
+这不是任意 URL 代理。API 名必须存在于 Manifest：`public` 可在允许的游客上下文使用，
+`protected` 只允许登录主体；所有 HTTP API 都需要实时 `network:fetch`。后端负责共享限流、模板注入、出站安全、SSRF 防护、builtin
+路由和上下文隔离缓存。
 
-| 错误码              | HTTP 状态码 | 说明           |
-| ------------------- | ----------- | -------------- |
-| `UNAUTHORIZED`      | 401         | 未认证         |
-| `PERMISSION_DENIED` | 403         | 权限不足       |
-| `NOT_FOUND`         | 404         | 资源不存在     |
-| `RATE_LIMITED`      | 429         | 请求频率超限   |
-| `QUOTA_EXCEEDED`    | 507         | 配额超限       |
-| `INTERNAL_ERROR`    | 500         | 服务器内部错误 |
+旧的 `POST /api/tapp/{tappId}/proxy` 不存在，也不应重新引入。
 
----
+## 修改路由时的同步项
 
-## 速率限制
+新增或修改端点时同时检查：
 
-| 端点类型     | 限制        |
-| ------------ | ----------- |
-| 存储 API     | 100 次/分钟 |
-| 平台数据 API | 60 次/分钟  |
-| AI API       | 20 次/分钟  |
-| 代理请求     | 100 次/分钟 |
-| 其他 API     | 200 次/分钟 |
-
-超出限制时返回 429 状态码，响应头包含：
-
-```
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 0
-X-RateLimit-Reset: 1705312800
-```
+1. 后端路由注册、中间件和 handler 内授权；
+2. `frontend/src/tapp/services/TappApiService.ts` 的 Cookie、CSRF 和字段转换；
+3. sandbox handler 与 `permissionConfig.ts`；
+4. `sdkGenerator.ts` 的公开方法；
+5. 本文和 [SDK API](API_REFERENCE.md)；
+6. Page、Widget、headless 三种宿主是否都应暴露该能力。
