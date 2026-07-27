@@ -101,5 +101,5 @@ index.js          # core（background + 内嵌 i18n 回退）
 page.html / page.css / styles.css
 page/*.js         # pageModules（UI 真源）
 i18n/{zh,en,ja}.json
-manifest.json     # version 1.0.22
+manifest.json     # version 1.0.31
 ```
