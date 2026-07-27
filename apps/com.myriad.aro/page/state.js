@@ -30,6 +30,8 @@ var state = {
   rosterFetchSeq: 0,
   /** Until this timestamp, room poll runs faster (ms epoch). */
   rosterBoostUntil: 0,
+  /** Debounce timer for loadConversations during roster confirm bursts. */
+  loadConvDebounceTimer: null,
   /** 新消息应用内 Toast（设置项 notifyOnMessage） */
   notifyOnMessage: true,
   /** Active realtime WS subscription (channel|room) */
