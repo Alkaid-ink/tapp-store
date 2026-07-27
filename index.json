@@ -70,7 +70,7 @@
     {
       "id": "com.myriad.quick-notes",
       "name": "便携便签",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "description": "快速记录想法，支持搜索与主页小组件",
       "long_description": "在页面中编写、搜索和整理便签，并通过 4×2 / 4×4 小组件在主页速览或速记。支持明暗主题与中英日。",
       "locales": {
@@ -102,7 +102,8 @@
         "storage",
         "ui:notification",
         "ui:theme",
-        "ui:confirm"
+        "ui:confirm",
+        "widget:register"
       ],
       "icon_svg": "<svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M8 2v3M16 2v3M3 9h18M21 8.5V17c0 3-1.5 5-5 5H8c-3.5 0-5-2-5-5V8.5c0-3 1.5-5 5-5h8c3.5 0 5 2 5 5z' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/><path d='M8 14h4M8 18h8' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg>",
       "theme_color": "#FFA726",
@@ -127,7 +128,7 @@
       "featured": true,
       "verified": true,
       "created_at": "2025-12-04T00:00:00Z",
-      "updated_at": "2026-07-19T11:28:19Z"
+      "updated_at": "2026-07-26T00:00:00Z"
     },
     {
       "id": "com.myriad.config-generator",
