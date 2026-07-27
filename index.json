@@ -1,13 +1,13 @@
 {
-  "$schema": "https://myriad.app/schemas/tapp-store-v1.json",
+  "$schema": "https://myriad.you/schemas/tapp-store-v1.json",
   "name": "Myriad Official Tapp Store",
-  "version": "1.8.17",
+  "version": "1.8.18",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-07-27T21:00:00Z",
+  "updated_at": "2026-07-27T23:30:00Z",
   "maintainer": {
     "name": "Myriad Team",
-    "email": "tapp@myriad.app",
+    "email": "tapp@myriad.you",
     "url": "https://github.com/Myriad-You/tapp-store"
   },
   "apps": [
@@ -248,9 +248,9 @@
     {
       "id": "com.myriad.aro",
       "name": "Aro",
-      "version": "1.0.20",
+      "version": "1.0.21",
       "description": "社交中心，统一管理消息、时间线、环网与个人资料",
-      "long_description": "社交中心：统一管理联邦消息（Channel/Room）、时间线、环网与个人资料。支持后台新消息通知、附件与多语言（中/英/日）。\n\n1.0.9: centered Accept/Reject invite CTAs in chat body.\n\n1.0.8: timeline share (X intent only), follow-graph mutual/domain badges.\n\n1.0.10: harden federation share rendering (SVG sanitize), block E2E plaintext auto-fallback, freeze send destination, safer store install and downloads.\n\n1.0.11: thin main (background-only), close pageModules file boundaries, history/files gen guards, import limits, disposable listener bag, clearer local-only DM privacy copy.\n\n1.0.12: pageListen DisposableBag for document/window guards (full ARO-14 coverage on long-lived listeners).\n\n1.0.13: fix download filename sanitization to strip path segments and \"..\".\n\n1.0.14: fix flash of E2E ciphertext JSON in chat — never stringify crypto envelopes; prefer plaintext over WS encrypted payload; fingerprint payload so poll refreshes decrypt.",
+      "long_description": "社交中心：统一管理联邦消息（Channel/Room）、时间线、环网与个人资料。支持后台新消息通知、附件与多语言（中/英/日）。\n\n1.0.21: declare network:fetch so sandbox CSP allows remote https avatars/covers/federation media.\n\n1.0.9: centered Accept/Reject invite CTAs in chat body.\n\n1.0.8: timeline share (X intent only), follow-graph mutual/domain badges.\n\n1.0.10: harden federation share rendering (SVG sanitize), block E2E plaintext auto-fallback, freeze send destination, safer store install and downloads.\n\n1.0.11: thin main (background-only), close pageModules file boundaries, history/files gen guards, import limits, disposable listener bag, clearer local-only DM privacy copy.\n\n1.0.12: pageListen DisposableBag for document/window guards (full ARO-14 coverage on long-lived listeners).\n\n1.0.13: fix download filename sanitization to strip path segments and \"..\".\n\n1.0.14: fix flash of E2E ciphertext JSON in chat — never stringify crypto envelopes; prefer plaintext over WS encrypted payload; fingerprint payload so poll refreshes decrypt.",
       "locales": {
         "en-US": {
           "name": "Aro",
@@ -263,7 +263,7 @@
       },
       "author": {
         "name": "Myriad Team",
-        "url": "https://github.com/Myriad-Dreamin"
+        "url": "https://github.com/Myriad-You"
       },
       "license": "MIT",
       "homepage": "https://github.com/Myriad-You/tapp-store/tree/main/apps/com.myriad.aro",
@@ -291,7 +291,8 @@
         "tappList:manage",
         "brew:read",
         "media:control",
-        "media:read"
+        "media:read",
+        "network:fetch"
       ],
       "icon_svg": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M2 12h20\"/><path d=\"M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z\"/></svg>",
       "theme_color": "#6366f1",
@@ -329,7 +330,7 @@
       "featured": true,
       "verified": true,
       "created_at": "2025-12-01T00:00:00Z",
-      "updated_at": "2026-07-27T21:00:00Z"
+      "updated_at": "2026-07-27T23:30:00Z"
     }
   ]
 }

@@ -2,7 +2,7 @@
 
 社交中心：消息（Channel/Room）、时间线、环网与个人资料。
 
-> 官方社交 Tapp（version 1.0.11）。设置页含出站投递队列与联邦签名密钥轮换（需宿主 `federation.rotateKeys`）。
+> 官方社交 Tapp（version 1.0.21）。设置页含出站投递队列与联邦签名密钥轮换（需宿主 `federation.rotateKeys`）。
 
 ## 功能
 
@@ -16,9 +16,19 @@
 
 `storage`, `ui:notification`, `ui:theme`,
 `federation:read|write|message|files`,
-`platform:read`, `report:read`, `tappList:read|manage`, `brew:read`
+`platform:read`, `report:read`, `tappList:read|manage`, `brew:read`,
+`media:control|read`, `network:fetch`
+
+> `network:fetch`：宿主沙箱将远端 `https` 图/媒体挂在此权限上（头像、封面、联邦附件直链）。
+> 为 **elevated**；已安装实例更新时需重新授权该权限（否则只保留旧 granted 交集）。
 
 ## Changelog
+
+### 1.0.21
+
+- Declare `network:fetch` so Myriad sandbox CSP allows remote https images
+  (GitHub avatars, remote federation media, share-card covers) without
+  host-origin proxy / domain whitelist.
 
 ### 1.0.11
 
@@ -66,5 +76,5 @@ index.js          # core（background + 内嵌 i18n 回退）
 page.html / page.css / styles.css
 page/*.js         # pageModules（UI 真源）
 i18n/{zh,en,ja}.json
-manifest.json     # version 1.0.11
+manifest.json     # version 1.0.21
 ```
