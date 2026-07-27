@@ -583,15 +583,29 @@ function isChannelComposerLocked() {
 }
 
 function isRoomInvitePending() {
-  if (state.activeKind !== 'room' || !state.roomDetail) return false;
+  if (state.activeKind !== 'room') return false;
+  // No detail yet (or only optimistic shell): treat as locked/pending-unknown.
+  if (!state.roomDetail) return !!state.activeId;
   var st = state.roomDetail.my_membership_status
-    || state.roomDetail.membership_status
-    || 'active';
+    || state.roomDetail.membership_status;
+  // Missing status while opening must not default to 'active' (would unlock compose).
+  if (st == null || st === '') {
+    return !!state.chatOpening || !!state.activeId;
+  }
   return st === 'pending';
 }
 
 function isRoomComposerLocked() {
-  return isRoomInvitePending();
+  if (state.activeKind !== 'room') return false;
+  // Align with channel: open room without known active membership stays locked.
+  if (!state.roomDetail) return !!state.activeId;
+  var st = state.roomDetail.my_membership_status
+    || state.roomDetail.membership_status;
+  if (st == null || st === '') {
+    // Optimistic list header may omit membership — keep locked until getRoom returns.
+    return true;
+  }
+  return st === 'pending';
 }
 
 function channelComposerLockReason() {

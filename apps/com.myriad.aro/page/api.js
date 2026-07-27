@@ -142,12 +142,18 @@ async function openConversation(kind, id) {
           state.channelDetail.remote_actor_name = hint.name;
           state.channelDetail.remote_actor_avatar = hint.avatar || '';
           state.channelDetail.remote_actor_url = hint.actorUrl || state.channelDetail.remote_actor_url;
-          state.channelDetail.status = hint.status || state.channelDetail.status;
+          // Only apply known statuses from the list (pending). Never invent 'active'.
+          if (hint.status) state.channelDetail.status = hint.status;
         } else if (kind === 'room') {
           state.roomDetail = state.roomDetail || {};
           state.roomDetail.name = hint.name;
           state.roomDetail.avatar_url = hint.avatar || '';
           state.roomDetail.room_id = id;
+          // List marks pending invites as status:'pending' — keep composer locked.
+          if (hint.status === 'pending') {
+            state.roomDetail.my_membership_status = 'pending';
+          }
+          // Do not default membership to active here; real getRoom fills it.
         }
         break;
       }
