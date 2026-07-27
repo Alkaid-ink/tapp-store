@@ -226,7 +226,11 @@ function safeInlineDownload(payload) {
     for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     var blob = new Blob([bytes], { type: mime });
     var url = URL.createObjectURL(blob);
-    var name = String(payload.filename || 'file').replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').slice(0, 180) || 'file';
+    // basename only; strip path segments and ".." so downloads never suggest traversal
+    var name = String(payload.filename || 'file').split(/[/\\]/).pop() || 'file';
+    name = name.replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').replace(/\.\./g, '_').replace(/^\.+/, '');
+    name = name.slice(0, 180);
+    if (!name || name === '.' || name === '..') name = 'file';
     return {
       url: url,
       filename: name,

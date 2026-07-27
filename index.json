@@ -1,10 +1,10 @@
 {
   "$schema": "https://myriad.app/schemas/tapp-store-v1.json",
   "name": "Myriad Official Tapp Store",
-  "version": "1.8.11",
+  "version": "1.8.12",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-07-27T02:11:15Z",
+  "updated_at": "2026-07-27T02:19:52Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.app",
@@ -246,9 +246,9 @@
     {
       "id": "com.myriad.aro",
       "name": "Aro",
-      "version": "1.0.12",
+      "version": "1.0.13",
       "description": "社交中心，统一管理消息、时间线、环网与个人资料",
-      "long_description": "社交中心：统一管理联邦消息（Channel/Room）、时间线、环网与个人资料。支持后台新消息通知、附件与多语言（中/英/日）。\n\n1.0.9: centered Accept/Reject invite CTAs in chat body.\n\n1.0.8: timeline share (X intent only), follow-graph mutual/domain badges.\n\n1.0.10: harden federation share rendering (SVG sanitize), block E2E plaintext auto-fallback, freeze send destination, safer store install and downloads.\n\n1.0.11: thin main (background-only), close pageModules file boundaries, history/files gen guards, import limits, disposable listener bag, clearer local-only DM privacy copy.\n\n1.0.12: pageListen DisposableBag for document/window guards (full ARO-14 coverage on long-lived listeners).",
+      "long_description": "社交中心：统一管理联邦消息（Channel/Room）、时间线、环网与个人资料。支持后台新消息通知、附件与多语言（中/英/日）。\n\n1.0.9: centered Accept/Reject invite CTAs in chat body.\n\n1.0.8: timeline share (X intent only), follow-graph mutual/domain badges.\n\n1.0.10: harden federation share rendering (SVG sanitize), block E2E plaintext auto-fallback, freeze send destination, safer store install and downloads.\n\n1.0.11: thin main (background-only), close pageModules file boundaries, history/files gen guards, import limits, disposable listener bag, clearer local-only DM privacy copy.\n\n1.0.12: pageListen DisposableBag for document/window guards (full ARO-14 coverage on long-lived listeners).\n\n1.0.13: fix download filename sanitization to strip path segments and \"..\".",
       "locales": {
         "en-US": {
           "name": "Aro",
@@ -325,7 +325,7 @@
       "featured": true,
       "verified": true,
       "created_at": "2025-12-01T00:00:00Z",
-      "updated_at": "2026-07-27T02:11:15Z"
+      "updated_at": "2026-07-27T02:19:52Z"
     }
   ]
 }
