@@ -217,8 +217,17 @@ function onMsgMenuOutside(e) {
 }
 
 // Single document listeners (not re-bound per render)
-document.addEventListener('click', onMsgMenuOutside);
-document.addEventListener('contextmenu', onMsgMenuOutside);
+// ARO-14: page-session disposables (also cleaned on destroy)
+(function bindMsgMenuOutsideOnce() {
+  if (typeof getPageDisposables === 'function') {
+    var bag = getPageDisposables();
+    bag.listen(document, 'click', onMsgMenuOutside);
+    bag.listen(document, 'contextmenu', onMsgMenuOutside);
+  } else {
+    document.addEventListener('click', onMsgMenuOutside);
+    document.addEventListener('contextmenu', onMsgMenuOutside);
+  }
+})();
 
 function showMsgMenu(msgEl, x, y) {
   closeMsgMenu();

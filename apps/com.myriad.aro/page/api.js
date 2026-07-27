@@ -500,7 +500,7 @@ async function doSend() {
   var ctx = {
     kind: state.activeKind,
     id: state.activeId,
-    generation: state.conversationGeneration,
+    generation: state.openGen,
     text: text,
     attach: attach,
     quoteMsg: state.quoteMsg
@@ -550,7 +550,7 @@ async function doSend() {
       }
       if (!dataUrl) throw new Error('Failed to read file');
       // Destination must not change mid-flight
-      if (state.conversationGeneration !== ctx.generation
+      if (state.openGen !== ctx.generation
         && !(state.activeKind === ctx.kind && state.activeId === ctx.id)) {
         throw new Error(lang.sendCancelled || 'Conversation changed; send cancelled');
       }

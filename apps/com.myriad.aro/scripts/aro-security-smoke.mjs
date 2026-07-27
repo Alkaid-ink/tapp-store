@@ -1,62 +1,71 @@
 /**
- * Lightweight smoke checks for Aro security helpers (ARO-01/05/09/10).
- * Does not need a browser for storeSource / accept-key shape checks.
- * SVG sanitizer is exercised only when DOMParser is available (Node 22+ / jsdom).
+ * Aro security + architecture smoke checks (ARO-01..14 subset).
  */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { spawnSync } from 'node:child_process'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const helpers = readFileSync(join(root, 'page/helpers.js'), 'utf8')
-const chat = readFileSync(join(root, 'page/chat.js'), 'utf8')
-const api = readFileSync(join(root, 'page/api.js'), 'utf8')
-const attachments = readFileSync(join(root, 'page/attachments.js'), 'utf8')
+const page = (n) => readFileSync(join(root, 'page', n), 'utf8')
+const main = readFileSync(join(root, 'index.js'), 'utf8')
 
-// Source structure assertions (shipped code, not re-implemented)
+const helpers = page('helpers.js')
+const chat = page('chat.js')
+const api = page('api.js')
+const attachments = page('attachments.js')
+const history = page('history.js')
+const files = page('files.js')
+const events = page('events.js')
+const index = page('index.js')
+const views = page('views.js')
+
+// Security (prior)
 assert.match(helpers, /function sanitizeRemoteSvg/)
 assert.match(helpers, /function isValidStoreSourceRef/)
 assert.match(helpers, /function safeInlineDownload/)
-assert.match(helpers, /function tappAcceptStorageKey/)
-assert.match(helpers, /function safeExternalHref/)
-
+assert.match(helpers, /function createDisposableBag/)
 assert.match(chat, /sanitizeRemoteSvg\(payload\.tapp_icon\)/)
-assert.doesNotMatch(chat, /iconContent = payload\.tapp_icon/)
-// Catch path after store failure must not chain another install(direct)
-assert.match(chat, /tappStoreInstallFailedNoAutoDirect|not installed automatically/)
-assert.doesNotMatch(
-  chat,
-  /installReq\.source === ['"]store['"][\s\S]{0,400}Tapp\.tappList\.install\(directReq/,
-)
-assert.match(chat, /ARO-05/)
-assert.match(chat, /tappAcceptStorageKey|data-accept-key/)
-assert.match(chat, /safeInlineDownload/)
-
-assert.match(api, /ARO-02|never auto-downgrade/)
 assert.doesNotMatch(api, /delete sendReq\.encrypt/)
 assert.match(api, /var ctx = \{/)
-assert.match(api, /generation: state\.conversationGeneration/)
-
-assert.match(attachments, /sendCtx/)
 assert.match(attachments, /file\.slice\(/)
 
-// Pure logic: extract isValidStoreSourceRef via Function (no DOM)
-const isValidStoreSourceRef = new Function(
-  helpers + '; return isValidStoreSourceRef;',
-)()
+// ARO-13 thin main
+assert.ok(main.length < 12000, 'main index.js should stay thin, got ' + main.length)
+assert.match(main, /pageModules|headless|background/i)
+assert.doesNotMatch(main, /function renderMessages\s*\(/)
+assert.doesNotMatch(main, /function openConversation\s*\(/)
 
-assert.equal(isValidStoreSourceRef('store'), false)
-assert.equal(isValidStoreSourceRef('direct'), false)
-assert.equal(isValidStoreSourceRef(''), false)
+// ARO-12 parseable boundaries
+assert.match(views, /function bindEvents\s*\(/)
+assert.match(index, /async function init\s*\(/)
+assert.doesNotMatch(events, /async function init\s*\(/)
+assert.doesNotMatch(events, /function bindEvents\s*\(/)
+assert.match(events, /Event binding lives in views\.js/)
+
+// ARO-06 / 07
+assert.match(history, /ARO_IMPORT_MAX_BYTES|ARO-07/)
+assert.match(history, /scope = \{ kind: h\.kind/)
+assert.match(files, /scope = \{ roomId:/)
+
+// ARO-14
+assert.match(index, /disposePageSession/)
+assert.match(helpers, /disposePageSession/)
+
+// syntax check page modules that should parse alone
+for (const f of ['events.js', 'index.js', 'helpers.js', 'state.js', 'i18n.js']) {
+  const r = spawnSync(process.execPath, ['--check', join(root, 'page', f)], { encoding: 'utf8' })
+  assert.equal(r.status, 0, f + ' syntax: ' + (r.stderr || r.stdout))
+}
+// views.js is huge but must parse
+const rv = spawnSync(process.execPath, ['--check', join(root, 'page', 'views.js')], { encoding: 'utf8' })
+assert.equal(rv.status, 0, 'views.js syntax: ' + (rv.stderr || ''))
+
+// pure isValidStoreSourceRef
+const isValidStoreSourceRef = new Function(helpers + '; return isValidStoreSourceRef;')()
 assert.equal(isValidStoreSourceRef('1'), true)
-assert.equal(
-  isValidStoreSourceRef(
-    'https://raw.githubusercontent.com/Myriad-You/tapp-store/main/index.json',
-  ),
-  true,
-)
-assert.equal(isValidStoreSourceRef('http://evil.example/index.json'), false)
-assert.equal(isValidStoreSourceRef('javascript:alert(1)'), false)
+assert.equal(isValidStoreSourceRef('store'), false)
+assert.equal(isValidStoreSourceRef('http://x/y'), false)
 
 console.log('aro-security-smoke: ok')

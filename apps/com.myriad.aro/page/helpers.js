@@ -1,6 +1,48 @@
 // ==================== Helpers ====================
 function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
 
+/**
+ * ARO-14: track subscriptions for lifecycle teardown.
+ * Usage: bag.listen(el, 'click', fn); bag.add(unsubFn); bag.disposeAll()
+ */
+function createDisposableBag() {
+  var items = [];
+  return {
+    add: function (disposeFn) {
+      if (typeof disposeFn === 'function') items.push(disposeFn);
+      return disposeFn;
+    },
+    listen: function (target, type, handler, options) {
+      if (!target || typeof target.addEventListener !== 'function') return;
+      target.addEventListener(type, handler, options);
+      items.push(function () {
+        try { target.removeEventListener(type, handler, options); } catch (e) { /* ignore */ }
+      });
+    },
+    disposeAll: function () {
+      var list = items.slice();
+      items.length = 0;
+      for (var i = list.length - 1; i >= 0; i--) {
+        try { list[i](); } catch (e) { /* ignore */ }
+      }
+    },
+    size: function () { return items.length; },
+  };
+}
+
+/** Page-session disposable bag (recreated each init). */
+var pageDisposables = null;
+function getPageDisposables() {
+  if (!pageDisposables) pageDisposables = createDisposableBag();
+  return pageDisposables;
+}
+function disposePageSession() {
+  if (pageDisposables) {
+    pageDisposables.disposeAll();
+    pageDisposables = null;
+  }
+}
+
 /** SVG elements allowed when rendering untrusted remote icon markup (ARO-01). */
 var SAFE_SVG_TAGS = {
   svg: 1, g: 1, path: 1, circle: 1, rect: 1, ellipse: 1, line: 1, polyline: 1,

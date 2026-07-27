@@ -475,24 +475,39 @@ async function loadMoreHistoryMessages() {
   var h = ensureHistoryState();
   if (!h.open || !h.kind || !h.id || h.loadingMore) return;
   if (!h.hasMore && h.messages.length) return;
+  // ARO-06: freeze conversation scope for this request
+  var scope = { kind: h.kind, id: h.id, gen: state.openGen };
   h.loadingMore = true;
   h.error = null;
   updateHistoryFooter();
   try {
     var before = h.messages.length ? h.messages[0].message_id : undefined;
-    var batch = await fetchMessagesPage(h.kind, h.id, before, HISTORY_PAGE_LIMIT);
+    var batch = await fetchMessagesPage(scope.kind, scope.id, before, HISTORY_PAGE_LIMIT);
+    // Discard if history panel target or active open generation changed
+    var h2 = ensureHistoryState();
+    if (!h2.open || h2.kind !== scope.kind || h2.id !== scope.id) return;
+    if (typeof isConversationCurrent === 'function'
+      && !isConversationCurrent(scope.kind, scope.id, scope.gen)
+      && !(state.activeKind === scope.kind && state.activeId === scope.id)) {
+      // still allow history browser for the same conversation even if openGen moved
+      // only abort when history panel itself left this conversation
+    }
     if (!batch.length) {
-      h.hasMore = false;
+      h2.hasMore = false;
     } else {
-      var prevLen = h.messages.length;
-      h.messages = mergeMessageListsAsc(h.messages, batch);
-      h.hasMore = batch.length >= HISTORY_PAGE_LIMIT && h.messages.length > prevLen;
+      var prevLen = h2.messages.length;
+      h2.messages = mergeMessageListsAsc(h2.messages, batch);
+      h2.hasMore = batch.length >= HISTORY_PAGE_LIMIT && h2.messages.length > prevLen;
     }
   } catch (e) {
-    h.error = (typeof getErrorMessage === 'function' ? getErrorMessage(e) : '') || lang.historyLoadFail || lang.loadFail || 'Load failed';
+    var h3 = ensureHistoryState();
+    if (h3.open && h3.kind === scope.kind && h3.id === scope.id) {
+      h3.error = (typeof getErrorMessage === 'function' ? getErrorMessage(e) : '') || lang.historyLoadFail || lang.loadFail || 'Load failed';
+    }
     console.error('[Aro] loadMoreHistoryMessages', e);
   } finally {
-    h.loadingMore = false;
+    var h4 = ensureHistoryState();
+    if (h4.kind === scope.kind && h4.id === scope.id) h4.loadingMore = false;
     renderHistoryList();
   }
 }
@@ -893,6 +908,12 @@ async function saveImportedArchives(list) {
   return trimmed;
 }
 
+/** ARO-07: hard limits for local history import */
+var ARO_IMPORT_MAX_BYTES = 4 * 1024 * 1024; // 4 MiB text
+var ARO_IMPORT_MAX_CONVERSATIONS = 50;
+var ARO_IMPORT_MAX_MESSAGES_TOTAL = 5000;
+var ARO_IMPORT_MAX_MESSAGES_PER_CONV = 2000;
+
 async function importChatArchiveFromFile(file) {
   if (!file) return;
   var statusEl = $('backup-status');
@@ -903,6 +924,15 @@ async function importChatArchiveFromFile(file) {
     if (kind === 'ok') statusEl.classList.add('backup-status-ok');
     if (kind === 'error') statusEl.classList.add('backup-status-error');
   };
+  // ARO-07: reject oversized files before read/parse
+  if (typeof file.size === 'number' && file.size > ARO_IMPORT_MAX_BYTES) {
+    setStatus(
+      (lang.backupImportTooLarge || 'Archive too large (max {n})')
+        .replace('{n}', String(Math.round(ARO_IMPORT_MAX_BYTES / (1024 * 1024))) + ' MB'),
+      'error'
+    );
+    return;
+  }
   setStatus(lang.backupImporting || 'Importing…');
   try {
     var text = await new Promise(function (resolve, reject) {
@@ -911,20 +941,52 @@ async function importChatArchiveFromFile(file) {
       reader.onerror = function () { reject(reader.error || new Error('read failed')); };
       reader.readAsText(file);
     });
+    if (text.length > ARO_IMPORT_MAX_BYTES) {
+      throw new Error(lang.backupImportTooLarge || 'Archive too large');
+    }
     var archive = parseChatArchive(text);
+    if (!archive || typeof archive !== 'object') {
+      throw new Error(lang.backupImportFail || 'Invalid archive');
+    }
+    var convs = Array.isArray(archive.conversations) ? archive.conversations : [];
+    if (convs.length > ARO_IMPORT_MAX_CONVERSATIONS) {
+      throw new Error(
+        (lang.backupImportTooManyConv || 'Too many conversations (max {n})')
+          .replace('{n}', String(ARO_IMPORT_MAX_CONVERSATIONS))
+      );
+    }
     var msgCount = 0;
-    (archive.conversations || []).forEach(function (c) {
-      msgCount += (c.messages && c.messages.length) || c.message_count || 0;
+    convs.forEach(function (c) {
+      if (!c || typeof c !== 'object') return;
+      var msgs = Array.isArray(c.messages) ? c.messages : [];
+      if (msgs.length > ARO_IMPORT_MAX_MESSAGES_PER_CONV) {
+        c.messages = msgs.slice(0, ARO_IMPORT_MAX_MESSAGES_PER_CONV);
+        msgs = c.messages;
+      }
+      // Drop nested SVG/HTML-like share fields on import (defense in depth)
+      msgs.forEach(function (m) {
+        if (!m || !m.payload || typeof m.payload !== 'object') return;
+        if (m.payload.tapp_icon) m.payload.tapp_icon = '';
+        if (m.payload.icon && String(m.payload.icon).indexOf('<') !== -1) m.payload.icon = '';
+      });
+      msgCount += msgs.length || c.message_count || 0;
     });
+    if (msgCount > ARO_IMPORT_MAX_MESSAGES_TOTAL) {
+      throw new Error(
+        (lang.backupImportTooManyMsg || 'Too many messages (max {n})')
+          .replace('{n}', String(ARO_IMPORT_MAX_MESSAGES_TOTAL))
+      );
+    }
+    archive.conversations = convs;
     var entry = {
       id: 'imp-' + Date.now().toString(36),
       imported_at: new Date().toISOString(),
-      source_name: file.name || 'archive.json',
+      source_name: String(file.name || 'archive.json').slice(0, 200),
       exported_at: archive.exported_at || '',
       identity: archive.identity || null,
       summary: archive.summary || {
-        channels: (archive.conversations || []).filter(function (c) { return c.kind === 'channel'; }).length,
-        rooms: (archive.conversations || []).filter(function (c) { return c.kind === 'room'; }).length,
+        channels: convs.filter(function (c) { return c && c.kind === 'channel'; }).length,
+        rooms: convs.filter(function (c) { return c && c.kind === 'room'; }).length,
         messages: msgCount,
       },
       // Store full archive for offline browse

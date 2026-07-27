@@ -450,18 +450,22 @@ async function openRoomFiles() {
 async function loadRoomFilesFirstPage() {
   var rf = ensureRoomFilesState();
   if (!rf.roomId) return;
+  // ARO-06: freeze room + open generation
+  var scope = { roomId: rf.roomId, gen: state.openGen };
 
   if (supportsListRoomFiles()) {
     try {
-      var page = await fetchRoomFilesPage(rf.roomId, {
+      var page = await fetchRoomFilesPage(scope.roomId, {
         filter: rf.filter,
         q: normalizeSearchQuery(rf.query) || undefined,
         limit: ROOM_FILES_PAGE_LIMIT,
       });
-      rf.items = page.items;
-      rf.hasMore = page.hasMore;
-      rf.source = 'server';
-      rf.oldestMessageId = oldestMessageIdFromItems(page.items);
+      var rf2 = ensureRoomFilesState();
+      if (!rf2.open || rf2.roomId !== scope.roomId) return;
+      rf2.items = page.items;
+      rf2.hasMore = page.hasMore;
+      rf2.source = 'server';
+      rf2.oldestMessageId = oldestMessageIdFromItems(page.items);
       return;
     } catch (e) {
       console.warn('[Aro] listRoomFiles failed, falling back to client scan', e);
@@ -469,7 +473,9 @@ async function loadRoomFilesFirstPage() {
   }
 
   // Phase 0 fallback
-  var transferMap = await fetchRoomTransfersMap(rf.roomId);
+  var transferMap = await fetchRoomTransfersMap(scope.roomId);
+  var rf3 = ensureRoomFilesState();
+  if (!rf3.open || rf3.roomId !== scope.roomId) return;
   rebuildRoomFilesFromStateMessages(transferMap);
 }
 
@@ -490,43 +496,52 @@ function oldestMessageIdFromItems(items) {
 async function loadMoreRoomFiles() {
   var rf = ensureRoomFilesState();
   if (!rf.open || !rf.roomId || rf.loadingMore || !rf.hasMore) return;
+  var scope = { roomId: rf.roomId, gen: state.openGen, source: rf.source };
   rf.loadingMore = true;
   rf.error = null;
   updateRoomFilesFooter();
   try {
-    if (rf.source === 'server' && supportsListRoomFiles()) {
+    if (scope.source === 'server' && supportsListRoomFiles()) {
       var before = rf.oldestMessageId || undefined;
-      var page = await fetchRoomFilesPage(rf.roomId, {
+      var page = await fetchRoomFilesPage(scope.roomId, {
         before: before,
         filter: rf.filter,
         q: normalizeSearchQuery(rf.query) || undefined,
         limit: ROOM_FILES_PAGE_LIMIT,
       });
+      var rfA = ensureRoomFilesState();
+      if (!rfA.open || rfA.roomId !== scope.roomId) return;
       if (!page.items.length) {
-        rf.hasMore = false;
+        rfA.hasMore = false;
       } else {
         var seen = {};
-        rf.items.forEach(function (it) { seen[it.key] = true; });
+        rfA.items.forEach(function (it) { seen[it.key] = true; });
         page.items.forEach(function (it) {
-          if (!seen[it.key]) rf.items.push(it);
+          if (!seen[it.key]) rfA.items.push(it);
         });
-        rf.hasMore = page.hasMore;
+        rfA.hasMore = page.hasMore;
         var nextOldest = oldestMessageIdFromItems(page.items);
-        if (nextOldest) rf.oldestMessageId = nextOldest;
+        if (nextOldest) rfA.oldestMessageId = nextOldest;
       }
     } else {
       // Client: page older room messages into live window
       if (typeof Tapp === 'undefined' || !Tapp.federation || typeof Tapp.federation.getRoomMessages !== 'function') {
-        rf.hasMore = false;
+        var rfB = ensureRoomFilesState();
+        if (rfB.roomId === scope.roomId) rfB.hasMore = false;
         return;
       }
       var beforeMsg = rf.oldestMessageId || undefined;
-      var res = await Tapp.federation.getRoomMessages(rf.roomId, beforeMsg, 100);
+      var res = await Tapp.federation.getRoomMessages(scope.roomId, beforeMsg, 100);
       var batch = unwrapMessagesResponse(res);
+      var rfC = ensureRoomFilesState();
+      if (!rfC.open || rfC.roomId !== scope.roomId) return;
       if (!batch.length) {
-        rf.hasMore = false;
+        rfC.hasMore = false;
       } else {
-        if (state.activeKind === 'room' && state.activeId === rf.roomId) {
+        // Only merge into live transcript when still viewing this room
+        if (state.activeKind === 'room' && state.activeId === scope.roomId
+          && (typeof isOpenGenCurrent !== 'function' || isOpenGenCurrent(scope.gen)
+            || state.activeId === scope.roomId)) {
           var existing = {};
           (state.messages || []).forEach(function (m) {
             if (m.message_id) existing[m.message_id] = true;
@@ -545,20 +560,27 @@ async function loadMoreRoomFiles() {
           } else if (older.length) {
             state.messages = older.concat(state.messages || []);
           }
-          rf.oldestMessageId = state.messages.length ? state.messages[0].message_id : rf.oldestMessageId;
+          rfC.oldestMessageId = state.messages.length ? state.messages[0].message_id : rfC.oldestMessageId;
         } else {
-          rf.oldestMessageId = batch[0].message_id || rf.oldestMessageId;
+          rfC.oldestMessageId = batch[0].message_id || rfC.oldestMessageId;
         }
-        rf.hasMore = batch.length >= 100;
-        var transferMap = await fetchRoomTransfersMap(rf.roomId);
-        rebuildRoomFilesFromStateMessages(transferMap);
+        rfC.hasMore = batch.length >= 100;
+        var transferMap = await fetchRoomTransfersMap(scope.roomId);
+        var rfD = ensureRoomFilesState();
+        if (rfD.open && rfD.roomId === scope.roomId) {
+          rebuildRoomFilesFromStateMessages(transferMap);
+        }
       }
     }
   } catch (e) {
-    rf.error = (typeof getErrorMessage === 'function' ? getErrorMessage(e) : '') || lang.loadFail || 'Load failed';
+    var rfE = ensureRoomFilesState();
+    if (rfE.open && rfE.roomId === scope.roomId) {
+      rfE.error = (typeof getErrorMessage === 'function' ? getErrorMessage(e) : '') || lang.loadFail || 'Load failed';
+    }
     console.error('[Aro] loadMoreRoomFiles', e);
   } finally {
-    rf.loadingMore = false;
+    var rfF = ensureRoomFilesState();
+    if (rfF.roomId === scope.roomId) rfF.loadingMore = false;
     renderRoomFilesList();
   }
 }

@@ -1,3 +1,14 @@
+// ==================== Init ====================
+async function init() {
+  if (typeof disposePageSession === 'function') disposePageSession();
+  if (typeof getPageDisposables === 'function') getPageDisposables();
+  try {
+    var user = await Tapp.context.getUser();
+    var actorUrl = user ? normalizeFederationUrl(user.actor_url) : '';
+    if (actorUrl) state.localActorUrl = actorUrl;
+  } catch (e) { /* ignore */ }
+
+  try {
     var localeRes = await Tapp.ui.getLocale();
     if (localeRes) setLocale(localeRes);
   } catch (e) { /* ignore */ }
@@ -146,7 +157,8 @@
 
   applyDialogLabels();
 
-  Tapp.ui.onLocaleChange(function (newLocale) {
+  // ARO-14: track locale subscription for destroy
+  var unsubLocale = Tapp.ui.onLocaleChange(function (newLocale) {
     setLocale(newLocale);
     applyLabels();
     applyDialogLabels();
@@ -157,6 +169,9 @@
     if (state.currentView === 'feed') { renderFeedContent(); }
     else if (state.currentView === 'rings') { renderRingsSidebar(); if (state.activeRingId) renderRingDetail(); }
   });
+  if (typeof getPageDisposables === 'function') {
+    getPageDisposables().add(typeof unsubLocale === 'function' ? unsubLocale : function () {});
+  }
 }
 
 // ==================== Entry ====================
@@ -168,5 +183,6 @@ if (window._TAPP_MODE === 'page' || window._TAPP_HAS_HTML) {
   Tapp.lifecycle.onDestroy(function () {
     stopPolling();
     unsubscribeRealtime();
+    if (typeof disposePageSession === 'function') disposePageSession();
   });
 }
