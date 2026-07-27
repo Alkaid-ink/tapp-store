@@ -2,7 +2,7 @@
 
 社交中心：消息（Channel/Room）、时间线、环网与个人资料。
 
-> 官方社交 Tapp（version 1.0.30）。设置页含出站投递队列与联邦签名密钥轮换（需宿主 `federation.rotateKeys`）。
+> 官方社交 Tapp（version 1.0.31）。设置页含出站投递队列与联邦签名密钥轮换（需宿主 `federation.rotateKeys`）。
 
 ## 功能
 
@@ -24,6 +24,10 @@
 > 为 **elevated**；已安装实例更新时需重新授权该权限（否则只保留旧 granted 交集）。
 
 ## Changelog
+
+### 1.0.31
+
+- Fix store install 400 missing `page/stickers.js`: sticker UI lives in `attachments.js` (always in download.page_modules); drop separate pageModule.
 
 ### 1.0.30
 
