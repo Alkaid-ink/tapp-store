@@ -308,9 +308,10 @@ function renderChatHeader() {
       + (!roomPending && rm.my_role && rm.my_role !== 'member' ? '<span class="meta-badge badge-role">' + esc(roleLabel(rm.my_role)) + '</span>' : '')
       + e2eStatusBadgeHtml();
     if (rm.is_public && rm.room_id) {
+      var shareId = typeof shareableRoomId === 'function' ? shareableRoomId(rm) : rm.room_id;
       metaHtml += '<button type="button" class="chat-room-id-btn" id="chat-room-id-btn" title="'
         + esc(lang.copyRoomId || lang.copy || 'Copy') + '">'
-        + esc((lang.roomId || 'ID') + ': ' + rm.room_id) + '</button>';
+        + esc((lang.roomId || 'ID') + ': ' + shareId) + '</button>';
     }
     metaEl.innerHTML = metaHtml;
     var menuItems = '';
@@ -387,7 +388,9 @@ function renderChatHeader() {
   var roomIdBtn = $('chat-room-id-btn');
   if (roomIdBtn && state.roomDetail && state.roomDetail.room_id) {
     roomIdBtn.addEventListener('click', function () {
-      var id = state.roomDetail.room_id;
+      var id = typeof shareableRoomId === 'function'
+        ? shareableRoomId(state.roomDetail)
+        : state.roomDetail.room_id;
       if (typeof copyTextToClipboard === 'function') {
         copyTextToClipboard(id, { okTitle: lang.copied || 'Copied' });
       } else if (typeof fallbackCopyText === 'function') {

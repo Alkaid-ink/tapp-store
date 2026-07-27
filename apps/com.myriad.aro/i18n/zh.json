@@ -250,7 +250,7 @@
   "joinRoomFail": "加入失败",
   "joinRoomOk": "已加入群组",
   "joinRoomById": "加入公开群",
-  "joinRoomIdPlaceholder": "粘贴 room id",
+  "joinRoomIdPlaceholder": "粘贴 room id（rm_… 或 rm_…@主机）",
   "joinRoomIdMissing": "请输入 room id",
   "makePublic": "设为公开群组",
   "makePublicHint": "公开后会展示可分享的群组 ID，且无法再改回私有。",

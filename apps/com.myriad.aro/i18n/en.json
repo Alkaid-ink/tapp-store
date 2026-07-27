@@ -250,7 +250,7 @@
   "joinRoomFail": "Failed to join",
   "joinRoomOk": "Joined the group",
   "joinRoomById": "Join public group",
-  "joinRoomIdPlaceholder": "Paste room id",
+  "joinRoomIdPlaceholder": "Paste room id (rm_… or rm_…@host)",
   "joinRoomIdMissing": "Enter a room id",
   "makePublic": "Make group public",
   "makePublicHint": "Public groups show a shareable room id. This cannot be undone.",

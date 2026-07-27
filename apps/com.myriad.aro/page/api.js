@@ -232,29 +232,42 @@ function getE2eStatusForActive() {
       return { status: 'none', label: '' };
     }
     if (state.activeKind === 'room') {
-      // Room multi-recipient: only encrypt when we already published and at least
-      // one peer key is known (best-effort from detail if present).
+      // Room multi-recipient: encrypt only when ≥2 public keys are published
+      // (self + at least one peer). Keys come from getRoom.shared_data_config.
       var rd = state.roomDetail || {};
       var shared = rd.shared_data_config || rd.sharedDataConfig || {};
       var re2e = (shared.e2e || {});
       var keys = re2e.published_keys || re2e.publishedKeys || {};
       var n = 0;
+      var hasLocalKey = false;
       if (keys && typeof keys === 'object') {
         for (var k in keys) {
-          if (Object.prototype.hasOwnProperty.call(keys, k) && keys[k]) n++;
+          if (Object.prototype.hasOwnProperty.call(keys, k) && keys[k]) {
+            n++;
+            if (state.localActorUrl && typeof sameActorUrl === 'function'
+              ? sameActorUrl(k, state.localActorUrl)
+              : (state.localActorUrl && k === state.localActorUrl)) {
+              hasLocalKey = true;
+            }
+            if (k === '__local__') hasLocalKey = true;
+          }
         }
       }
-      if (n >= 2) {
+      // Established: ≥2 published keys, and (if we know local actor) our key is among them.
+      // Solo room stays waiting until a peer publishes.
+      if (n >= 2 && (hasLocalKey || !state.localActorUrl)) {
         return {
           status: 'established',
           label: lang.e2eEstablished || 'End-to-end encryption active',
           peerCount: n,
         };
       }
-      if (n === 1) {
+      if (n >= 1) {
         return {
           status: 'waiting',
-          label: lang.e2eLocalOnly || lang.e2eWaitingPeer || 'Waiting for peer encryption key',
+          label: hasLocalKey
+            ? (lang.e2eLocalOnly || lang.e2eWaitingPeer || 'Waiting for peer encryption key')
+            : (lang.e2eWaitingPeer || 'Waiting for peer encryption key'),
           peerCount: n,
         };
       }
@@ -393,6 +406,29 @@ async function doRoomE2eExchange() {
         if (rm2) state.roomDetail = rm2.data || rm2;
       } catch (eR) { /* ignore */ }
     }
+    // Optimistic patch if getRoom still omits shared_data_config (older hosts).
+    // Prefer getRoom's published_keys when present; only seed self-key when map empty.
+    if (state.roomDetail && res && (res.public_key || (res.data && res.data.public_key))) {
+      var pk = res.public_key || res.data.public_key;
+      var sdc = state.roomDetail.shared_data_config || {};
+      var e2eObj = sdc.e2e || {};
+      var pkeys = e2eObj.published_keys || e2eObj.publishedKeys || {};
+      var keyCount = 0;
+      if (pkeys && typeof pkeys === 'object') {
+        for (var pkK in pkeys) {
+          if (Object.prototype.hasOwnProperty.call(pkeys, pkK) && pkeys[pkK]) keyCount++;
+        }
+      }
+      if (keyCount === 0 && pk) {
+        // Use a stable placeholder only when we have no actor URL yet — never
+        // invent a second key entry that could false-trigger "established".
+        var selfKey = state.localActorUrl || '__local__';
+        pkeys[selfKey] = pk;
+      }
+      e2eObj.published_keys = pkeys;
+      sdc.e2e = e2eObj;
+      state.roomDetail.shared_data_config = sdc;
+    }
     if (typeof renderChatHeader === 'function') renderChatHeader();
     var est = getE2eStatusForActive();
     try {
@@ -426,12 +462,15 @@ async function doTransferOwnership() {
     } catch (e0) { /* ignore */ }
     return;
   }
+  // Active non-owner non-observer members only (pending invites cannot receive ownership).
   var candidates = (state.members || []).filter(function (m) {
-    return m.role !== 'owner' && m.role !== 'observer' && !(typeof isLocalActor === 'function' && isLocalActor(m.actor_url));
-  });
-  // Include local non-self members too
-  candidates = (state.members || []).filter(function (m) {
-    return m.role !== 'owner' && m.role !== 'observer';
+    if (!m || !m.actor_url) return false;
+    var st = m.membership_status || m.status || 'active';
+    if (st && st !== 'active') return false;
+    if (m.role === 'owner' || m.role === 'observer') return false;
+    // Exclude self (current owner)
+    if (typeof isLocalActor === 'function' && isLocalActor(m.actor_url)) return false;
+    return true;
   });
   if (!candidates.length) {
     try {
@@ -442,23 +481,31 @@ async function doTransferOwnership() {
     } catch (e1) { /* ignore */ }
     return;
   }
-  var lines = candidates.map(function (m, i) {
+  // Sandbox iframe blocks window.prompt — use in-app picker.
+  var pickOpts = candidates.map(function (m) {
     var name = m.display_name || (m.actor_url || '').split('/').pop() || m.actor_url;
-    return (i + 1) + '. ' + name;
-  }).join('\n');
-  var pick = window.prompt(
-    (lang.transferOwnerPrompt || 'Transfer ownership to member number:') + '\n' + lines,
-    '1'
-  );
-  if (!pick) return;
-  var idx = parseInt(pick, 10) - 1;
-  if (isNaN(idx) || idx < 0 || idx >= candidates.length) {
+    var sub = m.role && m.role !== 'member' ? String(m.role) : '';
+    return { id: m.actor_url, label: name, sub: sub };
+  });
+  var pickTitle = lang.transferOwnerPrompt || 'Transfer ownership to:';
+  var pickedId = typeof aroPickOption === 'function'
+    ? await aroPickOption(pickTitle, pickOpts)
+    : null;
+  if (!pickedId) return;
+  var target = null;
+  for (var i = 0; i < candidates.length; i++) {
+    if (candidates[i].actor_url === pickedId
+      || (typeof sameActorUrl === 'function' && sameActorUrl(candidates[i].actor_url, pickedId))) {
+      target = candidates[i];
+      break;
+    }
+  }
+  if (!target) {
     try {
       Tapp.ui.showNotification({ title: lang.transferOwnerInvalid || 'Invalid choice', type: 'error' });
     } catch (e2) { /* ignore */ }
     return;
   }
-  var target = candidates[idx];
   var label = target.display_name || target.actor_url;
   if (!(await aroConfirm((lang.transferOwnerConfirm || 'Transfer ownership to {name}?').replace('{name}', label), true))) {
     return;
@@ -466,11 +513,12 @@ async function doTransferOwnership() {
   try {
     await Tapp.federation.transferRoomOwnership(state.activeId, target.actor_url);
     var detail = await Tapp.federation.getRoom(state.activeId);
-    if (detail) state.roomDetail = detail;
+    if (detail) state.roomDetail = detail.data || detail;
     var membersRes = await Tapp.federation.getRoomMembers(state.activeId);
     state.members = unwrapRoomMembers(membersRes);
     renderMembers();
     renderChatHeader();
+    if (typeof renderConvList === 'function') renderConvList();
     try {
       Tapp.ui.showNotification({
         title: lang.transferOwnerOk || 'Ownership transferred',
@@ -1453,7 +1501,9 @@ function showEditRoomDialog() {
   if (idBox && idVal) {
     if (alreadyPublic && state.roomDetail.room_id) {
       idBox.style.display = '';
-      idVal.textContent = state.roomDetail.room_id;
+      idVal.textContent = typeof shareableRoomId === 'function'
+        ? shareableRoomId(state.roomDetail)
+        : state.roomDetail.room_id;
     } else {
       idBox.style.display = 'none';
       idVal.textContent = '';
@@ -1514,9 +1564,12 @@ async function doSaveRoom() {
     renderConvList();
     if (!alreadyPublic && wantPublic) {
       try {
+        var shareIdAfter = typeof shareableRoomId === 'function'
+          ? shareableRoomId(state.roomDetail)
+          : state.activeId;
         Tapp.ui.showNotification({
           title: lang.publicGroup || 'Public',
-          message: (lang.roomId || 'Room ID') + ': ' + state.activeId,
+          message: (lang.roomId || 'Room ID') + ': ' + shareIdAfter,
           type: 'success',
         });
       } catch (eN) { /* ignore */ }
@@ -1875,9 +1928,12 @@ async function doCreateRoom() {
       openConversation('room', result.room_id);
       if (isPublic) {
         try {
+          var createdShare = typeof shareableRoomId === 'function'
+            ? shareableRoomId(result)
+            : result.room_id;
           Tapp.ui.showNotification({
             title: lang.publicGroup || 'Public',
-            message: (lang.roomId || 'Room ID') + ': ' + result.room_id,
+            message: (lang.roomId || 'Room ID') + ': ' + createdShare,
             type: 'success',
           });
         } catch (eN) { /* ignore */ }
@@ -1891,11 +1947,14 @@ async function doCreateRoom() {
   }
 }
 
-/** Join a public (or open) room by room id. */
+/** Join a public (or open) room by room id (bare or shareable `rm_…@home`). */
 async function doJoinRoomById() {
   var input = $('join-room-id-input');
   if (!input) return;
-  var roomId = (input.value || '').trim();
+  var parsed = typeof parseJoinRoomInput === 'function'
+    ? parseJoinRoomInput(input.value)
+    : { roomId: (input.value || '').trim(), homeServer: '' };
+  var roomId = parsed.roomId;
   if (!roomId) {
     flashCreateInput(input);
     try {
@@ -1913,7 +1972,12 @@ async function doJoinRoomById() {
   var btn = $('join-room-id-btn');
   if (btn) { btn.disabled = true; btn.textContent = lang.joining || lang.creating || '…'; }
   try {
-    await Tapp.federation.joinRoom(roomId);
+    var joinArg = parsed.homeServer
+      ? { home_server: parsed.homeServer }
+      : undefined;
+    // Pass shareable form in path so backend can parse home even if body is ignored.
+    var joinRef = parsed.homeServer ? (roomId + '@' + parsed.homeServer) : roomId;
+    await Tapp.federation.joinRoom(joinRef, joinArg);
     hideCreateDialog();
     input.value = '';
     await loadConversations();

@@ -238,7 +238,7 @@
   "joinRoomFail": "参加に失敗しました",
   "joinRoomOk": "グループに参加しました",
   "joinRoomById": "公開グループに参加",
-  "joinRoomIdPlaceholder": "room id を貼り付け",
+  "joinRoomIdPlaceholder": "room id を貼り付け（rm_… または rm_…@host）",
   "joinRoomIdMissing": "room id を入力してください",
   "makePublic": "グループを公開する",
   "makePublicHint": "公開すると room id を共有できます。非公開には戻せません。",

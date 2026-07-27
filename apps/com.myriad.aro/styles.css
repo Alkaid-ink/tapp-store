@@ -2146,6 +2146,16 @@ button.aro-select-trigger.create-input{
 .dark .confirm-message{color:rgba(255,255,255,.9)}
 .dark .confirm-btn-cancel{background:rgba(255,255,255,.08);color:rgba(255,255,255,.9)}
 
+/* In-app single-select list (replaces window.prompt in sandbox) */
+.aro-pick-dialog{width:min(360px,92vw)}
+.aro-pick-list{display:flex;flex-direction:column;gap:6px;max-height:min(50vh,320px);overflow-y:auto;margin:0 0 14px;padding:0}
+.aro-pick-item{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:10px 12px;border:1px solid rgba(128,128,128,.14);border-radius:12px;background:rgba(128,128,128,.05);color:var(--text-primary,#1a1a1a);font:inherit;text-align:left;cursor:pointer;transition:background .12s,border-color .12s}
+.aro-pick-item:hover,.aro-pick-item:focus{outline:none;background:rgba(99,102,241,.1);border-color:rgba(99,102,241,.35)}
+.aro-pick-label{font-size:13px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}
+.aro-pick-sub{font-size:11px;opacity:.65;font-weight:500}
+.dark .aro-pick-item{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.08);color:rgba(255,255,255,.92)}
+.dark .aro-pick-item:hover,.dark .aro-pick-item:focus{background:rgba(99,102,241,.18);border-color:rgba(99,102,241,.4)}
+
 /* ===== Motion layer (intentional, short, reduced-motion aware) ===== */
 :root{
   --aro-ease:cubic-bezier(.2,.8,.2,1);

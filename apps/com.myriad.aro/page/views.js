@@ -3657,6 +3657,50 @@ function bindEvents() {
       autoResizeInput(this);
       updateSendState();
     });
+    // Paste image from clipboard (screenshot / copy image) → attach preview
+    input.addEventListener('paste', function (e) {
+      if (!state.activeId || state.sending) return;
+      if (typeof isChannelComposerLocked === 'function' && isChannelComposerLocked()) return;
+      if (typeof isRoomComposerLocked === 'function' && isRoomComposerLocked()) return;
+      var cd = e.clipboardData || (e.originalEvent && e.originalEvent.clipboardData);
+      if (!cd) return;
+      var file = null;
+      // Prefer items (image/*) so we don't steal text-only pastes
+      if (cd.items && cd.items.length) {
+        for (var i = 0; i < cd.items.length; i++) {
+          var it = cd.items[i];
+          if (it && it.kind === 'file' && it.type && it.type.indexOf('image/') === 0) {
+            file = it.getAsFile();
+            if (file) break;
+          }
+        }
+      }
+      if (!file && cd.files && cd.files.length) {
+        for (var j = 0; j < cd.files.length; j++) {
+          if (cd.files[j] && cd.files[j].type && cd.files[j].type.indexOf('image/') === 0) {
+            file = cd.files[j];
+            break;
+          }
+        }
+      }
+      if (!file) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof handleFileSelect === 'function') {
+        // Ensure a filename for screenshots that often arrive as image.png or empty
+        if (!file.name || file.name === 'image.png' || file.name === 'blob') {
+          try {
+            var ext = (file.type && file.type.split('/')[1]) || 'png';
+            var named = new File([file], 'paste-' + Date.now() + '.' + ext, {
+              type: file.type || 'image/png',
+            });
+            handleFileSelect(named, 'image');
+            return;
+          } catch (eName) { /* fall through */ }
+        }
+        handleFileSelect(file, 'image');
+      }
+    });
   }
   updateSendState();
 
@@ -3815,7 +3859,11 @@ function bindEvents() {
   if (editRoomSaveBtn) editRoomSaveBtn.addEventListener('click', doSaveRoom);
   var editRoomIdCopy = $('edit-room-id-copy');
   if (editRoomIdCopy) editRoomIdCopy.addEventListener('click', function () {
-    var id = state.roomDetail && state.roomDetail.room_id;
+    var id = state.roomDetail
+      ? (typeof shareableRoomId === 'function'
+        ? shareableRoomId(state.roomDetail)
+        : state.roomDetail.room_id)
+      : '';
     if (!id) return;
     if (typeof copyTextToClipboard === 'function') {
       copyTextToClipboard(id, { okTitle: lang.copied || 'Copied' });

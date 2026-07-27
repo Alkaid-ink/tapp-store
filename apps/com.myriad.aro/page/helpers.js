@@ -2,6 +2,48 @@
 function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
 
 /**
+ * Shareable public room id: `rm_…@home[:port]` when home_server is known.
+ * Bare `rm_…` still works for same-instance joins.
+ */
+function shareableRoomId(room) {
+  if (!room) return '';
+  var id = room.room_id || room.id || '';
+  if (!id) return '';
+  var home = (room.home_server || '').trim();
+  if (!home) return id;
+  // Avoid double @ if already shareable
+  if (String(id).indexOf('@') >= 0) return id;
+  return id + '@' + home;
+}
+
+/** Parse join input: bare id, shareable id@home, or public URL. */
+function parseJoinRoomInput(raw) {
+  var s = String(raw || '').trim();
+  if (!s) return { roomId: '', homeServer: '' };
+  if (s.indexOf('myriad:room:') === 0) s = s.slice('myriad:room:'.length).trim();
+  var pubIdx = s.lastIndexOf('/public/rooms/');
+  if (pubIdx >= 0) {
+    var tail = s.slice(pubIdx + '/public/rooms/'.length);
+    var id = tail.split(/[?#/]/)[0] || '';
+    var home = '';
+    try {
+      var u = new URL(s);
+      home = u.host || '';
+    } catch (e) { /* ignore */ }
+    return { roomId: id, homeServer: home };
+  }
+  var at = s.lastIndexOf('@');
+  if (at > 0) {
+    var left = s.slice(0, at).trim();
+    var right = s.slice(at + 1).trim();
+    if (left.indexOf('rm_') === 0 && right && right.indexOf('/') < 0) {
+      return { roomId: left, homeServer: right };
+    }
+  }
+  return { roomId: s, homeServer: '' };
+}
+
+/**
  * ARO-14: track subscriptions for lifecycle teardown.
  * Usage: bag.listen(el, 'click', fn); bag.add(unsubFn); bag.disposeAll()
  */
@@ -1695,6 +1737,69 @@ function aroConfirm(message, danger) {
       overlay.style.display = 'flex';
     }
     overlay.querySelector('.confirm-btn-ok').focus();
+  });
+}
+
+/**
+ * 应用内单选列表（沙箱 iframe 中 window.prompt 同样不可用）。
+ * @param {string} title
+ * @param {{ id: string, label: string, sub?: string }[]} options
+ * @returns {Promise<string|null>} selected option id, or null if cancelled
+ */
+function aroPickOption(title, options) {
+  return new Promise(function (resolve) {
+    var list = Array.isArray(options) ? options : [];
+    if (!list.length) {
+      resolve(null);
+      return;
+    }
+    var overlay = document.createElement('div');
+    overlay.className = 'confirm-overlay';
+    overlay.style.display = 'none';
+    overlay.style.pointerEvents = 'none';
+    var itemsHtml = list.map(function (opt, i) {
+      return '<button type="button" class="aro-pick-item" data-pick-id="'
+        + esc(opt.id) + '" data-pick-idx="' + i + '">'
+        + '<span class="aro-pick-label">' + esc(opt.label || opt.id) + '</span>'
+        + (opt.sub ? '<span class="aro-pick-sub">' + esc(opt.sub) + '</span>' : '')
+        + '</button>';
+    }).join('');
+    overlay.innerHTML = '<div class="confirm-dialog aro-pick-dialog">'
+      + '<div class="confirm-message">' + esc(title || '') + '</div>'
+      + '<div class="aro-pick-list" role="listbox">' + itemsHtml + '</div>'
+      + '<div class="confirm-actions">'
+      + '<button type="button" class="confirm-btn confirm-btn-cancel">'
+      + esc(lang.confirmCancel || 'Cancel') + '</button>'
+      + '</div></div>';
+    var settled = false;
+    var done = function (result) {
+      if (settled) return;
+      settled = true;
+      aroDismiss(overlay, {
+        remove: true,
+        ms: 150,
+        onDone: function () { resolve(result); },
+      });
+    };
+    overlay.querySelector('.confirm-btn-cancel').addEventListener('click', function () {
+      done(null);
+    });
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) done(null);
+    });
+    Array.prototype.forEach.call(overlay.querySelectorAll('.aro-pick-item'), function (btn) {
+      btn.addEventListener('click', function () {
+        done(btn.getAttribute('data-pick-id') || null);
+      });
+    });
+    document.body.appendChild(overlay);
+    if (typeof showAroOverlay === 'function') showAroOverlay(overlay);
+    else {
+      overlay.style.pointerEvents = 'auto';
+      overlay.style.display = 'flex';
+    }
+    var first = overlay.querySelector('.aro-pick-item');
+    if (first) try { first.focus(); } catch (eF) { /* ignore */ }
   });
 }
 
