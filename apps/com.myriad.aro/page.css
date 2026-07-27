@@ -2616,11 +2616,21 @@ button.aro-select-trigger.create-input{
 .quote-repost-preview-label{font-size:11px;font-weight:600;color:var(--tapp-primary,#6366f1);margin-bottom:4px}
 .quote-repost-preview-text{white-space:pre-wrap;word-break:break-word;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .dark .quote-repost-preview{background:transparent;border:none;color:rgba(255,255,255,.7)}
-/* Quoted snapshot — soft fill only, no border lines */
+/* Quoted snapshot — soft fill only, no border lines; full body, clickable */
 .feed-item-quoted{
   margin-top:8px;padding:10px 12px;border-radius:12px;
   border:none;background:rgba(128,128,128,.055);
   font-size:12.5px;line-height:1.45;color:var(--text-secondary,#555);
+  max-height:none;overflow:visible;
+}
+.feed-item-quoted.is-clickable{
+  cursor:pointer;transition:background .12s ease, box-shadow .12s ease;
+  outline:none;
+}
+.feed-item-quoted.is-clickable:hover,
+.feed-item-quoted.is-clickable:focus-visible{
+  background:rgba(99,102,241,.08);
+  box-shadow:inset 0 0 0 1px rgba(99,102,241,.18);
 }
 .feed-item-quoted-meta{
   display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;
@@ -2628,8 +2638,17 @@ button.aro-select-trigger.create-input{
 }
 .feed-item-quoted-author{color:var(--text-primary,#1a1a1a);font-weight:700}
 .feed-item-quoted-kind{color:var(--text-secondary,#8b98a5);font-weight:500}
-.feed-item-quoted-text{white-space:pre-wrap;word-break:break-word;color:var(--text-primary,#333)}
+.feed-item-quoted-open{
+  margin-left:auto;font-size:10.5px;font-weight:700;letter-spacing:.01em;
+  color:var(--tapp-primary,#6366f1);opacity:.85;
+}
+.feed-item-quoted-text{
+  white-space:pre-wrap;word-break:break-word;color:var(--text-primary,#333);
+  /* Full body — do not clamp quote cards */
+  display:block;max-height:none;overflow:visible;-webkit-line-clamp:unset;
+}
 .feed-item-quoted-id{opacity:.55;font-size:11px}
+.feed-item-quoted .feed-item-media{margin-top:8px}
 /* Nested levels: softer fill + indent, still no borders */
 .feed-item-quoted .feed-item-quoted{
   margin-top:8px;margin-left:0;padding:8px 10px;
@@ -2640,9 +2659,32 @@ button.aro-select-trigger.create-input{
 }
 .feed-item-quoted-truncated{font-size:11px;opacity:.65;margin-top:6px;font-style:italic;color:var(--text-secondary,#888)}
 .dark .feed-item-quoted{background:rgba(255,255,255,.06);color:rgba(255,255,255,.7)}
+.dark .feed-item-quoted.is-clickable:hover,
+.dark .feed-item-quoted.is-clickable:focus-visible{
+  background:rgba(129,140,248,.12);
+  box-shadow:inset 0 0 0 1px rgba(165,180,252,.22);
+}
 .dark .feed-item-quoted-author{color:rgba(255,255,255,.9)}
 .dark .feed-item-quoted-kind{color:rgba(255,255,255,.45)}
+.dark .feed-item-quoted-open{color:#a5b4fc}
 .dark .feed-item-quoted-text{color:rgba(255,255,255,.78)}
 .dark .feed-item-quoted .feed-item-quoted{background:rgba(255,255,255,.04)}
 .dark .feed-item-quoted .feed-item-quoted .feed-item-quoted{background:rgba(255,255,255,.03)}
 .quote-repost-preview .feed-item-quoted{margin-top:0;max-height:none}
+/* Quote original viewer */
+.quote-view-dialog .quote-view-scroll{max-height:min(70vh,560px);overflow:auto}
+.quote-view-body{min-height:48px}
+.quote-view-loading{padding:16px 4px;font-size:13px;color:var(--text-secondary,#888)}
+.quote-view-card{display:flex;flex-direction:column;gap:8px}
+.quote-view-header{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.quote-view-name{font-size:15px;font-weight:700;color:var(--text-primary,#1a1a1a)}
+.quote-view-handle{font-size:12.5px;color:var(--text-secondary,#8b98a5)}
+.quote-view-text{white-space:pre-wrap;word-break:break-word;font-size:14.5px;line-height:1.5;color:var(--text-primary,#1a1a1a)}
+.quote-view-muted{opacity:.7}
+.quote-view-nested-label{font-size:11px;font-weight:600;color:var(--text-secondary,#8b98a5);margin-top:4px}
+.quote-view-link-row{margin-top:4px}
+.quote-view-link{font-size:12.5px;font-weight:600;color:var(--tapp-primary,#6366f1);text-decoration:none}
+.quote-view-link:hover{text-decoration:underline}
+.quote-view-source{font-size:10.5px;opacity:.5;margin-top:6px}
+.dark .quote-view-name{color:rgba(255,255,255,.92)}
+.dark .quote-view-text{color:rgba(255,255,255,.88)}

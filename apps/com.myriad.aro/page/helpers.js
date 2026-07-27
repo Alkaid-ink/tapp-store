@@ -483,7 +483,7 @@ function dismissTransientUi(opts) {
   // Force-hide fixed/absolute overlays that may still paint over the app
   try {
     ['create-dialog', 'edit-room-dialog', 'ring-create-dialog', 'feed-follow-dialog',
-      'feed-compose-dialog', 'quote-repost-dialog', 'feed-share-dialog',
+      'feed-compose-dialog', 'quote-repost-dialog', 'quote-view-dialog', 'feed-share-dialog',
       'chat-history-overlay', 'room-files-overlay'
     ].forEach(function (id) {
       var el = $(id);

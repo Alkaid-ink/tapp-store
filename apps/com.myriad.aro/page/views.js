@@ -523,6 +523,7 @@ function bindFeedContentActions(content) {
       doFollowBack(btn.dataset.actionFollowBack);
     });
   });
+  if (typeof bindQuotedObjectClicks === 'function') bindQuotedObjectClicks(content);
   content.querySelectorAll('[data-action-copy-actor]').forEach(function (btn) {
     btn.addEventListener('click', function (e) {
       e.stopPropagation();
@@ -886,12 +887,26 @@ function quotedObjectText(quoted) {
   );
 }
 
+function quotedObjectId(quoted) {
+  if (!quoted || typeof quoted !== 'object') return '';
+  var id = quoted.id || quoted['mfp:quotedObjectId'] || quoted.mfp_quotedObjectId
+    || quoted.quoteUrl || quoted.url || '';
+  return id ? String(id) : '';
+}
+
 /**
  * Render nested mfp:quotedObject chain as distinct cards.
  * Each level is a snapshot embedded at repost time (not a live pointer).
+ * Full body (no 280-char clamp); clickable to open original when id present.
+ * @param {object} quoted
+ * @param {number} [depth]
+ * @param {{ interactive?: boolean, full?: boolean }} [opts]
  */
-function renderQuotedObjectHtml(quoted, depth) {
+function renderQuotedObjectHtml(quoted, depth, opts) {
   depth = depth || 0;
+  opts = opts || {};
+  var interactive = opts.interactive !== false;
+  var full = opts.full !== false;
   if (!quoted || typeof quoted !== 'object') return '';
   if (depth >= MAX_QUOTE_RENDER_DEPTH) {
     return '<div class="feed-item-quoted feed-item-quoted-truncated" data-quote-depth="' + depth + '">'
@@ -899,13 +914,22 @@ function renderQuotedObjectHtml(quoted, depth) {
   }
   var author = attributedToLabel(quoted.attributedTo);
   var text = quotedObjectText(quoted);
+  var qid = quotedObjectId(quoted);
   var isNestedRepost = quoted['mfp:kind'] === 'repost' || quoted.mfp_kind === 'repost'
     || quoted['mfp:contentType'] === 'repost';
   var label = isNestedRepost
     ? (lang.quoteRepostNested || lang.quoteRepostQuoted || 'Quoted repost')
     : (lang.quoteRepostQuoted || 'Quoted post');
+  var clickable = interactive && !!qid;
   // Soft fill only — no border chrome; nested levels stay flat cards.
-  var h = '<div class="feed-item-quoted' + (isNestedRepost ? ' is-nested-repost' : '') + '" data-quote-depth="' + depth + '">';
+  var h = '<div class="feed-item-quoted'
+    + (isNestedRepost ? ' is-nested-repost' : '')
+    + (clickable ? ' is-clickable' : '')
+    + '" data-quote-depth="' + depth + '"'
+    + (qid ? ' data-quote-object-id="' + esc(qid) + '"' : '')
+    + (clickable ? ' role="button" tabindex="0" title="'
+      + esc(lang.quoteOpenOriginal || lang.quoteRepostQuoted || 'View original') + '"' : '')
+    + '>';
   h += '<div class="feed-item-quoted-meta">';
   if (author) {
     h += '<span class="feed-item-quoted-author">' + esc(author) + '</span>';
@@ -913,28 +937,214 @@ function renderQuotedObjectHtml(quoted, depth) {
   } else {
     h += '<span class="feed-item-quoted-kind">' + esc(label) + '</span>';
   }
+  if (clickable) {
+    h += '<span class="feed-item-quoted-open">'
+      + esc(lang.quoteOpenHint || 'View') + '</span>';
+  }
   h += '</div>';
   if (text && !looksLikeBareUrl(text)) {
-    h += '<div class="feed-item-quoted-text">' + esc(String(text).slice(0, 280)) + '</div>';
+    // Full body by default — only clamp in very deep nest when not in detail modal.
+    var body = full ? String(text) : String(text).slice(0, 1200);
+    h += '<div class="feed-item-quoted-text">' + esc(body) + '</div>';
   } else if (text && looksLikeBareUrl(text)) {
     // Prefer human label over raw activity URL
     h += '<div class="feed-item-quoted-text" style="opacity:.75">'
       + esc(lang.quoteRepostQuoted || 'Quoted post') + '</div>';
-  } else if (quoted.id && !looksLikeBareUrl(String(quoted.id))) {
-    h += '<div class="feed-item-quoted-text feed-item-quoted-id">' + esc(String(quoted.id).slice(0, 80)) + '</div>';
+  } else if (qid && !looksLikeBareUrl(qid)) {
+    h += '<div class="feed-item-quoted-text feed-item-quoted-id">' + esc(String(qid).slice(0, 120)) + '</div>';
   } else {
     h += '<div class="feed-item-quoted-text" style="opacity:.75">'
       + esc(lang.quoteRepostQuoted || 'Quoted post') + '</div>';
   }
+  // Media on quote cards (when snapshot includes attachments)
+  var qAtts = typeof extractNoteAttachments === 'function' ? extractNoteAttachments(quoted) : [];
+  if (qAtts.length && typeof renderTimelineMedia === 'function') {
+    h += renderTimelineMedia(qAtts);
+  }
   var inner = quoted['mfp:quotedObject'] || quoted.mfp_quotedObject || null;
   if (inner && typeof inner === 'object') {
-    h += renderQuotedObjectHtml(inner, depth + 1);
+    h += renderQuotedObjectHtml(inner, depth + 1, opts);
   } else if (quoted['mfp:quoteTruncated'] || quoted.mfp_quoteTruncated) {
     h += '<div class="feed-item-quoted-truncated">'
       + esc(lang.quoteRepostTruncated || 'Earlier quotes not shown') + '</div>';
   }
   h += '</div>';
   return h;
+}
+
+/** Find a feed item by object id across timeline / bookmarks / published. */
+function findAnyFeedItemByObjectId(objectId) {
+  if (!objectId) return null;
+  var lists = [
+    state.timeline,
+    state.bookmarks,
+    state.published,
+    state.feedItems,
+  ];
+  for (var li = 0; li < lists.length; li++) {
+    var arr = lists[li];
+    if (!Array.isArray(arr)) continue;
+    for (var i = 0; i < arr.length; i++) {
+      var it = arr[i];
+      if (!it) continue;
+      var oid = typeof resolveObjectId === 'function' ? resolveObjectId(it) : (it.object_id || '');
+      if (oid && String(oid) === String(objectId)) return it;
+      var cj = typeof timelineContentObject === 'function' ? timelineContentObject(it) : null;
+      if (cj && cj.id && String(cj.id) === String(objectId)) return it;
+    }
+  }
+  return null;
+}
+
+/**
+ * Open quoted/original post detail. Works without following the author:
+ * uses embedded snapshot first, then federation.getObject when available.
+ */
+async function openQuotedPostDetail(objectId, snapshot) {
+  if (!objectId && !(snapshot && typeof snapshot === 'object')) return;
+  var dlg = $('quote-view-dialog');
+  var bodyEl = $('quote-view-body');
+  var titleEl = $('quote-view-title');
+  if (titleEl) titleEl.textContent = lang.quoteViewTitle || lang.quoteRepostQuoted || 'Original post';
+  if (bodyEl) {
+    bodyEl.innerHTML = '<div class="quote-view-loading">'
+      + esc(lang.loading || 'Loading…') + '</div>';
+  }
+  if (dlg && typeof showAroOverlay === 'function') showAroOverlay(dlg);
+  else if (dlg) { dlg.hidden = false; dlg.style.display = ''; }
+
+  var object = snapshot && typeof snapshot === 'object' ? snapshot : null;
+  var actor = null;
+  var source = 'snapshot';
+
+  // Prefer live local feed item when present (may have richer fields).
+  var localItem = objectId ? findAnyFeedItemByObjectId(objectId) : null;
+  if (localItem) {
+    var cj = typeof timelineContentObject === 'function' ? timelineContentObject(localItem) : null;
+    if (cj && typeof cj === 'object') {
+      object = cj;
+      source = 'feed';
+    }
+    if (localItem.actor) actor = localItem.actor;
+  }
+
+  // Host API: resolve public object without follow (local DB or remote public).
+  if (objectId && typeof Tapp !== 'undefined' && Tapp.federation
+    && typeof Tapp.federation.getObject === 'function') {
+    try {
+      var res = await Tapp.federation.getObject(objectId);
+      var data = res && res.data ? res.data : res;
+      if (data && data.object && typeof data.object === 'object') {
+        object = data.object;
+        source = data.source || 'api';
+        if (data.actor) actor = data.actor;
+      }
+    } catch (eFetch) {
+      console.warn('[Aro] getObject failed, using snapshot', eFetch);
+    }
+  }
+
+  if (!object) {
+    object = {
+      id: objectId || '',
+      type: 'Note',
+      content_preview: lang.quoteViewUnavailable || 'This post could not be loaded',
+    };
+  }
+  if (bodyEl) {
+    bodyEl.innerHTML = renderQuoteViewDetailHtml(object, actor, source);
+    bindQuotedObjectClicks(bodyEl);
+  }
+}
+
+/** Bind click/keyboard on quote cards within a container (feed or detail modal). */
+function bindQuotedObjectClicks(root) {
+  if (!root || !root.querySelectorAll) return;
+  root.querySelectorAll('.feed-item-quoted.is-clickable[data-quote-object-id]').forEach(function (card) {
+    if (card._aroQuoteBound) return;
+    card._aroQuoteBound = true;
+    function openQuote(e) {
+      var target = e.target.closest('.feed-item-quoted.is-clickable[data-quote-object-id]');
+      if (!target || target !== card) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var oid = card.getAttribute('data-quote-object-id') || '';
+      var textEl = card.querySelector(':scope > .feed-item-quoted-text');
+      var authorEl = card.querySelector(':scope > .feed-item-quoted-meta .feed-item-quoted-author');
+      var snap = {
+        id: oid,
+        type: 'Note',
+        content_preview: textEl ? textEl.textContent : '',
+        attributedTo: authorEl ? authorEl.textContent : '',
+      };
+      openQuotedPostDetail(oid, snap);
+    }
+    card.addEventListener('click', openQuote);
+    card.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') openQuote(e);
+    });
+  });
+}
+
+function renderQuoteViewDetailHtml(object, actor, source) {
+  var author = '';
+  if (actor) {
+    author = actor.display_name || actor.username
+      || (actor.actor_url ? actorLabelFromUrl(actor.actor_url) : '') || '';
+  }
+  if (!author) author = attributedToLabel(object.attributedTo);
+  var handle = '';
+  if (actor && actor.username) {
+    handle = '@' + actor.username + (actor.domain ? '@' + actor.domain : '');
+  }
+  var text = quotedObjectText(object);
+  var h = '<div class="quote-view-card">';
+  h += '<div class="quote-view-header">';
+  if (author) h += '<span class="quote-view-name">' + esc(author) + '</span>';
+  if (handle) h += '<span class="quote-view-handle">' + esc(handle) + '</span>';
+  h += '</div>';
+  if (text && !looksLikeBareUrl(text)) {
+    h += '<div class="quote-view-text">' + esc(text) + '</div>';
+  } else {
+    h += '<div class="quote-view-text quote-view-muted">'
+      + esc(lang.quoteViewEmpty || lang.quoteRepostQuoted || 'Post') + '</div>';
+  }
+  var atts = typeof extractNoteAttachments === 'function' ? extractNoteAttachments(object) : [];
+  if (atts.length && typeof renderTimelineMedia === 'function') {
+    h += renderTimelineMedia(atts);
+  }
+  // Nested chain if this object is itself a repost
+  var nested = object['mfp:quotedObject'] || object.mfp_quotedObject || null;
+  if (nested && typeof nested === 'object') {
+    h += '<div class="quote-view-nested-label">'
+      + esc(lang.quoteRepostQuoted || 'Quoted post') + '</div>';
+    h += renderQuotedObjectHtml(nested, 0, { interactive: true, full: true });
+  }
+  var oid = quotedObjectId(object);
+  if (oid && /^https?:\/\//i.test(oid)) {
+    h += '<div class="quote-view-link-row">'
+      + '<a class="quote-view-link" href="' + esc(oid) + '" target="_blank" rel="noopener noreferrer">'
+      + esc(lang.quoteOpenExternal || 'Open link') + '</a></div>';
+  }
+  if (source && source !== 'api') {
+    h += '<div class="quote-view-source">'
+      + esc((lang.quoteViewSource || 'Source: {s}').replace('{s}', source)) + '</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+function closeQuotedPostDetail() {
+  var dlg = $('quote-view-dialog');
+  if (!dlg) return;
+  if (typeof aroDismiss === 'function') {
+    aroDismiss(dlg, { ms: 160 });
+  } else {
+    dlg.style.display = 'none';
+    dlg.hidden = true;
+  }
+  var bodyEl = $('quote-view-body');
+  if (bodyEl) bodyEl.innerHTML = '';
 }
 
 /** True when s is essentially a bare http(s) URL (not prose). */
@@ -1766,16 +1976,19 @@ function renderTimelineItem(item) {
     }
   }
   // Nested quote chain: each level is an embedded snapshot (mfp:quotedObject).
+  // Full body + clickable to open original (works without following the author).
   if (isQuoteRepost && contentJson) {
     var quoted = contentJson['mfp:quotedObject'] || contentJson.mfp_quotedObject || null;
     if (quoted && typeof quoted === 'object') {
-      h += renderQuotedObjectHtml(quoted, 0);
+      h += renderQuotedObjectHtml(quoted, 0, { interactive: true, full: true });
     } else if (contentJson.quoteUrl || contentJson.inReplyTo || contentJson['mfp:quotedObjectId']) {
-      // Never dump raw activity URL as the card body — show a readable label.
-      h += '<div class="feed-item-quoted"><div class="feed-item-quoted-meta">'
-        + esc(lang.quoteRepostQuoted || 'Quoted post') + '</div>'
-        + '<div class="feed-item-quoted-text" style="opacity:.75">'
-        + esc(lang.quoteRepostQuoted || 'Quoted post') + '</div></div>';
+      var fallbackId = contentJson['mfp:quotedObjectId'] || contentJson.quoteUrl
+        || contentJson.inReplyTo || '';
+      h += renderQuotedObjectHtml({
+        id: fallbackId,
+        type: 'Note',
+        content_preview: lang.quoteRepostQuoted || 'Quoted post',
+      }, 0, { interactive: true, full: true });
     }
   }
   h += renderTimelineMedia(attachments);
@@ -2017,13 +2230,27 @@ function renderPublishedItem(item) {
   if (preview && (!titleLine || preview !== titleLine || isRepost)) {
     h += '<div class="feed-item-text">' + esc(preview) + '</div>';
   }
-  // Quoted snippet for reposts (backend summary)
-  if (isRepost && summary && summary !== preview) {
-    var qText = summary.replace(/^↪\s*/, '');
-    if (qText && !looksLikeBareUrl(qText)) {
-      h += '<div class="feed-item-quoted"><div class="feed-item-quoted-meta">'
-        + esc(lang.quoteRepostQuoted || 'Quoted post') + '</div>'
-        + '<div class="feed-item-quoted-text">' + esc(qText.slice(0, 280)) + '</div></div>';
+  // Quote-repost: prefer full nested mfp:quotedObject from content_json
+  if (isRepost) {
+    var pubCj = item.content_json || item.content || item.object || null;
+    if (pubCj && pubCj.object && typeof pubCj.object === 'object'
+      && !pubCj.content && !(pubCj.source && pubCj.source.content)) {
+      pubCj = pubCj.object;
+    }
+    var pubQuoted = pubCj && (pubCj['mfp:quotedObject'] || pubCj.mfp_quotedObject);
+    if (pubQuoted && typeof pubQuoted === 'object') {
+      h += renderQuotedObjectHtml(pubQuoted, 0, { interactive: true, full: true });
+    } else if (summary && summary !== preview) {
+      var qText = summary.replace(/^↪\s*/, '');
+      var qOid = (pubCj && (pubCj['mfp:quotedObjectId'] || pubCj.quoteUrl || pubCj.inReplyTo))
+        || item.object_id || '';
+      if (qText && !looksLikeBareUrl(qText)) {
+        h += renderQuotedObjectHtml({
+          id: qOid,
+          type: 'Note',
+          content_preview: qText,
+        }, 0, { interactive: true, full: true });
+      }
     }
   }
   // Same media strip as timeline so Note images/videos appear on 已发布.
@@ -3491,6 +3718,12 @@ function bindEvents() {
       if (typeof closeShareModal === 'function') closeShareModal();
       return;
     }
+    var quoteViewDlg = $('quote-view-dialog');
+    if (quoteViewDlg && quoteViewDlg.style.display !== 'none' && !quoteViewDlg.hidden) {
+      e.preventDefault();
+      if (typeof closeQuotedPostDetail === 'function') closeQuotedPostDetail();
+      return;
+    }
     var quoteDlg = $('quote-repost-dialog');
     if (quoteDlg && quoteDlg.style.display !== 'none') {
       e.preventDefault();
@@ -3533,6 +3766,20 @@ function bindEvents() {
       e.preventDefault();
       if (typeof doSubmitQuoteRepost === 'function') doSubmitQuoteRepost();
     }
+  });
+
+  // Quote original post viewer (no follow required)
+  var qvClose = $('quote-view-close');
+  if (qvClose) qvClose.addEventListener('click', function () {
+    if (typeof closeQuotedPostDetail === 'function') closeQuotedPostDetail();
+  });
+  var qvDismiss = $('quote-view-dismiss');
+  if (qvDismiss) qvDismiss.addEventListener('click', function () {
+    if (typeof closeQuotedPostDetail === 'function') closeQuotedPostDetail();
+  });
+  var qvOverlay = $('quote-view-dialog');
+  if (qvOverlay) qvOverlay.addEventListener('click', function (e) {
+    if (e.target === qvOverlay && typeof closeQuotedPostDetail === 'function') closeQuotedPostDetail();
   });
 
   // External share modal (intent only — no server post)

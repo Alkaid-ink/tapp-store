@@ -2,7 +2,7 @@
 
 社交中心：消息（Channel/Room）、时间线、环网与个人资料。
 
-> 官方社交 Tapp（version 1.0.37）。设置页含出站投递队列与联邦签名密钥轮换（需宿主 `federation.rotateKeys`）。
+> 官方社交 Tapp（version 1.0.38）。设置页含出站投递队列与联邦签名密钥轮换（需宿主 `federation.rotateKeys`）。
 
 ## 功能
 
@@ -24,6 +24,11 @@
 > 为 **elevated**；已安装实例更新时需重新授权该权限（否则只保留旧 granted 交集）。
 
 ## Changelog
+
+### 1.0.38
+
+- Feed: quote/repost blocks show full body; click opens original post (no follow required)
+- Host: `federation.getObject` for public object lookup
 
 ### 1.0.37
 
@@ -128,5 +133,5 @@ index.js          # core（background + 内嵌 i18n 回退）
 page.html / page.css / styles.css
 page/*.js         # pageModules（UI 真源）
 i18n/{zh,en,ja}.json
-manifest.json     # version 1.0.37
+manifest.json     # version 1.0.38
 ```
