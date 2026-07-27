@@ -651,6 +651,66 @@
   gap: 10px;
 }
 
+/* 面板选择：三列（1Panel / 宝塔 / 通用） */
+.panel-mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+.panel-mode-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: var(--config-radius-sm);
+  border: 1px solid var(--config-border);
+  background: var(--config-input-bg);
+  cursor: pointer;
+  transition: var(--config-transition);
+  user-select: none;
+}
+
+.panel-mode-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.panel-mode-option:hover {
+  border-color: rgba(var(--config-primary-rgb), 0.35);
+  background: rgba(var(--config-primary-rgb), 0.06);
+}
+
+.panel-mode-option.is-active {
+  border-color: rgba(var(--config-primary-rgb), 0.55);
+  background: rgba(var(--config-primary-rgb), 0.12);
+  box-shadow: 0 0 0 1px rgba(var(--config-primary-rgb), 0.2);
+}
+
+.panel-mode-option-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--config-text);
+}
+
+.panel-mode-option.is-active .panel-mode-option-title {
+  color: var(--config-primary);
+}
+
+.panel-mode-option-desc {
+  font-size: 11px;
+  color: var(--config-text-muted);
+  line-height: 1.4;
+}
+
+@media (max-width: 640px) {
+  .panel-mode-toggle {
+    grid-template-columns: 1fr;
+  }
+}
+
 .db-mode-option {
   position: relative;
   display: flex;
@@ -709,8 +769,191 @@
   }
 }
 
-/* Select 下拉框 */
-.form-select {
+/* ========================================
+   自定义下拉（替代系统 <select> option 列表）
+   ======================================== */
+
+.cg-select {
+  position: relative;
+  width: 100%;
+}
+
+/* 原生 select 仅作值载体，不展示系统菜单 */
+.cg-select > select.form-select,
+.cg-select > select.form-input {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.cg-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px 10px 14px;
+  background: var(--config-input-bg);
+  border: 1px solid var(--config-border);
+  border-radius: var(--config-radius-xs);
+  color: var(--config-text);
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--config-transition), box-shadow var(--config-transition),
+    background var(--config-transition);
+  box-sizing: border-box;
+}
+
+.cg-select-trigger:hover {
+  border-color: var(--config-border-strong);
+  background: color-mix(in srgb, var(--config-input-bg) 65%, var(--config-surface-elevated));
+}
+
+.cg-select.is-open .cg-select-trigger,
+.cg-select-trigger:focus {
+  outline: none;
+  border-color: var(--config-primary);
+  box-shadow: 0 0 0 3px rgba(var(--config-primary-rgb), 0.15);
+  background: var(--config-surface-elevated);
+}
+
+.cg-select-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cg-select-label.is-placeholder {
+  color: var(--config-text-muted);
+}
+
+.cg-select-chevron {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--config-text-muted);
+  transition: transform var(--config-transition), color var(--config-transition);
+}
+
+.cg-select.is-open .cg-select-chevron {
+  transform: rotate(180deg);
+  color: var(--config-primary);
+}
+
+.cg-select-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 40;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  max-height: 240px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--config-surface-elevated);
+  border: 1px solid var(--config-border);
+  border-radius: var(--config-radius-sm);
+  box-shadow: var(--config-shadow-lg), 0 0 0 1px rgba(var(--config-primary-rgb), 0.04);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  backdrop-filter: blur(18px) saturate(160%);
+  animation: cg-select-pop 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.cg-select-menu[hidden] {
+  display: none !important;
+}
+
+@keyframes cg-select-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.cg-select-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--config-text);
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--config-transition), color var(--config-transition);
+  box-sizing: border-box;
+}
+
+.cg-select-option:hover,
+.cg-select-option.is-active {
+  background: rgba(var(--config-primary-rgb), 0.1);
+  color: var(--config-primary);
+}
+
+.cg-select-option.is-selected {
+  background: rgba(var(--config-primary-rgb), 0.14);
+  color: var(--config-primary);
+  font-weight: 600;
+}
+
+.cg-select-option-check {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  opacity: 0;
+  color: var(--config-primary);
+}
+
+.cg-select-option.is-selected .cg-select-option-check {
+  opacity: 1;
+}
+
+.cg-select-menu::-webkit-scrollbar {
+  width: 6px;
+}
+
+.cg-select-menu::-webkit-scrollbar-thumb {
+  background: rgba(var(--config-primary-rgb), 0.22);
+  border-radius: 3px;
+}
+
+.dark .cg-select-menu {
+  background: rgba(23, 23, 23, 0.96);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* 未增强前的原生 select 兜底（隐藏 option 系统菜单尽量一致） */
+select.form-select:not(.cg-select-native) {
+  -webkit-appearance: none;
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   background-repeat: no-repeat;
@@ -719,7 +962,7 @@
   cursor: pointer;
 }
 
-.dark .form-select {
+.dark select.form-select:not(.cg-select-native) {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
 }
 

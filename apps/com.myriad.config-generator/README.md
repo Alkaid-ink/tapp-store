@@ -2,6 +2,39 @@
 
 生成生产用 `docker-compose.yml`、`.env`、Nginx 与部署说明。
 
+## 版本
+
+`1.0.0`
+
+## 安全
+
+- **密钥白名单**：`JWT_SECRET` / `UPDATE_TOKEN` / `UPDATER_GATEWAY_SECRET`（及 bundled `POSTGRES_PASSWORD`）须匹配 `[A-Za-z0-9_-]{32,512}`；拒绝 CR/LF/NUL、`#`、`=`、空白，避免未加引号 `.env` 注入。
+- **生成后自检**：对产物再 `parseDotenvStrict`，校验密钥一致、期望键齐全、`PROXY_ALLOW_DIRECT_UPDATER=false` 仅一次。
+- **Nginx 上传**：≤512KB、`.conf`/文本、拒 NUL。
+- **Docker Hub**：`Promise.allSettled`，单仓失败不拖垮；优先四组件共同 versioned tag。
+- **资源边界**：内存 16M–256G；PostgreSQL 主版本 18–20。
+- **Digest**：tag 可写 `vX.Y.Z@sha256:<64hex>`。
+- 自检脚本：`node apps/com.myriad.config-generator/scripts/security-smoke.mjs`
+
+## UI
+
+- **自定义下拉**：`select.form-select` 在运行时增强为 `.cg-select`（自绘 trigger + option 列表），跟随壁纸主色/深色模式；原生 `<select>` 仅作值载体（系统 option 菜单无法主题化）。
+
+## 面板适配（用户可选）
+
+| 面板 | Compose 用法 | 站点路径（默认 conf） | 日志 | 依据 |
+|------|--------------|----------------------|------|------|
+| **1Panel** | 编排粘贴 YAML；环境变量框粘贴 `.env` | `/www/sites/<domain>/index` | `/www/sites/<domain>/log/…` | 1Panel 编排文档 + 本生成器历史默认 |
+| **宝塔** | **也可「创建编排」粘贴 YAML**（官方教程）；或目录+终端；应用商店编排常改同目录 `.env` | `/www/wwwroot/<domain>` | `/www/wwwlogs/<domain>.log` | 站点 conf 默认（论坛示例）；Compose [140412](https://www.bt.cn/bbs/thread-140412-1-1.html)；`.env` 端口 [141215](https://www.bt.cn/bbs/thread-141215-1-1.html)；`.env` 未加载 [124845](https://www.bt.cn/bbs/thread-124845-1-1.html) |
+| **通用 / CLI** | `docker compose up -d` | `/var/www/<domain>/html` | `/var/log/nginx/…` | 常规 Linux 约定 |
+
+### 数据库权限（用户反馈 · Docker 通病，宝塔更易触发）
+
+公开案例形态：`wrong ownership`、`Permission denied` / `Operation not permitted` on postgresql data dir（Docker Hub issue / SO / 论坛，不限宝塔）。  
+根因：bind mount 目录须由容器内 **系统用户 postgres** 拥有。本仓库 `postgres:*-alpine` **实测 `uid=70`**（Debian 系常见 999，勿混）。  
+宝塔「文件」root 建目录易踩；另有**软件商店原生 PG**（`/www/server/pgsql`）权限线，与 Myriad compose 内置库无关。  
+DEPLOY：`chown -R 70:70 pgdata && chmod 700 pgdata`。
+
 ## 输出
 
 | 文件 | 内容 |
@@ -9,7 +42,7 @@
 | `docker-compose.yml` | proxy / frontend / backend / backend-volume-init / [postgres] / docker-guard / updater / updater-gateway |
 | `.env` | 密钥、tag、`MYRIAD_DB_MODE`（勿提交） |
 | `<domain>.conf` | 外层整站反代到 proxy（含 ACME 本地挑战） |
-| `DEPLOY.md` | 启动、联邦与救援 |
+| `DEPLOY.md` | 启动、联邦与救援（含所选面板专章） |
 
 ## 数据库模式 `MYRIAD_DB_MODE`
 
@@ -67,11 +100,14 @@ curl -sS "https://YOUR_DOMAIN/.well-known/nodeinfo" | head -c 200
 
 ## 用法
 
-1. 填域名 / 数据库（内置或外置），确认密钥  
-2. 可选上传 Nginx 站点配置（会规范为整站反代 + ACME 本地挑战）  
-3. 生成并下载  
+1. 选择面板（1Panel / 宝塔 / 通用）  
+2. 填域名 / 数据库（内置或外置），确认密钥  
+3. 可选上传 Nginx 站点配置（会规范为整站反代 + ACME 本地挑战）  
+4. 生成并下载  
 
-1Panel：YAML → 编排，`.env` → 环境变量；站点反代到 `HTTP_BIND_ADDRESS:HTTP_PORT`。
+**1Panel：** YAML → 编排，`.env` → 环境变量。  
+**宝塔：** 目录内同时放 compose + `.env` → Docker 容器编排添加项目；网站反向代理目标 `127.0.0.1:HTTP_PORT`，代理 `/`。  
+站点反代均到 `HTTP_BIND_ADDRESS:HTTP_PORT`。
 
 **内置：**
 
@@ -94,7 +130,7 @@ docker compose up -d
 ## 注意
 
 - 勿公开 `.env`
-- 仅 proxy 映射宿主端口（`HTTP_BIND_ADDRESS` 默认本机绑定，适配 1Panel）
+- 仅 proxy 映射宿主端口（`HTTP_BIND_ADDRESS` 默认本机绑定，适配面板 Nginx 反代）
 - cosign=`off` 时需双钥匙（见生成的 `.env`）
 - `PROXY_TRUSTED_UPSTREAMS` 空=信任私网/回环上游；切勿 `0.0.0.0/0`
 - 外置模式下数据库备份不由 Myriad updater 负责
