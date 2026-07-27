@@ -1118,20 +1118,111 @@ function renderAttachPreview() {
 var STICKER_PANEL_MAX_H = 280;
 var STICKER_PERSONAL_KEY = 'aro.personal_stickers';
 var STICKER_PERSONAL_MAX = 48;
+var EMOJI_RECENT_KEY = 'aro.emoji_recent';
+var EMOJI_RECENT_MAX = 32;
 /** Backend ROOM_STICKER_MAX_DATA_LEN = 120_000 */
 var STICKER_DATA_MAX = 115000;
 var STICKER_ROOM_MAX = 24;
 var _stickerPanelOpen = false;
-var _stickerTab = 'room'; // 'room' | 'mine'
+var _stickerTab = 'emoji'; // 'emoji' | 'room' | 'mine'
+var _emojiCat = 'smileys';
 var _stickerBusy = false;
 var _personalStickersCache = null;
 var _stickerCtxMenu = null;
+var _emojiRecentCache = null;
+
+// Curated Unicode emoji packs (panel "表情" tab). Keep compact for page payload size.
+var EMOJI_PACKS = [
+  {
+    id: 'smileys',
+    icon: '😀',
+    list: '😀 😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 😉 😊 😇 🥰 😍 🤩 😘 😗 😚 😙 🥲 😋 😛 😜 🤪 😝 🤑 🤗 🤭 🤫 🤔 🤐 🤨 😐 😑 😶 😏 😒 🙄 😬 😮‍💨 🤥 😌 😔 😪 🤤 😴 😷 🤒 🤕 🤢 🤮 🥵 🥶 🥴 😵 🤯 🤠 🥳 🥸 😎 🤓 🧐 😕 😟 🙁 ☹️ 😮 😯 😲 😳 🥺 😦 😧 😨 😰 😥 😢 😭 😱 😖 😣 😞 😓 😩 😫 🥱 😤 😡 😠 🤬 😈 👿 💀 ☠️ 💩 🤡 👹 👺 👻 👽 👾 🤖 😺 😸 😹 😻 😼 😽 🙀 😿 😾'.split(' '),
+  },
+  {
+    id: 'gestures',
+    icon: '👋',
+    list: '👋 🤚 🖐 ✋ 🖖 👌 🤌 🤏 ✌️ 🤞 🤟 🤘 🤙 👈 👉 👆 🖕 👇 ☝️ 👍 👎 ✊ 👊 🤛 🤜 👏 🙌 👐 🤲 🤝 🙏 ✍️ 💅 🤳 💪 🦾 🦿 🦵 🦶 👂 🦻 👃 🧠 🫀 🫁 🦷 🦴 👀 👁 👅 👄 💋 🩸'.split(' '),
+  },
+  {
+    id: 'hearts',
+    icon: '❤️',
+    list: '❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💟 ☮️ ✝️ ☪️ 🕉 ☸️ ✡️ 🔯 🕎 ☯️ ☦️ 🛐 ⛎ ♈ ♉ ♊ ♋ ♌ ♍ ♎ ♏ ♐ ♑ ♒ ♓ 🆔 ⚛️ 🉑 ☢️ ☣️'.split(' '),
+  },
+  {
+    id: 'animals',
+    icon: '🐱',
+    list: '🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐻‍❄️ 🐨 🐯 🦁 🐮 🐷 🐽 🐸 🐵 🙈 🙉 🙊 🐒 🐔 🐧 🐦 🐤 🐣 🐥 🦆 🦅 🦉 🦇 🐺 🐗 🐴 🦄 🐝 🪱 🐛 🦋 🐌 🐞 🐜 🪰 🪲 🪳 🦟 🦗 🕷 🕸 🦂 🐢 🐍 🦎 🦖 🦕 🐙 🦑 🦐 🦞 🦀 🐡 🐠 🐟 🐬 🐳 🐋 🦈 🐊 🐅 🐆 🦓 🦍 🦧 🦣 🐘 🦛 🦏 🐪 🐫 🦒 🦘 🦬 🐃 🐂 🐄 🐎 🐖 🐏 🐑 🦙 🐐 🦌 🐕 🐩 🦮 🐕‍🦺 🐈 🐈‍⬛ 🪶 🐓 🦃 🦤 🦚 🦜 🦢 🦩 🕊 🐇 🦝 🦨 🦡 🦫 🦦 🦥 🐁 🐀 🐿 🦔'.split(' '),
+  },
+  {
+    id: 'food',
+    icon: '🍎',
+    list: '🍏 🍎 🍐 🍊 🍋 🍌 🍉 🍇 🍓 🫐 🍈 🍒 🍑 🥭 🍍 🥥 🥝 🍅 🍆 🥑 🥦 🥬 🥒 🌶 🫑 🌽 🥕 🫒 🧄 🧅 🥔 🍠 🥐 🥯 🍞 🥖 🥨 🧀 🥚 🍳 🧈 🥞 🧇 🥓 🥩 🍗 🍖 🦴 🌭 🍔 🍟 🍕 🫓 🥪 🥙 🧆 🌮 🌯 🫔 🥗 🥘 🫕 🥫 🍝 🍜 🍲 🍛 🍣 🍱 🥟 🦪 🍤 🍙 🍚 🍘 🍥 🥠 🥮 🍢 🍡 🍧 🍨 🍦 🥧 🧁 🍰 🎂 🍮 🍭 🍬 🍫 🍿 🍩 🍪 🌰 🥜 🍯 🥛 🍼 🫖 ☕ 🍵 🧃 🥤 🍶 🍺 🍻 🥂 🍷 🥃 🍸 🍹 🧉 🍾 🧊 🥄 🍴 🍽 🥣 🥡 🥢 🧂'.split(' '),
+  },
+  {
+    id: 'travel',
+    icon: '✈️',
+    list: '🚗 🚕 🚙 🚌 🚎 🏎 🚓 🚑 🚒 🚐 🛻 🚚 🚛 🚜 🦯 🦽 🦼 🛴 🚲 🛵 🏍 🛺 🚨 🚔 🚍 🚘 🚖 🚡 🚠 🚟 🚃 🚋 🚞 🚝 🚄 🚅 🚈 🚂 🚆 🚇 🚊 🚉 ✈️ 🛫 🛬 🛩 💺 🛰 🚀 🛸 🚁 🛶 ⛵ 🚤 🛥 🛳 ⛴ 🚢 ⚓ 🪝 ⛽ 🚧 🚦 🚥 🚏 🗺 🗿 🗽 🗼 🏰 🏯 🏟 🎡 🎢 🎠 ⛲ ⛱ 🏖 🏝 🏜 🌋 ⛰ 🏔 🗻 🏕 ⛺ 🏠 🏡 🏘 🏚 🏗 🏭 🏢 🏬 🏣 🏤 🏥 🏦 🏨 🏪 🏫 🏩 💒 🏛 ⛪ 🕌 🕍 🛕 🕋 ⛩ 🛤 🛣 🗾 🎑 🏞 🌅 🌄 🌠 🎇 🎆 🌇 🌆 🏙 🌃 🌌 🌉 🌁'.split(' '),
+  },
+  {
+    id: 'objects',
+    icon: '💡',
+    list: '⌚ 📱 📲 💻 ⌨️ 🖥 🖨 🖱 🖲 🕹 🗜 💽 💾 💿 📀 📼 📷 📸 📹 🎥 📽 🎞 📞 ☎️ 📟 📠 📺 📻 🎙 🎚 🎛 🧭 ⏱ ⏲ ⏰ 🕰 ⌛ ⏳ 📡 🔋 🔌 💡 🔦 🕯 🪔 🧯 🛢 💸 💵 💴 💶 💷 🪙 💰 💳 💎 ⚖️ 🪜 🧰 🪛 🔧 🔨 ⚒ 🛠 ⛏ 🪚 🔩 ⚙️ 🪤 🧱 🔫 💣 🧨 🪓 🔪 🗡 ⚔️ 🛡 🚬 ⚰️ 🪦 ⚱️ 🏺 🔮 📿 🧿 💈 ⚗️ 🔭 🔬 🕳 🩹 🩺 💊 💉 🩸 🧬 🦠 🧫 🧪 🌡 🧹 🪠 🧺 🧻 🚽 🚰 🚿 🛁 🛀 🧼 🧴 🧷 🧸 🪆 🖼 🪞 🪟 🛍 🛒 🎁 🎈 🎏 🎀 🪄 🪅 🎊 🎉 🎎 🏮 🎐 🧧 ✉️ 📩 📨 📧 💌 📥 📤 📦 🏷 🪧 📪 📫 📬 📭 📮 📯 📜 📃 📄 📑 🧾 📊 📈 📉 🗒 🗓 📆 📅 🗑 📇 🗃 🗳 🗄 📋 📁 📂 🗂 🗞 📰 📓 📔 📒 📕 📗 📘 📙 📚 📖 🔖 🧷 🔗 📎 🖇 📐 📏 🧮 📌 📍 ✂️ 🖊 🖋 ✒️ 🖌 🖍 📝 ✏️ 🔍 🔎 🔏 🔐 🔒 🔓'.split(' '),
+  },
+  {
+    id: 'symbols',
+    icon: '✨',
+    list: '❤️‍🔥 ❤️‍🩹 💯 💢 💬 👁️‍🗨️ 🗨 🗯 💭 💤 💮 ♨️ 💈 🛑 🕛 🕧 🕐 🕜 🕑 🕝 🕒 🕞 🕓 🕟 🕔 🕠 🕕 🕡 🕖 🕢 🕗 🕣 🕘 🕤 🕙 🕥 🕚 🕦 🌀 ♠️ ♥️ ♦️ ♣️ 🃏 🀄 🎴 🎭 🔇 🔈 🔉 🔊 📢 📣 📯 🔔 🔕 🎵 🎶 💹 🏧 🚮 🚰 ♿ 🚹 🚺 🚻 🚼 🚾 🛂 🛃 🛄 🛅 ⚠️ 🚸 ⛔ 🚫 🚳 🚭 🚯 🚱 🚷 📵 🔞 ☢️ ☣️ ⬆️ ↗️ ➡️ ↘️ ⬇️ ↙️ ⬅️ ↖️ ↕️ ↔️ ↩️ ↪️ ⤴️ ⤵️ 🔃 🔄 🔙 🔚 🔛 🔜 🔝 🛐 ⚛️ 🕉️ ✡️ ☸️ ☯️ ✝️ ☦️ ☪️ ☮️ 🕎 🔯 ♈ ♉ ♊ ♋ ♌ ♍ ♎ ♏ ♐ ♑ ♒ ♓ ⛎ 🔀 🔁 🔂 ▶️ ⏩ ⏭ ⏯ ◀️ ⏪ ⏮ 🔼 ⏫ 🔽 ⏬ ⏸️ ⏹️ ⏺️ ⏏️ 🎦 🔅 🔆 📶 📳 📴 ♀️ ♂️ ⚧️ ✖️ ➕ ➖ ➗ ♾️ ‼️ ⁉️ ❓ ❔ ❕ ❗ 〰️ 💱 💲 ⚕️ ♻️ ⚜️ 🔱 📛 🔰 ⭕ ✅ ☑️ ✔️ ❌ ❎ ➰ ➿ 〽️ ✳️ ✴️ ❇️ ©️ ©️‍🔳 ©️ ®️ ™️ 🔴 🟠 🟡 🟢 🔵 🟣 🟤 ⚫ ⚪ 🟥 🟧 🟨 🟩 🟦 🟪 🟫 ⬛ ⬜ ◼️ ◻️ ◾ ◽ ▪️ ▫️ 🔶 🔷 🔸 🔹 🔺 🔻 💠 🔘 🔳 🔲'.split(' '),
+  },
+];
 
 function ensureStickerState() {
   if (!state.stickers) {
-    state.stickers = { open: false, tab: 'room' };
+    state.stickers = { open: false, tab: 'emoji' };
   }
   return state.stickers;
+}
+
+function loadRecentEmojis() {
+  if (_emojiRecentCache) return _emojiRecentCache;
+  var list = [];
+  try {
+    var raw = localStorage.getItem(EMOJI_RECENT_KEY);
+    if (raw) {
+      var parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) list = parsed;
+    }
+  } catch (e0) { /* ignore */ }
+  _emojiRecentCache = list.filter(function (e) {
+    return typeof e === 'string' && e.length > 0 && e.length <= 8;
+  }).slice(0, EMOJI_RECENT_MAX);
+  return _emojiRecentCache;
+}
+
+function pushRecentEmoji(emoji) {
+  if (!emoji) return;
+  var list = loadRecentEmojis().filter(function (e) { return e !== emoji; });
+  list.unshift(emoji);
+  _emojiRecentCache = list.slice(0, EMOJI_RECENT_MAX);
+  try {
+    localStorage.setItem(EMOJI_RECENT_KEY, JSON.stringify(_emojiRecentCache));
+  } catch (e1) { /* ignore */ }
+}
+
+function insertEmojiAtCursor(emoji) {
+  var input = $('msg-input');
+  if (!input || input.disabled) return;
+  var start = typeof input.selectionStart === 'number' ? input.selectionStart : (input.value || '').length;
+  var end = typeof input.selectionEnd === 'number' ? input.selectionEnd : start;
+  var val = input.value || '';
+  input.value = val.slice(0, start) + emoji + val.slice(end);
+  var pos = start + emoji.length;
+  try {
+    input.focus();
+    input.setSelectionRange(pos, pos);
+  } catch (eF) { /* ignore */ }
+  if (typeof autoResizeInput === 'function') autoResizeInput(input);
+  if (typeof updateSendState === 'function') updateSendState();
+  pushRecentEmoji(emoji);
 }
 
 function isStickerPanelOpen() {
@@ -1347,14 +1438,30 @@ function openStickerPanel() {
   if (!panel) return;
   var st = ensureStickerState();
   st.open = true;
-  // Default tab: room pack in groups, mine in DMs
-  if (state.activeKind === 'room') {
-    _stickerTab = st.tab === 'mine' ? 'mine' : 'room';
+  // Default to emoji; remember last sticker pack tab if user was there
+  if (st.tab === 'room' || st.tab === 'mine' || st.tab === 'emoji') {
+    _stickerTab = st.tab;
   } else {
-    _stickerTab = 'mine';
+    _stickerTab = 'emoji';
+  }
+  // Room pack only makes sense in rooms
+  if (_stickerTab === 'room' && state.activeKind !== 'room') {
+    _stickerTab = 'emoji';
   }
   st.tab = _stickerTab;
   _stickerPanelOpen = true;
+  // Refresh room stickers from host when opening room pack
+  if (_stickerTab === 'room' && state.activeKind === 'room' && state.activeId
+    && typeof Tapp !== 'undefined' && Tapp.federation && typeof Tapp.federation.getRoom === 'function') {
+    Tapp.federation.getRoom(state.activeId).then(function (detail) {
+      var d = detail && (detail.data || detail);
+      if (!d || state.activeId !== (d.room_id || state.activeId)) return;
+      if (d.shared_data_config || d.avatar_url || d.name) {
+        state.roomDetail = Object.assign({}, state.roomDetail || {}, d);
+      }
+      if (_stickerPanelOpen && _stickerTab === 'room') renderStickerPanel();
+    }).catch(function () { /* ignore */ });
+  }
 
   // Class-driven open (avoid fighting [hidden]{display:none!important})
   try { panel.removeAttribute('hidden'); } catch (eH) { /* ignore */ }
@@ -1422,17 +1529,19 @@ function closeStickerPanel() {
 function resetStickersOnConversationChange() {
   closeStickerPanel();
   var st = ensureStickerState();
-  st.tab = state.activeKind === 'room' ? 'room' : 'mine';
-  _stickerTab = st.tab;
+  st.tab = 'emoji';
+  _stickerTab = 'emoji';
 }
 
 function applyStickerLabels() {
   var btn = $('sticker-btn');
   if (btn) {
-    var title = lang.stickerBtn || lang.stickers || 'Stickers';
+    var title = lang.stickerBtn || lang.emojiBtn || 'Emoji';
     btn.setAttribute('title', title);
     btn.setAttribute('aria-label', title);
   }
+  var tabEmoji = $('sticker-tab-emoji');
+  if (tabEmoji) tabEmoji.textContent = lang.stickerTabEmoji || lang.emoji || 'Emoji';
   var tabRoom = $('sticker-tab-room');
   if (tabRoom) tabRoom.textContent = lang.stickerTabRoom || 'Group';
   var tabMine = $('sticker-tab-mine');
@@ -1447,21 +1556,34 @@ function applyStickerLabels() {
 }
 
 function setStickerTab(tab) {
-  if (tab !== 'room' && tab !== 'mine') return;
+  if (tab !== 'emoji' && tab !== 'room' && tab !== 'mine') return;
   if (tab === 'room' && state.activeKind !== 'room') return;
   _stickerTab = tab;
   ensureStickerState().tab = tab;
   renderStickerPanel();
 }
 
+function setEmojiCat(catId) {
+  if (!catId) return;
+  _emojiCat = catId;
+  renderStickerPanel();
+}
+
+function getEmojiListForCat(catId) {
+  if (catId === 'recent') return loadRecentEmojis();
+  for (var i = 0; i < EMOJI_PACKS.length; i++) {
+    if (EMOJI_PACKS[i].id === catId) return EMOJI_PACKS[i].list || [];
+  }
+  return EMOJI_PACKS[0] ? EMOJI_PACKS[0].list : [];
+}
+
 async function renderStickerPanel() {
   var panel = $('sticker-panel');
   if (!panel || !_stickerPanelOpen) return;
 
-  var tabs = $('sticker-tabs');
-  if (tabs) {
-    tabs.style.display = state.activeKind === 'room' ? 'flex' : 'none';
-  }
+  // Always show all tabs; hide room pack only when not in a room
+  var tabRoom = $('sticker-tab-room');
+  if (tabRoom) tabRoom.style.display = state.activeKind === 'room' ? '' : 'none';
   document.querySelectorAll('[data-sticker-tab]').forEach(function (el) {
     var t = el.getAttribute('data-sticker-tab');
     var active = t === _stickerTab;
@@ -1469,10 +1591,54 @@ async function renderStickerPanel() {
     el.setAttribute('aria-selected', active ? 'true' : 'false');
   });
 
-  var grid = $('sticker-grid');
+  var emojiCats = $('emoji-cats');
+  var emojiGrid = $('emoji-grid');
+  var stickerGrid = $('sticker-grid');
   var empty = $('sticker-empty');
-  if (!grid) return;
+  var addBtn = $('sticker-add-btn');
+  var meta = $('sticker-meta');
+  var isEmoji = _stickerTab === 'emoji';
 
+  if (emojiCats) emojiCats.style.display = isEmoji ? 'flex' : 'none';
+  if (emojiGrid) emojiGrid.style.display = isEmoji ? 'grid' : 'none';
+  if (stickerGrid) stickerGrid.style.display = isEmoji ? 'none' : 'grid';
+  if (addBtn) addBtn.style.display = isEmoji ? 'none' : 'inline-flex';
+
+  if (isEmoji) {
+    if (empty) empty.style.display = 'none';
+    // Category chips
+    if (emojiCats) {
+      var catsHtml = '';
+      var recent = loadRecentEmojis();
+      catsHtml += '<button type="button" class="emoji-cat-btn' + (_emojiCat === 'recent' ? ' is-active' : '') + '"'
+        + ' data-emoji-cat="recent" title="' + esc(lang.emojiRecent || 'Recent') + '" aria-label="' + esc(lang.emojiRecent || 'Recent') + '">🕒</button>';
+      EMOJI_PACKS.forEach(function (pack) {
+        catsHtml += '<button type="button" class="emoji-cat-btn' + (_emojiCat === pack.id ? ' is-active' : '') + '"'
+          + ' data-emoji-cat="' + esc(pack.id) + '" title="' + esc(pack.id) + '" aria-label="' + esc(pack.id) + '">'
+          + esc(pack.icon) + '</button>';
+      });
+      emojiCats.innerHTML = catsHtml;
+    }
+    var emojis = getEmojiListForCat(_emojiCat);
+    if (_emojiCat === 'recent' && (!emojis || !emojis.length)) {
+      // Fall back to smileys when no recent use yet
+      emojis = getEmojiListForCat('smileys');
+    }
+    if (emojiGrid) {
+      var eHtml = '';
+      (emojis || []).forEach(function (em) {
+        if (!em) return;
+        eHtml += '<button type="button" class="emoji-cell" data-emoji="' + esc(em) + '"'
+          + ' aria-label="' + esc(em) + '">' + esc(em) + '</button>';
+      });
+      emojiGrid.innerHTML = eHtml;
+    }
+    if (meta) meta.textContent = '';
+    return;
+  }
+
+  // Image sticker packs (room / mine)
+  if (!stickerGrid) return;
   var list = [];
   if (_stickerTab === 'room' && state.activeKind === 'room') {
     list = getRoomStickersList();
@@ -1481,7 +1647,7 @@ async function renderStickerPanel() {
   }
 
   if (!list.length) {
-    grid.innerHTML = '';
+    stickerGrid.innerHTML = '';
     if (empty) {
       empty.style.display = 'flex';
       empty.dataset.role = 'empty';
@@ -1511,7 +1677,6 @@ async function renderStickerPanel() {
         ? safeMessageImageUrl(s.data)
         : (typeof safeIconUrl === 'function' ? safeIconUrl(s.data) : '');
       if (!src) {
-        // Fallback: allow short data URLs already validated as data:image
         if (String(s.data).indexOf('data:image/') === 0 && s.data.length < STICKER_DATA_MAX + 5000) {
           src = s.data;
         }
@@ -1525,12 +1690,11 @@ async function renderStickerPanel() {
         + '<img src="' + esc(src) + '" alt="" loading="lazy" draggable="false" />'
         + '</button>';
     });
-    grid.innerHTML = html;
-    grid._stickerList = list;
-    grid._stickerPack = pack;
+    stickerGrid.innerHTML = html;
+    stickerGrid._stickerList = list;
+    stickerGrid._stickerPack = pack;
   }
 
-  var meta = $('sticker-meta');
   if (meta) {
     if (_stickerTab === 'room') {
       meta.textContent = (lang.stickerRoomMeta || '{n}/{max}')
@@ -1542,7 +1706,6 @@ async function renderStickerPanel() {
     }
   }
 
-  var addBtn = $('sticker-add-btn');
   if (addBtn) {
     var roomFull = _stickerTab === 'room' && list.length >= STICKER_ROOM_MAX;
     addBtn.disabled = !!_stickerBusy || roomFull;
@@ -2011,7 +2174,7 @@ function bindStickerUi() {
   var onComposerClick = function (e) {
     var t = e.target;
     if (!t || !t.closest) return;
-    if (t.closest('#sticker-btn') || t.closest('.sticker-btn')) {
+    if (t.closest('#sticker-btn') || (t.closest('.sticker-btn') && !t.closest('#sticker-panel'))) {
       e.preventDefault();
       e.stopPropagation();
       toggleStickerPanel(e);
@@ -2028,6 +2191,20 @@ function bindStickerUi() {
       e.preventDefault();
       e.stopPropagation();
       setStickerTab(tab.getAttribute('data-sticker-tab'));
+      return;
+    }
+    var catBtn = t.closest('[data-emoji-cat]');
+    if (catBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      setEmojiCat(catBtn.getAttribute('data-emoji-cat'));
+      return;
+    }
+    var emojiCell = t.closest('.emoji-cell[data-emoji]');
+    if (emojiCell) {
+      e.preventDefault();
+      e.stopPropagation();
+      insertEmojiAtCursor(emojiCell.getAttribute('data-emoji') || emojiCell.textContent || '');
     }
   };
   if (typeof pageListen === 'function') {

@@ -818,17 +818,26 @@ function renderMessages(opts) {
       var safeImg = typeof safeMessageImageUrl === 'function'
         ? safeMessageImageUrl(payload.data)
         : safeIconUrl(payload.data);
+      var isStickerMsg = !!(payload.sticker === true || payload.sticker === 1 || payload.as_sticker);
       if (safeImg) {
-        html += '<figure class="msg-media" data-media-idx="' + idx + '" tabindex="0" role="button"'
-          + ' aria-label="' + esc(payload.filename || lang.attachImage || 'Image') + '">'
-          + '<img class="msg-image" src="' + esc(safeImg) + '" alt="' + esc(payload.filename || '') + '" loading="lazy" />'
-          + '<span class="msg-media-veil"></span>'
-          + '<span class="msg-media-zoom">' + SVG_ICONS.expand + '</span>'
-          + '</figure>';
+        if (isStickerMsg) {
+          // Compact sticker bubble (no photo chrome)
+          html += '<button type="button" class="msg-sticker" data-media-idx="' + idx + '"'
+            + ' aria-label="' + esc(payload.filename || lang.stickerBtn || 'Sticker') + '">'
+            + '<img class="msg-sticker-img" src="' + esc(safeImg) + '" alt="" loading="lazy" draggable="false" />'
+            + '</button>';
+        } else {
+          html += '<figure class="msg-media" data-media-idx="' + idx + '" tabindex="0" role="button"'
+            + ' aria-label="' + esc(payload.filename || lang.attachImage || 'Image') + '">'
+            + '<img class="msg-image" src="' + esc(safeImg) + '" alt="' + esc(payload.filename || '') + '" loading="lazy" />'
+            + '<span class="msg-media-veil"></span>'
+            + '<span class="msg-media-zoom">' + SVG_ICONS.expand + '</span>'
+            + '</figure>';
+        }
       } else {
         html += '<div class="msg-text">' + esc(payload.filename || lang.attachImage || 'Image') + '</div>';
       }
-      if (payload.text) html += '<div class="msg-text msg-caption">' + esc(payload.text) + '</div>';
+      if (payload.text && !isStickerMsg) html += '<div class="msg-text msg-caption">' + esc(payload.text) + '</div>';
     } else if (msgType === 'file' || msgType === 'file-meta') {
       var fileMeta = fileCardMeta(payload.filename, payload.mime_type);
       var hasInline = !!(payload.data);
@@ -1098,8 +1107,8 @@ function renderMessages(opts) {
     });
   });
 
-  // Image bubbles → full-screen viewer
-  container.querySelectorAll('.msg-media[data-media-idx]').forEach(function (fig) {
+  // Image / sticker bubbles → full-screen viewer
+  container.querySelectorAll('.msg-media[data-media-idx], .msg-sticker[data-media-idx]').forEach(function (fig) {
     var open = function (e) {
       e.stopPropagation();
       var m = state.messages[parseInt(fig.dataset.mediaIdx, 10)];

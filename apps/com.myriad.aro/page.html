@@ -69,24 +69,27 @@
           <div class="input-float-wrap">
             <div id="quote-preview" class="quote-preview" style="display:none"></div>
             <div id="attach-preview" class="attach-preview" style="display:none"></div>
-            <!-- Stickers: group pack (rooms) + personal local pack -->
-            <div id="sticker-panel" class="sticker-panel" hidden role="dialog" aria-label="Stickers" aria-hidden="true">
+            <!-- Emoji + stickers panel -->
+            <div id="sticker-panel" class="sticker-panel" hidden role="dialog" aria-label="Emoji" aria-hidden="true">
               <div class="sticker-panel-grab" aria-hidden="true"><span class="sticker-panel-grab-bar"></span></div>
               <div class="sticker-panel-head">
                 <div id="sticker-tabs" class="sticker-tabs" role="tablist">
-                  <button type="button" id="sticker-tab-room" class="sticker-tab sticker-tab-active" data-sticker-tab="room" role="tab" aria-selected="true">群贴纸</button>
+                  <button type="button" id="sticker-tab-emoji" class="sticker-tab sticker-tab-active" data-sticker-tab="emoji" role="tab" aria-selected="true">表情</button>
+                  <button type="button" id="sticker-tab-room" class="sticker-tab" data-sticker-tab="room" role="tab" aria-selected="false">群贴纸</button>
                   <button type="button" id="sticker-tab-mine" class="sticker-tab" data-sticker-tab="mine" role="tab" aria-selected="false">我的</button>
                 </div>
                 <div class="sticker-panel-actions">
                   <span id="sticker-meta" class="sticker-meta" aria-live="polite"></span>
-                  <button type="button" id="sticker-add-btn" class="sticker-add-btn">
+                  <button type="button" id="sticker-add-btn" class="sticker-add-btn" style="display:none">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                     <span class="sticker-add-label">添加</span>
                   </button>
                 </div>
               </div>
+              <div id="emoji-cats" class="emoji-cats" role="tablist" aria-label="Emoji categories" style="display:none"></div>
               <div id="sticker-empty" class="sticker-empty" style="display:none"></div>
-              <div id="sticker-grid" class="sticker-grid" role="listbox" aria-label="Stickers"></div>
+              <div id="emoji-grid" class="emoji-grid" role="listbox" aria-label="Emoji" style="display:none"></div>
+              <div id="sticker-grid" class="sticker-grid" role="listbox" aria-label="Stickers" style="display:none"></div>
             </div>
             <div id="input-bar" class="input-bar">
               <button type="button" id="attach-btn" class="attach-btn" title="附件" aria-label="附件">
