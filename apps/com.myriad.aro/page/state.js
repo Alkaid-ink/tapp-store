@@ -23,6 +23,11 @@ var state = {
   rosterConfirmTimers: [],
   /** Token bumped to cancel in-flight confirm sequences. */
   rosterConfirmToken: 0,
+  /**
+   * Monotonic seq for getRoomMembers apply. Concurrent refreshRoomMembers
+   * must not let an older response clobber a newer roster (stale-write race).
+   */
+  rosterFetchSeq: 0,
   /** Until this timestamp, room poll runs faster (ms epoch). */
   rosterBoostUntil: 0,
   /** 新消息应用内 Toast（设置项 notifyOnMessage） */

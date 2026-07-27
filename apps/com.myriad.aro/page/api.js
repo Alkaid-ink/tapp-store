@@ -981,10 +981,13 @@ async function refreshRoomMembers(roomId, gen, opts) {
     return false;
   }
   var useGen = gen != null ? gen : state.openGen;
+  // Drop stale responses when confirm-burst / poll overlap.
+  var fetchSeq = (state.rosterFetchSeq = (state.rosterFetchSeq || 0) + 1);
 
   // Optimistic insert so UI reacts before getRoomMembers round-trip.
+  // Only paint if we still own the latest seq (a newer refresh may have started).
   if (opts.optimisticActor && typeof findMemberByActor === 'function') {
-    if (!findMemberByActor(opts.optimisticActor)) {
+    if (!findMemberByActor(opts.optimisticActor) && fetchSeq === state.rosterFetchSeq) {
       state.members = (state.members || []).concat([{
         actor_url: opts.optimisticActor,
         role: opts.optimisticRole || 'member',
@@ -1004,6 +1007,8 @@ async function refreshRoomMembers(roomId, gen, opts) {
 
   try {
     var res = await Tapp.federation.getRoomMembers(roomId);
+    // Stale network: a newer refreshRoomMembers already owns apply rights.
+    if (fetchSeq !== state.rosterFetchSeq) return false;
     if (!isConversationCurrent('room', roomId, useGen)) return false;
     var next = unwrapRoomMembers(res);
     var prevFp = typeof membersFingerprint === 'function'
@@ -1024,6 +1029,7 @@ async function refreshRoomMembers(roomId, gen, opts) {
     if (opts.fetchDetail && typeof Tapp.federation.getRoom === 'function') {
       try {
         var detail = await Tapp.federation.getRoom(roomId);
+        if (fetchSeq !== state.rosterFetchSeq) return changed;
         if (!isConversationCurrent('room', roomId, useGen)) return false;
         if (detail) {
           state.roomDetail = detail;
@@ -1038,6 +1044,7 @@ async function refreshRoomMembers(roomId, gen, opts) {
       } catch (eDetail) { /* ignore detail refresh */ }
     }
 
+    if (fetchSeq !== state.rosterFetchSeq) return changed;
     if (changed || opts.forceRender) {
       if (typeof renderMembers === 'function') renderMembers();
       if (typeof renderChatHeader === 'function') renderChatHeader();
@@ -1074,17 +1081,9 @@ function confirmRoomMembers(roomId, gen, opts) {
   var token = state.rosterConfirmToken;
   boostRoomPoll(opts.boostMs != null ? opts.boostMs : 20000);
 
-  // Immediate optimistic paint (no await)
-  if (opts.optimisticActor) {
-    refreshRoomMembers(roomId, useGen, {
-      fetchDetail: false,
-      forceRender: true,
-      optimisticActor: opts.optimisticActor,
-      optimisticRole: opts.optimisticRole || 'member',
-    }).catch(function () {});
-  }
-
   // Burst: now, 250ms, 700ms, 1.5s, 3s, 6s — stop early when expectation met.
+  // Note: optimistic insert is applied only on the first tick (index 0) so we
+  // never race a second concurrent getRoomMembers against an older empty roster.
   var delays = opts.delays || [0, 250, 700, 1500, 3000, 6000];
   var confirmedStable = 0;
 
@@ -1095,6 +1094,8 @@ function confirmRoomMembers(roomId, gen, opts) {
       refreshRoomMembers(roomId, useGen, {
         fetchDetail: index === 0 || index === delays.length - 1 || index === 2,
         forceRender: true,
+        optimisticActor: index === 0 ? opts.optimisticActor : undefined,
+        optimisticRole: opts.optimisticRole || 'member',
       }).then(function (changed) {
         if (token !== state.rosterConfirmToken) return;
         if (!isConversationCurrent('room', roomId, useGen)) return;
@@ -1146,6 +1147,8 @@ async function pollMessages(force) {
     } else {
       // Rooms: poll messages + roster together so joins/leaves converge even if
       // the membership WS event was missed (common after reconnect / lag).
+      // Seq taken BEFORE await so a concurrent confirm-burst can win apply rights.
+      var pollSeq = (state.rosterFetchSeq = (state.rosterFetchSeq || 0) + 1);
       var roomPoll = await Promise.allSettled([
         Tapp.federation.getRoomMessages(id, undefined, 200),
         Tapp.federation.getRoomMembers(id),
@@ -1154,7 +1157,11 @@ async function pollMessages(force) {
       if (roomPoll[0].status === 'fulfilled') {
         res = roomPoll[0].value;
       }
-      if (roomPoll[1].status === 'fulfilled' && roomPoll[1].value) {
+      if (
+        roomPoll[1].status === 'fulfilled'
+        && roomPoll[1].value
+        && pollSeq === state.rosterFetchSeq
+      ) {
         var nextMembers = unwrapRoomMembers(roomPoll[1].value);
         var prevMfp = typeof membersFingerprint === 'function'
           ? membersFingerprint(state.members)
