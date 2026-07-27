@@ -129,7 +129,7 @@ flowchart TB
 
 | 字段 | 类型 | 说明 |
 | ---- | ---- | ---- |
-| `$schema` | string | 可选；官方使用 `https://myriad.you/schemas/tapp-store-v1.json` |
+| `$schema` | string | 可选；官方使用 `https://myriad.app/schemas/tapp-store-v1.json` |
 | `name` | string | 商店名称（前端校验必填） |
 | `version` | string | 目录自身版本（元数据） |
 | `api_version` | string \| number | 协议版本提示；官方当前为 `"2"` |
