@@ -385,7 +385,8 @@ function aroPlayEnter(el, className) {
     el.removeEventListener('animationend', done);
   };
   el.addEventListener('animationend', done);
-  setTimeout(done, 400);
+  // Match --aro-dur-view (~180ms) with small buffer; avoid 400ms lag on rapid switches.
+  setTimeout(done, 280);
 }
 
 /**

@@ -70,9 +70,18 @@ function syncConvTabsUi() {
 
 function setConvTab(tab) {
   if (tab !== 'recent' && tab !== 'dm' && tab !== 'room') tab = 'recent';
+  if (state.convTab === tab) {
+    syncConvTabsUi();
+    return;
+  }
   state.convTab = tab;
   syncConvTabsUi();
   renderConvList();
+  // Keep list scrolled to top when changing filter — avoids “stuck mid-list” empty feeling.
+  var list = $('conv-list');
+  if (list) {
+    try { list.scrollTop = 0; } catch (eScr) { /* ignore */ }
+  }
 }
 
 /**

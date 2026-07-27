@@ -67,6 +67,30 @@ function isConversationCurrent(kind, id, gen) {
 
 async function openConversation(kind, id) {
   if (!kind || !id) return;
+
+  // Already on this conversation and fully open — no reload thrash.
+  var chatElEarly = $('chat-container');
+  var chatVisible = !!(chatElEarly && chatElEarly.style.display !== 'none' && !chatElEarly.hidden);
+  if (
+    state.activeKind === kind
+    && state.activeId === id
+    && chatVisible
+    && !state.chatOpening
+    && !state.chatLoadError
+  ) {
+    // Mobile: ensure list stays hidden behind the open thread.
+    var sideStay = $('sidebar');
+    if (sideStay) sideStay.classList.add('sidebar-hidden-mobile');
+    return;
+  }
+
+  // A→B while chat already open: skip slide-in; only empty→thread animates.
+  var switchWithinChat = !!(
+    chatVisible
+    && state.activeId
+    && (state.activeKind !== kind || state.activeId !== id)
+  );
+
   // Invalidate any in-flight open/poll/realtime apply for the previous target.
   var gen = (state.openGen = (state.openGen || 0) + 1);
 
@@ -107,23 +131,55 @@ async function openConversation(kind, id) {
   if (typeof closeAttachMenu === 'function') closeAttachMenu();
   if (typeof updateSendState === 'function') updateSendState();
 
+  // Optimistic header from list so A→B does not flash a blank name.
+  try {
+    var listItems = typeof buildConversationItems === 'function' ? buildConversationItems() : [];
+    for (var li = 0; li < listItems.length; li++) {
+      if (listItems[li].kind === kind && listItems[li].id === id) {
+        var hint = listItems[li];
+        if (kind === 'channel') {
+          state.channelDetail = state.channelDetail || {};
+          state.channelDetail.remote_actor_name = hint.name;
+          state.channelDetail.remote_actor_avatar = hint.avatar || '';
+          state.channelDetail.remote_actor_url = hint.actorUrl || state.channelDetail.remote_actor_url;
+          state.channelDetail.status = hint.status || state.channelDetail.status;
+        } else if (kind === 'room') {
+          state.roomDetail = state.roomDetail || {};
+          state.roomDetail.name = hint.name;
+          state.roomDetail.avatar_url = hint.avatar || '';
+          state.roomDetail.room_id = id;
+        }
+        break;
+      }
+    }
+  } catch (eHint) { /* ignore */ }
+
   var emptyEl = $('empty-state');
-  if (emptyEl) emptyEl.style.display = 'none';
+  if (emptyEl) {
+    emptyEl.style.display = 'none';
+    emptyEl.classList.remove('aro-panel-enter');
+  }
   var chatEl = $('chat-container');
   if (chatEl) {
     chatEl.style.display = '';
-    // Only animate enter when this open is still current (avoids double-play on rapid switch)
-    if (isOpenGenCurrent(gen) && typeof aroPlayEnter === 'function') {
+    // Only animate empty→thread (or first open). A→B must not re-slide every click.
+    if (
+      !switchWithinChat
+      && isOpenGenCurrent(gen)
+      && typeof aroPlayEnter === 'function'
+    ) {
       aroPlayEnter(chatEl, 'aro-panel-enter');
+    } else {
+      chatEl.classList.remove('aro-panel-enter');
     }
   }
   var sideEl = $('sidebar');
   if (sideEl) sideEl.classList.add('sidebar-hidden-mobile');
 
-  renderMessages();
-  renderChatHeader();
-  // Refresh active highlight without waiting for network
+  // Highlight list first (instant feedback), then mid-pane content.
   renderConvList();
+  renderChatHeader();
+  renderMessages();
 
   // ---- Async work after first paint (stale-guarded with openGen) ----
   // Never block UI open on realtime unsubscribe.
@@ -2424,38 +2480,47 @@ function switchView(view) {
   var prev = state.currentView;
   if (prev === view) return;
   state.currentView = view;
+
+  // Instant nav chrome first — user feedback before view paint.
+  document.querySelectorAll('.aro-nav-item').forEach(function (btn) {
+    var on = btn.dataset.view === view;
+    btn.classList.toggle('aro-nav-active', on);
+    if (btn.setAttribute) btn.setAttribute('aria-current', on ? 'page' : 'false');
+  });
+
   // Leaving a view: clear overlays that can pin over the whole #tapp-content (create/compose).
   if (typeof dismissTransientUi === 'function') {
     dismissTransientUi({ keepChat: view === 'messages' });
   }
+
   var views = ['messages', 'feed', 'rings'];
   views.forEach(function (v) {
     var el = $('view-' + v);
-    if (el) {
-      el.classList.toggle('aro-view-active', v === view);
-      if (v !== view) {
-        el.style.display = 'none';
-        el.classList.remove('aro-view-enter');
-        // Ensure inactive views never intercept pointer hits
-        el.style.pointerEvents = 'none';
-      } else {
-        el.style.display = '';
-        el.style.pointerEvents = '';
-        el.classList.add('aro-view-active');
-        if (prev && prev !== view) aroPlayEnter(el, 'aro-view-enter');
+    if (!el) return;
+    if (v !== view) {
+      el.classList.remove('aro-view-active', 'aro-view-enter');
+      el.style.display = 'none';
+      // Ensure inactive views never intercept pointer hits
+      el.style.pointerEvents = 'none';
+    } else {
+      el.style.display = '';
+      el.style.pointerEvents = '';
+      el.classList.add('aro-view-active');
+      // Enter animation only when actually changing views (not first paint).
+      if (prev && prev !== view && typeof aroPlayEnter === 'function') {
+        aroPlayEnter(el, 'aro-view-enter');
       }
     }
   });
-  // Update nav buttons
-  document.querySelectorAll('.aro-nav-item').forEach(function (btn) {
-    btn.classList.toggle('aro-nav-active', btn.dataset.view === view);
-  });
+
   // Pause chat poll when not on messages; keep WS for quick resume.
   // Do not bump openGen here — active conversation should survive nav away/back.
   if (view === 'messages') {
     if (state.activeId) startPolling();
   } else {
     stopPolling();
+    // Mid-open load must not keep skeleton when user left messenger.
+    if (state.chatOpening) state.chatOpening = false;
   }
   // Contextual feed + is feed-only; hide and close menus when leaving feed.
   if (typeof updateFeedPlusVisibility === 'function') updateFeedPlusVisibility();
@@ -2463,7 +2528,14 @@ function switchView(view) {
     if (typeof closeFeedPlusMenu === 'function') closeFeedPlusMenu();
     if (typeof closeFollowDialog === 'function') closeFollowDialog();
   }
-  // Load data for the view
-  if (view === 'feed') loadFeed();
-  else if (view === 'rings') loadRings();
+  // Load data for the view (rings always; feed only if not already loaded for sub-tab).
+  if (view === 'feed') {
+    var sub = state.feedSubTab || 'timeline';
+    var already = state.feedLoaded && state.feedLoaded[sub];
+    if (!already || (typeof loadFeed === 'function' && state.feedError)) {
+      if (typeof loadFeed === 'function') loadFeed();
+    }
+  } else if (view === 'rings') {
+    if (typeof loadRings === 'function') loadRings();
+  }
 }

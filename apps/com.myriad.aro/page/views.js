@@ -3709,6 +3709,9 @@ function bindEvents() {
     backBtn.addEventListener('click', function () {
       // Invalidate in-flight open/poll so leaving chat cannot flash stale messages.
       state.openGen = (state.openGen || 0) + 1;
+      state.chatOpening = false;
+      if (typeof clearRosterConfirmTimers === 'function') clearRosterConfirmTimers();
+      state.rosterConfirmToken = (state.rosterConfirmToken || 0) + 1;
       // History/files live under #chat-main (siblings of #chat-container), and on mobile
       // .history-overlay is position:fixed;z-index:90 — must seal BEFORE hiding chat shell.
       if (typeof dismissTransientUi === 'function') {
@@ -3737,10 +3740,10 @@ function bindEvents() {
       var chat = $('chat-container');
       var members = $('member-panel');
       var empty = $('empty-state');
+      // Paint list first (instant), then hide chat — feels snappier on mobile.
       if (sidebar) {
         sidebar.classList.remove('sidebar-hidden-mobile');
         sidebar.style.pointerEvents = '';
-        aroPlayEnter(sidebar, 'aro-panel-enter');
       }
       if (chat) {
         chat.style.display = 'none';
@@ -3755,6 +3758,16 @@ function bindEvents() {
       }
       if (empty) {
         empty.style.display = '';
+      }
+      // Animate list return only on narrow layouts where sidebar was fully hidden.
+      var isMobileNav = false;
+      try {
+        isMobileNav = !!(window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+      } catch (eMm) { /* ignore */ }
+      if (isMobileNav && sidebar && typeof aroPlayEnter === 'function') {
+        aroPlayEnter(sidebar, 'aro-panel-enter');
+      }
+      if (empty && typeof aroPlayEnter === 'function') {
         aroPlayEnter(empty, 'aro-panel-enter');
       }
       clearPendingAttach();

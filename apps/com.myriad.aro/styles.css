@@ -2187,21 +2187,22 @@ button.aro-select-trigger.create-input{
 /* ===== Motion layer (intentional, short, reduced-motion aware) ===== */
 :root{
   --aro-ease:cubic-bezier(.2,.8,.2,1);
-  --aro-dur-fast:120ms;
-  --aro-dur:200ms;
-  --aro-dur-view:240ms;
+  --aro-dur-fast:100ms;
+  --aro-dur:160ms;
+  /* View / panel switches stay short so rapid taps feel responsive */
+  --aro-dur-view:180ms;
 }
 @keyframes aroFadeIn{from{opacity:0}to{opacity:1}}
 @keyframes aroFadeOut{from{opacity:1}to{opacity:0}}
-@keyframes aroViewIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-@keyframes aroSlideInRight{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:translateX(0)}}
-@keyframes aroSlideInLeft{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}
-@keyframes aroSlideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-@keyframes aroScaleIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
-@keyframes aroMsgIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-@keyframes aroPopIn{from{opacity:0;transform:scale(.94) translateY(4px)}to{opacity:1;transform:scale(1) translateY(0)}}
-@keyframes aroSheetOut{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(12px)}}
-@keyframes aroScaleOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.97)}}
+@keyframes aroViewIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+@keyframes aroSlideInRight{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:translateX(0)}}
+@keyframes aroSlideInLeft{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
+@keyframes aroSlideUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes aroScaleIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
+@keyframes aroMsgIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+@keyframes aroPopIn{from{opacity:0;transform:scale(.96) translateY(3px)}to{opacity:1;transform:scale(1) translateY(0)}}
+@keyframes aroSheetOut{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(10px)}}
+@keyframes aroScaleOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.98)}}
 
 /* View switch: messages / feed / rings */
 .aro-view.aro-view-active.aro-view-enter{
@@ -2215,9 +2216,13 @@ button.aro-select-trigger.create-input{
 .panel-main.aro-panel-enter,
 .panel-detail.aro-panel-enter{animation:aroSlideInRight var(--aro-dur-view) var(--aro-ease) both}
 
+/* Active conv highlight settles without layout jump */
+.conv-item{transition:background .12s ease,box-shadow .12s ease}
+.conv-item.conv-active{transition:background .1s ease}
+
 /* Mobile member sheet */
 @media(max-width:768px){
-  .member-panel.member-open-mobile{animation:aroSlideInRight 220ms var(--aro-ease) both}
+  .member-panel.member-open-mobile{animation:aroSlideInRight 180ms var(--aro-ease) both}
 }
 
 /* Dialogs / sheets / confirm / menus */
