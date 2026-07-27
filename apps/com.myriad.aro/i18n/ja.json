@@ -409,6 +409,7 @@
   "settingsVisPublicDesc": "誰でも閲覧でき、フォロワーへ配信されます。",
   "settingsVisUnlisted": "未収載",
   "settingsVisUnlistedDesc": "公開一覧には載せず、このサーバーでは限定的な配信になります。",
+  "e2eEncryptedMessage": "暗号化メッセージ",
   "settingsWhoCanMessage": "メッセージを送れる相手（端末内受信箱フィルタ）",
   "settingsWhoCanMessageHint": "サーバー側のプライバシー制御ではありません。相手は依然として送信できます。端末内での表示フィルタのみです。",
   "backupImportTooLarge": "アーカイブが大きすぎます（最大 {n}）",

@@ -614,6 +614,28 @@ function isE2eKeyExchangeMessage(msg, msgType, payload) {
   return false;
 }
 
+/**
+ * True if payload is an E2E ciphertext envelope (not yet decrypted for display).
+ * Shape: { algorithm, ciphertext, ephemeral_key? } — must never JSON.stringify into bubbles.
+ */
+function isE2eCiphertextEnvelope(payload) {
+  if (!payload || typeof payload !== 'object') return false;
+  if (isE2eKeyExchangeMessage(null, '', payload)) return false;
+  var ct = payload.ciphertext || payload.cipher_text;
+  if (!ct || typeof ct !== 'string') return false;
+  if (payload.algorithm || payload.ephemeral_key || payload.ephemeralKey || payload.nonce) {
+    return true;
+  }
+  // bare ciphertext + high entropy base64
+  return ct.length > 16 && !payload.text && !payload.title && !payload.data;
+}
+
+function e2eEncryptedPlaceholder() {
+  return lang.e2eEncryptedMessage
+    || lang.e2eEstablished
+    || 'Encrypted message';
+}
+
 function e2eKeyExchangeLabel(msg, payload) {
   var p = payload || (msg && typeof msg.payload === 'object' ? msg.payload : {}) || {};
   var dir = String(p.direction || '').toLowerCase();
@@ -641,12 +663,24 @@ function e2eKeyExchangeLabel(msg, payload) {
  * Human-readable text from a message payload.
  * Never stringifies media blobs (data / transfer_id) — that used to dump base64 into quotes.
  * Never stringifies E2E key-exchange payloads (algorithm + publicKey).
+ * Never stringifies ciphertext envelopes (algorithm + ciphertext + ephemeral_key).
  */
 function getPayloadText(payload) {
   if (payload == null) return '';
-  if (typeof payload === 'string') return payload;
+  if (typeof payload === 'string') {
+    // Defensive: backend/WS sometimes leaves a JSON string of the envelope
+    var st = payload.trim();
+    if (st.charAt(0) === '{' && st.indexOf('ciphertext') !== -1 && st.indexOf('algorithm') !== -1) {
+      return e2eEncryptedPlaceholder();
+    }
+    return payload;
+  }
   if (typeof payload !== 'object') {
     try { return String(payload); } catch (e0) { return ''; }
+  }
+  // Ciphertext envelope first — do not prefer accidental nested fields
+  if (isE2eCiphertextEnvelope(payload)) {
+    return e2eEncryptedPlaceholder();
   }
   if (payload.text != null && payload.text !== '') return String(payload.text);
   if (typeof payload.content === 'string' && payload.content) return payload.content;
@@ -663,6 +697,12 @@ function getPayloadText(payload) {
     if (!s || s === '{}' || s === 'null') return '';
     // Defensive: still suppress crypto-looking envelopes without message_type
     if (s.indexOf('publicKey') !== -1 && s.indexOf('x25519') !== -1) return '';
+    if (s.indexOf('ciphertext') !== -1 && s.indexOf('algorithm') !== -1) {
+      return e2eEncryptedPlaceholder();
+    }
+    if (s.indexOf('ephemeral_key') !== -1 || s.indexOf('ephemeralKey') !== -1) {
+      return e2eEncryptedPlaceholder();
+    }
     return s.length > 160 ? s.slice(0, 159) + '…' : s;
   } catch (e) {
     return '';

@@ -421,6 +421,7 @@
   "settingsVisPublicDesc": "所有人可见，并投递给关注者。",
   "settingsVisUnlisted": "不公开列出",
   "settingsVisUnlistedDesc": "不作为公开内容列出；本站受众范围受限。",
+  "e2eEncryptedMessage": "加密消息",
   "settingsWhoCanMessage": "谁可以私信你（本地收件箱过滤）",
   "settingsWhoCanMessageHint": "这不是服务端隐私策略：远端仍可能投递消息。选项仅影响本机收件箱如何过滤/展示，无法阻止对方发送。",
   "backupImportTooLarge": "备份文件过大（最大 {n}）",

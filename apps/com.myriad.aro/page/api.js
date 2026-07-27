@@ -778,24 +778,74 @@ function messagesFingerprint(msgs) {
       ids.push((msgs[i].message_id || '') + (msgs[i].is_pinned ? '*' : ''));
     }
   }
-  return msgs.length + '|' + (last.message_id || '') + '|' + (last.created_at || '') + '|' + pins + '|' + ids.join(',');
+  // Include a slice of last payload so ciphertext→plaintext decrypt refreshes UI
+  // even when message_id/count stay the same (WS envelope vs GET decrypt race).
+  var lastBody = '';
+  try {
+    var lp = last.payload;
+    if (typeof lp === 'string') lastBody = lp.slice(0, 48);
+    else if (lp && typeof lp === 'object') {
+      lastBody = (lp.text || lp.ciphertext || lp.title || lp.filename || JSON.stringify(lp)).toString().slice(0, 48);
+    }
+  } catch (eFp) { /* ignore */ }
+  return msgs.length + '|' + (last.message_id || '') + '|' + (last.created_at || '') + '|' + pins + '|' + ids.join(',') + '|' + lastBody;
+}
+
+/**
+ * Prefer decrypted/plain payloads over WS ciphertext envelopes.
+ * Host WS often echoes storage form {algorithm,ciphertext,...} while GET history
+ * returns decrypted JSON — a late WS event must not clobber good plaintext.
+ */
+function preferDisplayPayload(existingMsg, incomingMsg) {
+  var out = Object.assign({}, existingMsg || {}, incomingMsg || {});
+  var oldP = existingMsg && existingMsg.payload;
+  var newP = incomingMsg && incomingMsg.payload;
+  var oldEnc = typeof isE2eCiphertextEnvelope === 'function' && isE2eCiphertextEnvelope(oldP);
+  var newEnc = typeof isE2eCiphertextEnvelope === 'function' && isE2eCiphertextEnvelope(newP);
+  if (newEnc && oldP && !oldEnc) {
+    out.payload = oldP;
+  } else if (oldEnc && newP && !newEnc) {
+    out.payload = newP;
+  }
+  return out;
+}
+
+var _decryptRefreshTimer = null;
+function scheduleDecryptRefresh() {
+  if (_decryptRefreshTimer) return;
+  _decryptRefreshTimer = setTimeout(function () {
+    _decryptRefreshTimer = null;
+    if (typeof pollMessages === 'function') {
+      pollMessages(true).catch(function () {});
+    }
+  }, 120);
 }
 
 function mergeIncomingMessage(msg) {
   if (!msg || !msg.message_id) return false;
   // Realtime can race a conversation switch; never mutate without an active chat.
   if (!state.activeId || !state.activeKind) return false;
+  var needsDecryptRefresh = typeof isE2eCiphertextEnvelope === 'function'
+    && isE2eCiphertextEnvelope(msg.payload);
   for (var i = 0; i < state.messages.length; i++) {
     if (state.messages[i].message_id === msg.message_id) {
-      state.messages[i] = Object.assign({}, state.messages[i], msg);
+      var merged = preferDisplayPayload(state.messages[i], msg);
+      // If we still only have ciphertext, keep UI placeholder until poll decrypts
+      if (typeof isE2eCiphertextEnvelope === 'function'
+        && isE2eCiphertextEnvelope(merged.payload)) {
+        needsDecryptRefresh = true;
+      }
+      state.messages[i] = merged;
       state.messagesFp = messagesFingerprint(state.messages);
       renderMessages();
+      if (needsDecryptRefresh) scheduleDecryptRefresh();
       return true;
     }
   }
   state.messages.push(msg);
   state.messagesFp = messagesFingerprint(state.messages);
   renderMessages({ animateNew: true, newCount: 1 });
+  if (needsDecryptRefresh) scheduleDecryptRefresh();
   return true;
 }
 

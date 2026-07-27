@@ -421,6 +421,7 @@
   "settingsVisPublicDesc": "Anyone can see this post; delivered to followers.",
   "settingsVisUnlisted": "Unlisted",
   "settingsVisUnlistedDesc": "Not listed as public; audience is limited on this server.",
+  "e2eEncryptedMessage": "Encrypted message",
   "settingsWhoCanMessage": "Who can message you (local inbox filter)",
   "settingsWhoCanMessageHint": "Not a server privacy policy: peers can still deliver messages. This only filters how your local inbox shows them.",
   "backupImportTooLarge": "Archive too large (max {n})",
