@@ -583,7 +583,18 @@ function buildLibraryShareSnapshot(item, platformId) {
   if (meta) { for (var mk in meta) if (Object.prototype.hasOwnProperty.call(meta, mk)) statSource[mk] = meta[mk]; }
   var stats = extractLibraryStats(contentType || (item && item.type) || '', statSource);
   var music = extractMusicMeta(statSource);
-  return {
+  // Prefer platform HTML urls when the item already carries one.
+  var externalUrl = '';
+  if (meta) {
+    externalUrl = String(meta.html_url || meta.url || meta.link || meta.external_url || '').trim();
+  }
+  if (!externalUrl && item) {
+    externalUrl = String(item.html_url || item.url || item.link || item.external_url || '').trim();
+  }
+  // GitHub full_name often lives on the item itself
+  if (!itemId && meta && meta.full_name) itemId = String(meta.full_name);
+  if (!itemId && item && item.full_name) itemId = String(item.full_name);
+  var snap = {
     title: title,
     description: description,
     platform_id: platform,
@@ -596,7 +607,12 @@ function buildLibraryShareSnapshot(item, platformId) {
     progress_total: stats.progressTotal,
     artist: music.artist,
     album: music.album,
+    external_url: externalUrl || '',
   };
+  if (!snap.external_url) {
+    snap.external_url = libraryExternalUrl(snap) || '';
+  }
+  return snap;
 }
 
 function openLibraryPicker(icons, titles) {
@@ -753,6 +769,7 @@ function openLibraryPicker(icons, titles) {
       progressTotal: snap.progress_total,
       artist: snap.artist,
       album: snap.album,
+      externalUrl: snap.external_url,
     });
     dismissPickerOverlay(overlay);
   });

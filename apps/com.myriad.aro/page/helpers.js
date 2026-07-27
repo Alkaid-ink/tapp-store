@@ -898,13 +898,180 @@ function sheetMetaHtml(parts) {
 }
 
 /** "Open original" affordance; only https links are offered (sandbox blocks the rest). */
-function brewLinkHtml(url) {
-  var href = String(url || '').trim();
-  if (href.toLowerCase().indexOf('https://') !== 0) return '';
+function brewLinkHtml(url, label) {
+  var href = safeExternalHref(url);
+  if (!href || href.toLowerCase().indexOf('https://') !== 0) {
+    // Allow http only if already validated by safeExternalHref as http
+    href = safeExternalHref(url);
+    if (!href) return '';
+  }
   return '<a class="sheet-link" href="' + esc(href) + '" target="_blank" rel="noopener noreferrer">'
-    + esc(lang.openOriginal || 'Open original')
+    + esc(label || lang.openOriginal || 'Open original')
     + '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>'
     + '</a>';
+}
+
+/**
+ * Build a public web URL for a library item (github / steam / bangumi / …).
+ * Prefer an explicit external_url from the share snapshot.
+ */
+function libraryExternalUrl(payload) {
+  payload = payload || {};
+  var explicit = safeExternalHref(payload.external_url || payload.url || payload.link || '');
+  if (explicit) return explicit;
+  var platform = platformKey(payload.platform_id || payload.platform || '');
+  var itemId = String(payload.item_id || payload.id || '').trim();
+  var itemType = String(payload.item_type || payload.content_type || '').trim().toLowerCase();
+  if (itemType === 'library') itemType = '';
+  if (!itemId && !platform) return '';
+
+  if (platform === 'github') {
+    // full_name "owner/repo" or bare username
+    if (/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(itemId)) {
+      return 'https://github.com/' + itemId;
+    }
+    if (/^[A-Za-z0-9_.-]+$/.test(itemId)) return 'https://github.com/' + itemId;
+  }
+  if (platform === 'netease') {
+    if (/^\d+$/.test(itemId)) {
+      if (itemType === 'music' || !itemType) return 'https://music.163.com/#/song?id=' + itemId;
+      if (itemType === 'playlist' || itemType === 'album') {
+        return 'https://music.163.com/#/' + itemType + '?id=' + itemId;
+      }
+      return 'https://music.163.com/#/song?id=' + itemId;
+    }
+  }
+  if (platform === 'steam' && /^\d+$/.test(itemId)) {
+    return 'https://store.steampowered.com/app/' + itemId;
+  }
+  if (platform === 'bangumi' && /^\d+$/.test(itemId)) {
+    return 'https://bgm.tv/subject/' + itemId;
+  }
+  if (platform === 'mal' && /^\d+$/.test(itemId)) {
+    var malKind = (itemType === 'anime' || itemType === 'manga') ? itemType : 'anime';
+    return 'https://myanimelist.net/' + malKind + '/' + itemId;
+  }
+  if (platform === 'bilibili') {
+    if (/^BV[0-9A-Za-z]+$/i.test(itemId)) return 'https://www.bilibili.com/video/' + itemId;
+    if (/^av\d+$/i.test(itemId)) return 'https://www.bilibili.com/video/' + itemId;
+    if (/^\d+$/.test(itemId)) return 'https://www.bilibili.com/video/av' + itemId;
+  }
+  if (platform === 'psn' && itemId) {
+    return 'https://store.playstation.com/search/' + encodeURIComponent(itemId);
+  }
+  if (platform === 'xbox' && itemId) {
+    return 'https://www.xbox.com/games/store/search?q=' + encodeURIComponent(itemId);
+  }
+  return '';
+}
+
+/** True when this library share should try host music playback (NetEase track). */
+function isPlayableLibraryShare(payload) {
+  payload = payload || {};
+  var platform = platformKey(payload.platform_id || payload.platform || '');
+  var itemType = String(payload.item_type || payload.content_type || '').trim().toLowerCase();
+  if (itemType === 'library') itemType = '';
+  var itemId = String(payload.item_id || '').trim();
+  if (platform === 'netease' && /^\d+$/.test(itemId)) {
+    return !itemType || itemType === 'music' || itemType === 'song';
+  }
+  return false;
+}
+
+/**
+ * Trigger host music player for a playable library share.
+ * @returns {Promise<boolean>} true if a play attempt was made successfully
+ */
+async function playLibraryShare(payload) {
+  payload = payload || {};
+  if (!isPlayableLibraryShare(payload)) return false;
+  var itemId = String(payload.item_id || '').trim();
+  if (!itemId) return false;
+  if (typeof Tapp === 'undefined' || !Tapp.media || typeof Tapp.media.playTrack !== 'function') {
+    return false;
+  }
+  var song = {
+    id: itemId,
+    trackId: itemId,
+    name: payload.title || payload.name || ('#' + itemId),
+    title: payload.title || payload.name || ('#' + itemId),
+    artist: payload.artist || '',
+    album: payload.album || '',
+    cover: payload.image || '',
+    image: payload.image || '',
+    source: 'netease',
+    url: '/api/proxy/music/netease/audio/' + encodeURIComponent(itemId),
+    duration: 0,
+  };
+  try {
+    var res = await Tapp.media.playTrack(song);
+    if (res && res.success === false) return false;
+    try {
+      Tapp.ui.showNotification({
+        title: lang.nowPlaying || lang.mediaPlay || 'Playing',
+        message: song.name,
+        type: 'success',
+      });
+    } catch (eN) { /* ignore */ }
+    return true;
+  } catch (e) {
+    console.warn('[Aro] playLibraryShare failed', e);
+    return false;
+  }
+}
+
+/**
+ * Open an external https URL from the sandbox via a temporary <a> click
+ * (window.open is disabled in the Tapp sandbox).
+ */
+function openSafeExternalUrl(url) {
+  var href = safeExternalHref(url);
+  if (!href) return false;
+  try {
+    var a = document.createElement('a');
+    a.href = href;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    return true;
+  } catch (e) {
+    console.warn('[Aro] openSafeExternalUrl failed', e);
+    return false;
+  }
+}
+
+/**
+ * Primary card action for a federation share:
+ * - library netease music → play
+ * - library / brew with URL → open link
+ * - returns 'played' | 'opened' | 'none'
+ */
+async function activateShareCard(type, payload, card) {
+  payload = payload || {};
+  type = type || '';
+  if (type === 'library') {
+    if (isPlayableLibraryShare(payload)) {
+      var played = await playLibraryShare(payload);
+      if (played) return 'played';
+      // Fall through to open song page if play failed
+    }
+    var libUrl = libraryExternalUrl(payload);
+    if (libUrl && openSafeExternalUrl(libUrl)) return 'opened';
+    return 'none';
+  }
+  if (type === 'brew') {
+    var brewUrl = safeExternalHref(payload.brew_link || (card && card.dataset && card.dataset.brewLink) || '');
+    if (brewUrl && openSafeExternalUrl(brewUrl)) return 'opened';
+    return 'none';
+  }
+  if (type === 'report') {
+    // No stable public URL for another user's report — detail sheet only.
+    return 'none';
+  }
+  return 'none';
 }
 
 /** Per-type sheet accents, matching the share-card palette. */

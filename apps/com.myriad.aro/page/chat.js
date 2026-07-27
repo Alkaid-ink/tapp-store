@@ -885,6 +885,19 @@ function renderMessages(opts) {
         + (payload.brew_link && safeExternalHref(payload.brew_link) ? ' data-brew-link="' + esc(safeExternalHref(payload.brew_link)) + '"' : '')
         + (payload.platform_id ? ' data-platform-id="' + esc(payload.platform_id) + '"' : '')
         + (payload.item_id ? ' data-item-id="' + esc(String(payload.item_id)) + '"' : '')
+        + (payload.item_type || (payload.content_type && payload.content_type !== 'library')
+          ? ' data-item-type="' + esc(String(payload.item_type || payload.content_type)) + '"'
+          : '')
+        + (payload.artist ? ' data-artist="' + esc(payload.artist) + '"' : '')
+        + (payload.album ? ' data-album="' + esc(payload.album) + '"' : '')
+        + (function () {
+            var eu = typeof libraryExternalUrl === 'function' ? libraryExternalUrl(payload) : '';
+            if (!eu && payload.external_url) eu = safeExternalHref(payload.external_url) || '';
+            return eu ? ' data-external-url="' + esc(eu) + '"' : '';
+          })()
+        + (typeof isPlayableLibraryShare === 'function' && isPlayableLibraryShare(payload)
+          ? ' data-playable="1"'
+          : '')
         + (shareCover && safeIconUrl(shareCover) ? ' data-image="' + esc(safeIconUrl(shareCover)) + '"' : '')
         + (payload.report_id ? ' data-report-id="' + esc(payload.report_id) + '"' : '')
         + (payload.summary ? ' data-report-summary="' + esc(payload.summary) + '"' : '')
@@ -916,8 +929,11 @@ function renderMessages(opts) {
         }
         html += '</div>';
       }
+      var goPlayable = msgType === 'library' && typeof isPlayableLibraryShare === 'function' && isPlayableLibraryShare(payload);
       html += '</div>'
-        + (shareNeedsDecision ? '' : '<span class="msg-share-go" aria-hidden="true">' + SVG_ICONS.chevronRight + '</span>')
+        + (shareNeedsDecision ? '' : '<span class="msg-share-go" aria-hidden="true">'
+          + (goPlayable ? SVG_ICONS.playCircle : SVG_ICONS.chevronRight)
+          + '</span>')
         + '</div>';
       // Receiver: accept/reject span the card footer, below the main row
       if (shareNeedsDecision) {
@@ -1064,27 +1080,77 @@ function renderMessages(opts) {
     });
   });
 
-  // Bind share card click handlers — open detail views
+  // Bind share card click handlers — play (music) / open link / detail sheet
   container.querySelectorAll('.msg-share-card[data-type], .msg-media-card[data-type]').forEach(function (card) {
     card.addEventListener('click', function (e) {
       // Don't open detail if clicking on action buttons
       if (e.target.closest('.msg-share-actions')) return;
+      e.preventDefault();
+      e.stopPropagation();
       var type = card.dataset.type;
+      var payload = typeof shareCardPayload === 'function' ? shareCardPayload(card) : {};
+      // Prefer dataset fields for robustness
+      if (!payload.platform_id && card.dataset.platformId) payload.platform_id = card.dataset.platformId;
+      if (!payload.item_id && card.dataset.itemId) payload.item_id = card.dataset.itemId;
+      if (!payload.item_type && card.dataset.itemType) payload.item_type = card.dataset.itemType;
+      if (!payload.external_url && card.dataset.externalUrl) payload.external_url = card.dataset.externalUrl;
+      if (!payload.image && card.dataset.image) payload.image = card.dataset.image;
+      if (!payload.artist && card.dataset.artist) payload.artist = card.dataset.artist;
+      if (!payload.album && card.dataset.album) payload.album = card.dataset.album;
+      if (!payload.title) {
+        var tEl = card.querySelector('.msg-share-title, .msg-media-title');
+        if (tEl) payload.title = tEl.textContent || '';
+      }
+
       if (type === 'tapp' && card.dataset.tappId) {
         // Only open detail if accepted or if sender
-        var msgIdx = card.dataset.msgIdx;
-        var stKey = 'tapp_accept_' + card.dataset.tappId + '_' + msgIdx;
+        var stKey = (card.dataset.acceptKey || '').trim();
+        if (!stKey) {
+          var msgIdx = card.dataset.msgIdx;
+          stKey = 'tapp_accept_' + card.dataset.tappId + '_' + msgIdx;
+        }
         var status = state.tappAcceptMap && state.tappAcceptMap[stKey];
         var isLocal = card.closest('.msg-local');
         if (isLocal || status === 'accepted') {
           openTappDetail(card.dataset.tappId, card);
         }
-      } else if (type === 'brew' && card.dataset.brewId) {
+        return;
+      }
+
+      // Primary: play NetEase / open github·steam·etc. links
+      if (typeof activateShareCard === 'function') {
+        activateShareCard(type, payload, card).then(function (result) {
+          if (result === 'played' || result === 'opened') return;
+          // Secondary: detail sheet
+          if (type === 'brew') {
+            openBrewDetail(
+              card.dataset.brewId ? parseInt(card.dataset.brewId, 10) : 0,
+              card.dataset.brewLink || payload.brew_link || '',
+              card,
+            );
+          } else if (type === 'library') {
+            openLibraryDetail(card);
+          } else if (type === 'report' && (card.dataset.reportId || payload.report_id)) {
+            openReportDetail(card.dataset.reportId || payload.report_id, card);
+          }
+        }).catch(function () {
+          if (type === 'library') openLibraryDetail(card);
+          else if (type === 'brew') {
+            openBrewDetail(
+              card.dataset.brewId ? parseInt(card.dataset.brewId, 10) : 0,
+              card.dataset.brewLink || '',
+              card,
+            );
+          }
+        });
+        return;
+      }
+
+      if (type === 'brew') {
         openBrewDetail(parseInt(card.dataset.brewId, 10), card.dataset.brewLink, card);
       } else if (type === 'library') {
         openLibraryDetail(card);
       } else if (type === 'report' && card.dataset.reportId) {
-        // Report detail polish is owned by report workers; keep basic open path
         openReportDetail(card.dataset.reportId, card);
       }
     });
@@ -1127,19 +1193,33 @@ function libraryMediaCardHtml(idx, payload, view) {
     + (logo ? '<span class="msg-media-logo" data-mark="brand" aria-hidden="true">' + logo + '</span>' : '')
     + '</div>';
 
+  var playable = typeof isPlayableLibraryShare === 'function' && isPlayableLibraryShare(payload);
+  var extUrl = typeof libraryExternalUrl === 'function' ? libraryExternalUrl(payload) : '';
   return '<div class="msg-media-card" data-type="library" data-orient="' + orient + '"'
     + ' data-msg-idx="' + idx + '"'
     + (payload.platform_id ? ' data-platform-id="' + esc(payload.platform_id) + '"' : '')
     + (payload.item_id ? ' data-item-id="' + esc(String(payload.item_id)) + '"' : '')
+    + (payload.item_type || payload.content_type
+      ? ' data-item-type="' + esc(String(payload.item_type || payload.content_type)) + '"'
+      : '')
+    + (payload.artist ? ' data-artist="' + esc(payload.artist) + '"' : '')
+    + (payload.album ? ' data-album="' + esc(payload.album) + '"' : '')
+    + (extUrl ? ' data-external-url="' + esc(extUrl) + '"' : '')
+    + (playable ? ' data-playable="1"' : '')
     + (view.image ? ' data-image="' + esc(view.image) + '"' : '')
     + (accent ? ' data-mark="brand"' : '')
-    + ' style="cursor:pointer' + accentStyle + '">'
+    + ' style="cursor:pointer' + accentStyle + '"'
+    + ' title="' + esc(playable
+      ? (lang.mediaPlayHint || lang.nowPlaying || 'Play')
+      : (lang.openOriginal || 'Open')) + '">'
     + cover
     + '<div class="msg-media-info">'
     + '<div class="msg-media-title">' + esc(view.title) + '</div>'
     + (meta ? '<div class="msg-media-meta">' + meta + '</div>' : '')
     + '</div>'
-    + '<span class="msg-media-go" aria-hidden="true">' + SVG_ICONS.chevronRight + '</span>'
+    + '<span class="msg-media-go" aria-hidden="true">'
+    + (playable ? SVG_ICONS.playCircle : SVG_ICONS.chevronRight)
+    + '</span>'
     + '</div>';
 }
 
@@ -1614,7 +1694,16 @@ function openBrewDetail(brewId, brewLink, card) {
 function openLibraryDetail(card) {
   // Prefer live message payload snapshot, then data-* attrs, then DOM text.
   var payloadSnap = shareCardPayload(card);
-  var titleEl = card && card.querySelector('.msg-share-title');
+  if (card && card.dataset) {
+    if (!payloadSnap.platform_id && card.dataset.platformId) payloadSnap.platform_id = card.dataset.platformId;
+    if (!payloadSnap.item_id && card.dataset.itemId) payloadSnap.item_id = card.dataset.itemId;
+    if (!payloadSnap.item_type && card.dataset.itemType) payloadSnap.item_type = card.dataset.itemType;
+    if (!payloadSnap.external_url && card.dataset.externalUrl) payloadSnap.external_url = card.dataset.externalUrl;
+    if (!payloadSnap.artist && card.dataset.artist) payloadSnap.artist = card.dataset.artist;
+    if (!payloadSnap.album && card.dataset.album) payloadSnap.album = card.dataset.album;
+    if (!payloadSnap.image && card.dataset.image) payloadSnap.image = card.dataset.image;
+  }
+  var titleEl = card && (card.querySelector('.msg-share-title') || card.querySelector('.msg-media-title'));
   var descEl = card && card.querySelector('.msg-share-desc');
   var view = resolveShareCardView('library', payloadSnap);
   var title = view.title || (titleEl && titleEl.textContent) || lang.attachLibrary || 'Library';
@@ -1623,6 +1712,9 @@ function openLibraryDetail(card) {
   var itemId = payloadSnap.item_id != null ? String(payloadSnap.item_id) : ((card && card.dataset.itemId) || '');
   var image = view.image || (card && card.dataset.image) || '';
   var contentType = payloadSnap.item_type || (payloadSnap.content_type && payloadSnap.content_type !== 'library' ? payloadSnap.content_type : '') || '';
+  var extUrl = (typeof libraryExternalUrl === 'function' ? libraryExternalUrl(payloadSnap) : '')
+    || safeExternalHref(payloadSnap.external_url) || '';
+  var canPlay = typeof isPlayableLibraryShare === 'function' && isPlayableLibraryShare(payloadSnap);
   var overlay = createDetailOverlay(title, {
     type: 'library',
     subtitle: platformId,
@@ -1630,12 +1722,46 @@ function openLibraryDetail(card) {
     fallback: SVG_ICONS.library,
   });
   var body = overlay.querySelector('.picker-body');
+  var actions = '';
+  if (canPlay) {
+    actions += '<button type="button" class="sheet-btn lib-action-play">'
+      + SVG_ICONS.playCircle + ' '
+      + esc(lang.mediaPlay || lang.nowPlaying || 'Play')
+      + '</button>';
+  }
+  if (extUrl) {
+    actions += brewLinkHtml(extUrl, lang.openOriginal || 'Open original');
+  }
   body.innerHTML =
     '<div class="sheet-pad">'
     + (safeIconUrl(image) ? '<img class="sheet-cover" src="' + esc(image) + '" alt="" />' : '')
-    + sheetMetaHtml([platformId, contentType, itemId])
+    + sheetMetaHtml([platformId, contentType, itemId, payloadSnap.artist, payloadSnap.album].filter(Boolean))
     + (desc ? '<div class="sheet-desc">' + esc(desc) + '</div>' : '')
+    + (actions ? '<div class="sheet-actions" style="display:flex;flex-direction:column;gap:10px;margin-top:12px">' + actions + '</div>' : '')
+    + (!actions && !desc ? '<div class="sheet-hint">' + esc(lang.pickerEmpty || 'No details') + '</div>' : '')
     + '</div>';
+
+  var playBtn = body.querySelector('.lib-action-play');
+  if (playBtn) {
+    playBtn.addEventListener('click', function () {
+      playBtn.disabled = true;
+      playLibraryShare(payloadSnap).then(function (ok) {
+        playBtn.disabled = false;
+        if (ok) {
+          try { aroDismiss(overlay, { remove: true, ms: 170 }); } catch (eD) { /* ignore */ }
+        } else if (extUrl) {
+          openSafeExternalUrl(extUrl);
+        } else {
+          try {
+            Tapp.ui.showNotification({
+              title: lang.mediaPlayFail || lang.loadFail || 'Playback failed',
+              type: 'error',
+            });
+          } catch (eN) { /* ignore */ }
+        }
+      });
+    });
+  }
 }
 
 function openReportDetail(reportId, card) {

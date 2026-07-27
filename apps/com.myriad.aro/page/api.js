@@ -687,6 +687,10 @@ async function doSend() {
         if (attach.progressTotal != null) msgPayload.progress_total = attach.progressTotal;
         if (attach.artist) msgPayload.artist = attach.artist;
         if (attach.album) msgPayload.album = attach.album;
+        if (attach.externalUrl) {
+          var ext = typeof safeExternalHref === 'function' ? safeExternalHref(attach.externalUrl) : '';
+          if (ext) msgPayload.external_url = ext;
+        }
       } else {
         if (attach.platformId) msgPayload.platform_id = attach.platformId;
         if (attach.itemId) msgPayload.item_id = attach.itemId;

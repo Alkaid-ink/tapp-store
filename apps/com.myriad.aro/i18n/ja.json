@@ -533,5 +533,9 @@
   "emptyTitleBookmarks": "ブックマークはまだありません",
   "copyHandle": "ハンドルをコピー",
   "shareCopiedText": "共有テキストをコピーしました",
-  "unrepostFail": "リポスト解除に失敗しました"
+  "unrepostFail": "リポスト解除に失敗しました",
+  "nowPlaying": "再生中",
+  "mediaPlay": "再生",
+  "mediaPlayFail": "再生できません",
+  "mediaPlayHint": "タップして再生"
 }

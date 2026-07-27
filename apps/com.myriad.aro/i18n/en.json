@@ -533,5 +533,9 @@
   "emptyTitleBookmarks": "No bookmarks yet",
   "copyHandle": "Copy handle",
   "shareCopiedText": "Share text copied",
-  "unrepostFail": "Couldn't undo repost"
+  "unrepostFail": "Couldn't undo repost",
+  "nowPlaying": "Now playing",
+  "mediaPlay": "Play",
+  "mediaPlayFail": "Playback failed",
+  "mediaPlayHint": "Tap to play"
 }

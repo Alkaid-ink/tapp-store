@@ -533,5 +533,9 @@
   "emptyTitleBookmarks": "还没有收藏",
   "copyHandle": "复制标识",
   "shareCopiedText": "分享文案已复制",
-  "unrepostFail": "取消转发失败"
+  "unrepostFail": "取消转发失败",
+  "nowPlaying": "正在播放",
+  "mediaPlay": "播放",
+  "mediaPlayFail": "无法播放",
+  "mediaPlayHint": "点击播放"
 }
