@@ -1487,11 +1487,18 @@ async function doInviteMember(actorUrl) {
     try { Tapp.ui.showNotification({ title: lang.inviteSuccess, type: 'success' }); } catch (e2) {}
     // Refresh members & re-render popover
     try {
-      var detail = await Tapp.federation.getRoom(state.activeId);
-      if (detail) state.roomDetail = detail;
-      var membersRes = await Tapp.federation.getRoomMembers(state.activeId);
-      state.members = unwrapRoomMembers(membersRes);
-      renderMembers();
+      if (typeof refreshRoomMembers === 'function') {
+        await refreshRoomMembers(state.activeId, state.openGen, {
+          fetchDetail: true,
+          forceRender: true,
+        });
+      } else {
+        var detail = await Tapp.federation.getRoom(state.activeId);
+        if (detail) state.roomDetail = detail;
+        var membersRes = await Tapp.federation.getRoomMembers(state.activeId);
+        state.members = unwrapRoomMembers(membersRes);
+        renderMembers();
+      }
       renderInvitePopoverContacts();
     } catch (e2) {}
   } catch (e) {
@@ -1783,13 +1790,20 @@ async function doKickMember(actorUrl) {
   if (!(await aroConfirm(lang.kickConfirm, true))) return;
   try {
     await Tapp.federation.removeMember(state.activeId, actorUrl);
-    // Refresh members
-    var detail = await Tapp.federation.getRoom(state.activeId);
-    if (detail) state.roomDetail = detail;
-    var membersRes = await Tapp.federation.getRoomMembers(state.activeId);
-    state.members = unwrapRoomMembers(membersRes);
-    renderMembers();
-    renderChatHeader();
+    // Refresh members + count
+    if (typeof refreshRoomMembers === 'function') {
+      await refreshRoomMembers(state.activeId, state.openGen, {
+        fetchDetail: true,
+        forceRender: true,
+      });
+    } else {
+      var detail = await Tapp.federation.getRoom(state.activeId);
+      if (detail) state.roomDetail = detail;
+      var membersRes = await Tapp.federation.getRoomMembers(state.activeId);
+      state.members = unwrapRoomMembers(membersRes);
+      renderMembers();
+      renderChatHeader();
+    }
   } catch (e) {
     notifyError(lang.kickFail, e);
   }
