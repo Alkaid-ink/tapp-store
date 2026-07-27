@@ -72,6 +72,10 @@ async function openConversation(kind, id) {
 
   // Stop poll immediately so a prior interval cannot write into the new shell.
   stopPolling();
+  // Cancel any previous room's roster confirm burst.
+  if (typeof clearRosterConfirmTimers === 'function') clearRosterConfirmTimers();
+  state.rosterConfirmToken = (state.rosterConfirmToken || 0) + 1;
+  state.rosterBoostUntil = 0;
 
   // ---- Synchronous shell update FIRST (must not await before this) ----
   // Clicks on 最近/list must paint active chat immediately; network teardown
@@ -196,6 +200,14 @@ async function openConversation(kind, id) {
   updateSendState();
   startPolling();
   subscribeRealtime();
+  // Room open: actively re-confirm roster (home/fan-out lag after someone just joined).
+  if (kind === 'room' && typeof confirmRoomMembers === 'function') {
+    confirmRoomMembers(id, gen, {
+      delays: [400, 1200, 3000],
+      boostMs: 12000,
+      refreshList: true,
+    });
+  }
   // Refresh list so server unread (post last_read_at) is not stuck for a full poll cycle
   if (kind === 'room' && typeof loadConversations === 'function') {
     loadConversations().catch(function () {});
@@ -932,6 +944,27 @@ function mergeIncomingMessage(msg) {
   return true;
 }
 
+function clearRosterConfirmTimers() {
+  var timers = state.rosterConfirmTimers || [];
+  for (var i = 0; i < timers.length; i++) {
+    try { clearTimeout(timers[i]); } catch (eClr) { /* ignore */ }
+  }
+  state.rosterConfirmTimers = [];
+}
+
+/**
+ * Temporarily poll rooms faster so membership converges without waiting 15s.
+ * @param {number} [ms] boost window length (default 20s)
+ */
+function boostRoomPoll(ms) {
+  var windowMs = ms != null ? ms : 20000;
+  state.rosterBoostUntil = Date.now() + windowMs;
+  // Restart poll loop with a short interval while boosted.
+  if (state.activeKind === 'room' && state.activeId) {
+    startPolling();
+  }
+}
+
 /**
  * Pull latest room roster (and optionally room detail). Used after membership
  * WS events and during poll so a missed RoomJoin still converges without
@@ -1016,6 +1049,90 @@ async function refreshRoomMembers(roomId, gen, opts) {
   }
 }
 
+/**
+ * Actively confirm roster after join/leave: immediate pull + short burst of
+ * re-fetches (federation delivery / DB lag often lands after the first GET).
+ *
+ * @param {string} roomId
+ * @param {number} [gen]
+ * @param {{
+ *   optimisticActor?: string,
+ *   optimisticRole?: string,
+ *   expectActor?: string,
+ *   expectAbsent?: string,
+ *   delays?: number[],
+ *   boostMs?: number,
+ *   refreshList?: boolean
+ * }} [opts]
+ */
+function confirmRoomMembers(roomId, gen, opts) {
+  opts = opts || {};
+  if (!roomId) return;
+  var useGen = gen != null ? gen : state.openGen;
+  clearRosterConfirmTimers();
+  state.rosterConfirmToken = (state.rosterConfirmToken || 0) + 1;
+  var token = state.rosterConfirmToken;
+  boostRoomPoll(opts.boostMs != null ? opts.boostMs : 20000);
+
+  // Immediate optimistic paint (no await)
+  if (opts.optimisticActor) {
+    refreshRoomMembers(roomId, useGen, {
+      fetchDetail: false,
+      forceRender: true,
+      optimisticActor: opts.optimisticActor,
+      optimisticRole: opts.optimisticRole || 'member',
+    }).catch(function () {});
+  }
+
+  // Burst: now, 250ms, 700ms, 1.5s, 3s, 6s — stop early when expectation met.
+  var delays = opts.delays || [0, 250, 700, 1500, 3000, 6000];
+  var confirmedStable = 0;
+
+  function schedule(delay, index) {
+    var tid = setTimeout(function () {
+      if (token !== state.rosterConfirmToken) return;
+      if (!isConversationCurrent('room', roomId, useGen)) return;
+      refreshRoomMembers(roomId, useGen, {
+        fetchDetail: index === 0 || index === delays.length - 1 || index === 2,
+        forceRender: true,
+      }).then(function (changed) {
+        if (token !== state.rosterConfirmToken) return;
+        if (!isConversationCurrent('room', roomId, useGen)) return;
+
+        // Optional: stop early once we see the expected actor appear/disappear twice in a row.
+        var met = true;
+        if (opts.expectActor && typeof findMemberByActor === 'function') {
+          var m = findMemberByActor(opts.expectActor);
+          met = !!(m && (m.membership_status || 'active') === 'active');
+        }
+        if (opts.expectAbsent && typeof findMemberByActor === 'function') {
+          met = met && !findMemberByActor(opts.expectAbsent);
+        }
+        if (met && (opts.expectActor || opts.expectAbsent)) {
+          confirmedStable += 1;
+        } else if (opts.expectActor || opts.expectAbsent) {
+          confirmedStable = 0;
+        }
+
+        if (opts.refreshList && (changed || index === 0) && typeof loadConversations === 'function') {
+          loadConversations().catch(function () {});
+        }
+
+        // Two consecutive confirms that meet expectation → cancel remaining bursts.
+        if (confirmedStable >= 2 && index < delays.length - 1) {
+          clearRosterConfirmTimers();
+          return;
+        }
+      }).catch(function () {});
+    }, delay);
+    state.rosterConfirmTimers = (state.rosterConfirmTimers || []).concat([tid]);
+  }
+
+  for (var i = 0; i < delays.length; i++) {
+    schedule(delays[i], i);
+  }
+}
+
 async function pollMessages(force) {
   if (!state.activeId || !state.activeKind) return;
   // Snapshot target so a mid-flight conversation switch cannot apply wrong msgs.
@@ -1080,13 +1197,39 @@ async function pollMessages(force) {
   } catch (e) { /* ignore */ }
 }
 
+function currentPollInterval() {
+  var base = state.pollInterval || 15000;
+  if (state.activeKind === 'room' && state.rosterBoostUntil && Date.now() < state.rosterBoostUntil) {
+    // Aggressive confirm window after membership changes.
+    return Math.min(base, 2500);
+  }
+  return base;
+}
+
 function startPolling() {
-  stopPolling();
-  state.pollTimer = setInterval(function () { pollMessages(false); }, state.pollInterval);
+  // Cancel only the poll loop — do NOT cancel roster confirm bursts.
+  if (state.pollTimer) {
+    clearTimeout(state.pollTimer);
+    state.pollTimer = null;
+  }
+  function tick() {
+    state.pollTimer = null;
+    pollMessages(false);
+    if (!state.activeId || !state.activeKind) return;
+    // Drop boost when expired so interval returns to normal.
+    if (state.rosterBoostUntil && Date.now() >= state.rosterBoostUntil) {
+      state.rosterBoostUntil = 0;
+    }
+    state.pollTimer = setTimeout(tick, currentPollInterval());
+  }
+  state.pollTimer = setTimeout(tick, currentPollInterval());
 }
 
 function stopPolling() {
-  if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; }
+  if (state.pollTimer) {
+    clearTimeout(state.pollTimer);
+    state.pollTimer = null;
+  }
 }
 
 async function subscribeRealtime() {
@@ -1271,13 +1414,29 @@ function handleRealtimeMessage(ev) {
     var roomIdForMembers = state.activeId;
     var genForMembers = state.openGen;
     var joinActor = data.event === 'member_joined' ? data.actor : null;
-    if (typeof refreshRoomMembers === 'function') {
+    var leaveActor = (
+      data.event === 'member_left'
+      || data.event === 'member_removed'
+      || data.event === 'member_kicked'
+    ) ? data.actor : null;
+    if (typeof confirmRoomMembers === 'function') {
+      confirmRoomMembers(roomIdForMembers, genForMembers, {
+        optimisticActor: joinActor || undefined,
+        optimisticRole: data.role || 'member',
+        expectActor: joinActor || undefined,
+        expectAbsent: leaveActor || undefined,
+        refreshList: true,
+      });
+    } else if (typeof refreshRoomMembers === 'function') {
       refreshRoomMembers(roomIdForMembers, genForMembers, {
         fetchDetail: true,
         forceRender: true,
         optimisticActor: joinActor || undefined,
         optimisticRole: data.role || 'member',
       }).catch(function () {});
+      if (typeof loadConversations === 'function') {
+        loadConversations().catch(function () {});
+      }
     } else {
       Tapp.federation.getRoomMembers(roomIdForMembers).then(function (res) {
         if (!isConversationCurrent('room', roomIdForMembers, genForMembers)) return;
@@ -1285,9 +1444,9 @@ function handleRealtimeMessage(ev) {
         renderMembers();
         renderChatHeader();
       }).catch(function () {});
-    }
-    if (typeof loadConversations === 'function') {
-      loadConversations().catch(function () {});
+      if (typeof loadConversations === 'function') {
+        loadConversations().catch(function () {});
+      }
     }
     return;
   }
@@ -1389,13 +1548,30 @@ function bindRealtimeListeners() {
         || ev.event === 'member_invited'
         || ev.event === 'member_kicked'
       ) {
-        if (typeof refreshRoomMembers === 'function') {
+        var joined = ev.event === 'member_joined' ? ev.actor : null;
+        var left = (
+          ev.event === 'member_left'
+          || ev.event === 'member_removed'
+          || ev.event === 'member_kicked'
+        ) ? ev.actor : null;
+        if (typeof confirmRoomMembers === 'function') {
+          confirmRoomMembers(roomId, gen, {
+            optimisticActor: joined || undefined,
+            optimisticRole: ev.role || 'member',
+            expectActor: joined || undefined,
+            expectAbsent: left || undefined,
+            refreshList: true,
+          });
+        } else if (typeof refreshRoomMembers === 'function') {
           refreshRoomMembers(roomId, gen, {
             fetchDetail: true,
             forceRender: true,
-            optimisticActor: ev.event === 'member_joined' ? ev.actor : undefined,
+            optimisticActor: joined || undefined,
             optimisticRole: ev.role || 'member',
           }).catch(function () {});
+          if (typeof loadConversations === 'function') {
+            loadConversations().catch(function () {});
+          }
         } else {
           Tapp.federation.getRoomMembers(roomId).then(function (res) {
             if (!isConversationCurrent('room', roomId, gen)) return;
@@ -1403,9 +1579,6 @@ function bindRealtimeListeners() {
             renderMembers();
             renderChatHeader();
           }).catch(function () {});
-        }
-        if (typeof loadConversations === 'function') {
-          loadConversations().catch(function () {});
         }
       }
     });
@@ -1485,9 +1658,15 @@ async function doInviteMember(actorUrl) {
     await Tapp.federation.inviteMember(state.activeId, { actor: actor });
     if (!actorUrl) { var input2 = $('invite-input'); if (input2) input2.value = ''; }
     try { Tapp.ui.showNotification({ title: lang.inviteSuccess, type: 'success' }); } catch (e2) {}
-    // Refresh members & re-render popover
+    // Refresh members & re-render popover (burst: invitee may still be pending).
     try {
-      if (typeof refreshRoomMembers === 'function') {
+      if (typeof confirmRoomMembers === 'function') {
+        confirmRoomMembers(state.activeId, state.openGen, {
+          delays: [0, 400, 1200, 3000],
+          boostMs: 12000,
+          refreshList: true,
+        });
+      } else if (typeof refreshRoomMembers === 'function') {
         await refreshRoomMembers(state.activeId, state.openGen, {
           fetchDetail: true,
           forceRender: true,
@@ -1499,7 +1678,11 @@ async function doInviteMember(actorUrl) {
         state.members = unwrapRoomMembers(membersRes);
         renderMembers();
       }
-      renderInvitePopoverContacts();
+      // Popover contacts re-render after first tick; burst will re-render members panel.
+      setTimeout(function () {
+        if (typeof renderInvitePopoverContacts === 'function') renderInvitePopoverContacts();
+      }, 100);
+      if (typeof renderInvitePopoverContacts === 'function') renderInvitePopoverContacts();
     } catch (e2) {}
   } catch (e) {
     notifyError(lang.inviteFail, e);
@@ -1790,8 +1973,15 @@ async function doKickMember(actorUrl) {
   if (!(await aroConfirm(lang.kickConfirm, true))) return;
   try {
     await Tapp.federation.removeMember(state.activeId, actorUrl);
-    // Refresh members + count
-    if (typeof refreshRoomMembers === 'function') {
+    // Confirm absence with a short burst (federated remove can lag).
+    if (typeof confirmRoomMembers === 'function') {
+      confirmRoomMembers(state.activeId, state.openGen, {
+        expectAbsent: actorUrl,
+        delays: [0, 300, 900, 2000, 4000],
+        boostMs: 15000,
+        refreshList: true,
+      });
+    } else if (typeof refreshRoomMembers === 'function') {
       await refreshRoomMembers(state.activeId, state.openGen, {
         fetchDetail: true,
         forceRender: true,
@@ -1829,6 +2019,9 @@ function exitActiveConversationUi(toastTitle, asError) {
   state.messages = [];
   state.messagesFp = '';
   if (typeof stopPolling === 'function') stopPolling();
+  if (typeof clearRosterConfirmTimers === 'function') clearRosterConfirmTimers();
+  state.rosterConfirmToken = (state.rosterConfirmToken || 0) + 1;
+  state.rosterBoostUntil = 0;
   if (typeof clearPendingAttach === 'function') clearPendingAttach();
   if (typeof clearQuote === 'function') clearQuote();
   if (typeof closeAttachMenu === 'function') closeAttachMenu();
@@ -1929,7 +2122,12 @@ async function doJoinOpenRoom() {
       state.roomDetail.my_role = state.roomDetail.my_role || 'member';
     }
     try {
-      if (typeof refreshRoomMembers === 'function') {
+      if (typeof confirmRoomMembers === 'function') {
+        confirmRoomMembers(state.activeId, state.openGen, {
+          refreshList: true,
+          delays: [0, 200, 600, 1200, 2500, 5000],
+        });
+      } else if (typeof refreshRoomMembers === 'function') {
         await refreshRoomMembers(state.activeId, state.openGen, {
           fetchDetail: true,
           forceRender: true,
@@ -1946,9 +2144,6 @@ async function doJoinOpenRoom() {
     renderMembers();
     renderConvList();
     updateSendState();
-    if (typeof loadConversations === 'function') {
-      loadConversations().catch(function () {});
-    }
     if (typeof maybePublishE2eKeys === 'function') {
       maybePublishE2eKeys().catch(function () {});
     }
@@ -1979,7 +2174,12 @@ async function doAcceptRoomInvite() {
       }
     }
     try {
-      if (typeof refreshRoomMembers === 'function') {
+      if (typeof confirmRoomMembers === 'function') {
+        confirmRoomMembers(state.activeId, state.openGen, {
+          refreshList: true,
+          delays: [0, 200, 600, 1200, 2500, 5000],
+        });
+      } else if (typeof refreshRoomMembers === 'function') {
         await refreshRoomMembers(state.activeId, state.openGen, {
           fetchDetail: true,
           forceRender: true,
@@ -1996,9 +2196,6 @@ async function doAcceptRoomInvite() {
     renderMembers();
     renderConvList();
     updateSendState();
-    if (typeof loadConversations === 'function') {
-      loadConversations().catch(function () {});
-    }
     if (typeof maybePublishE2eKeys === 'function') {
       maybePublishE2eKeys().catch(function () {});
     }
@@ -2211,7 +2408,15 @@ async function doJoinRoomById() {
     hideCreateDialog();
     input.value = '';
     await loadConversations();
-    openConversation('room', roomId);
+    await openConversation('room', roomId);
+    // openConversation already schedules a confirm burst; boost again for post-join.
+    if (typeof confirmRoomMembers === 'function') {
+      confirmRoomMembers(roomId, state.openGen, {
+        delays: [0, 300, 900, 2000, 4500],
+        boostMs: 20000,
+        refreshList: true,
+      });
+    }
     try {
       Tapp.ui.showNotification({
         title: lang.joinRoomOk || 'Joined',

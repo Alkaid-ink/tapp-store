@@ -16,6 +16,15 @@ var state = {
   sending: false,
   pollTimer: null,
   pollInterval: 15000,
+  /**
+   * Active roster confirmation burst timers (cleared on leave / new burst).
+   * After join/leave we re-fetch members multiple times instead of waiting on poll.
+   */
+  rosterConfirmTimers: [],
+  /** Token bumped to cancel in-flight confirm sequences. */
+  rosterConfirmToken: 0,
+  /** Until this timestamp, room poll runs faster (ms epoch). */
+  rosterBoostUntil: 0,
   /** 新消息应用内 Toast（设置项 notifyOnMessage） */
   notifyOnMessage: true,
   /** Active realtime WS subscription (channel|room) */
