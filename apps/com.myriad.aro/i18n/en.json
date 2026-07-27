@@ -360,6 +360,8 @@
   "quoteRepostSubmit": "Repost",
   "quoteRepostTitle": "Quote repost",
   "quoteRepostTruncated": "Earlier quotes not shown",
+  "postDetailTitle": "Post",
+  "postShowMore": "Show more",
   "quoteViewEmpty": "No text",
   "quoteViewSource": "Source: {s}",
   "quoteViewTitle": "Original post",

@@ -360,6 +360,8 @@
   "quoteRepostSubmit": "转发",
   "quoteRepostTitle": "引用转发",
   "quoteRepostTruncated": "更早的引用已折叠",
+  "postDetailTitle": "动态详情",
+  "postShowMore": "展开全文",
   "quoteViewEmpty": "暂无正文",
   "quoteViewSource": "来源：{s}",
   "quoteViewTitle": "原文",

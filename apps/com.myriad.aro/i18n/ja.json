@@ -360,6 +360,8 @@
   "quoteRepostSubmit": "リポスト",
   "quoteRepostTitle": "引用リポスト",
   "quoteRepostTruncated": "これより前の引用は省略",
+  "postDetailTitle": "投稿の詳細",
+  "postShowMore": "全文を表示",
   "quoteViewEmpty": "本文なし",
   "quoteViewSource": "ソース: {s}",
   "quoteViewTitle": "元の投稿",

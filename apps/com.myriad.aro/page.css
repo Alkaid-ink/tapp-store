@@ -265,6 +265,9 @@ body.dark{background:#0a0a0a;color:rgba(255,255,255,.92)}
 /* ===== Feed Items (tweet-like cards) ===== */
 .feed-item{display:flex;gap:12px;padding:16px 18px;border-bottom:1px solid rgba(128,128,128,.06);transition:background .12s;cursor:default}
 .feed-item:hover{background:rgba(128,128,128,.028)}
+.feed-item.is-openable{cursor:pointer}
+.feed-item.is-openable:hover{background:rgba(128,128,128,.04)}
+.feed-item.is-openable:focus-visible{outline:2px solid rgba(var(--tapp-primary-rgb,99,102,241),.35);outline-offset:-2px}
 .feed-item-avatar{width:42px;height:42px;border-radius:50%;flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;background:rgba(var(--tapp-primary-rgb,128,128,128),.1);color:var(--tapp-primary,#6366f1)}
 .feed-item-avatar img{width:100%;height:100%;object-fit:cover}
 .feed-item-icon{width:42px;height:42px;border-radius:12px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px;background:rgba(var(--tapp-primary-rgb,128,128,128),.07)}
@@ -276,6 +279,21 @@ body.dark{background:#0a0a0a;color:rgba(255,255,255,.92)}
 .feed-item-sep{font-size:13px;color:var(--text-secondary,#c0c0c0)}
 .feed-item-time{font-size:12px;color:var(--text-secondary,#8b98a5);white-space:nowrap;flex-shrink:0;margin-left:auto}
 .feed-item-text{font-size:14.5px;line-height:1.55;color:var(--text-primary,#1a1a1a);margin-top:6px;white-space:pre-wrap;overflow-wrap:break-word;max-width:100%}
+/* List clamp: outer feed truncates; detail modal shows full text */
+.feed-item-text.is-clamped{
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:5;
+  overflow:hidden;white-space:pre-wrap;
+}
+.feed-item-more{
+  display:inline-block;margin-top:4px;padding:0;border:none;background:none;
+  color:var(--tapp-primary,#6366f1);font-size:13px;font-weight:650;cursor:pointer;
+  font-family:inherit;touch-action:manipulation;
+}
+.feed-item-more:hover{text-decoration:underline}
+.feed-item-quoted-text.is-clamped{
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;
+  overflow:hidden;
+}
 .feed-item-badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 /* X-density action row: even spacing, compact hit targets */
 .feed-item-actions{display:flex;align-items:center;gap:2px;margin-top:8px;flex-wrap:wrap;max-width:100%}

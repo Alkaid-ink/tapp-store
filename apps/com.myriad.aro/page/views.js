@@ -524,6 +524,70 @@ function bindFeedContentActions(content) {
     });
   });
   if (typeof bindQuotedObjectClicks === 'function') bindQuotedObjectClicks(content);
+  // Open post detail (list is truncated; modal shows full body).
+  content.querySelectorAll('.feed-item[data-action-open-post]').forEach(function (card) {
+    if (card._aroOpenBound) return;
+    card._aroOpenBound = true;
+    function openFromCard(e) {
+      if (e) {
+        // Don't steal clicks from actions / media / nested quote / links.
+        if (e.target.closest(
+          'button, a, video, audio, input, textarea, select, .feed-item-actions, .feed-reply-box, .feed-item-quoted.is-clickable'
+        )) {
+          // Explicit "show more" still opens
+          if (!e.target.closest('[data-action-open-post].feed-item-more, button.feed-item-more')) {
+            return;
+          }
+        }
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      var oid = card.getAttribute('data-object-id') || '';
+      var item = oid && typeof findAnyFeedItemByObjectId === 'function'
+        ? findAnyFeedItemByObjectId(oid)
+        : null;
+      if (!item && oid && typeof findFeedItem === 'function') item = findFeedItem(oid);
+      // Published list may not be in findAny — reconstruct minimal item from DOM/state
+      if (!item) {
+        var lists = [state.timeline, state.bookmarks, state.published, state.feedItems];
+        for (var li = 0; li < lists.length && !item; li++) {
+          var arr = lists[li];
+          if (!Array.isArray(arr)) continue;
+          for (var i = 0; i < arr.length; i++) {
+            var it = arr[i];
+            if (!it) continue;
+            var rid = typeof resolveObjectId === 'function' ? resolveObjectId(it) : (it.object_id || '');
+            if (rid && String(rid) === String(oid)) { item = it; break; }
+            if (it.activity_id && card.getAttribute('data-activity-id')
+              && String(it.activity_id) === String(card.getAttribute('data-activity-id'))) {
+              item = it; break;
+            }
+          }
+        }
+      }
+      if (item && typeof openFeedPostDetail === 'function') {
+        openFeedPostDetail(item);
+      } else if (oid && typeof openQuotedPostDetail === 'function') {
+        openQuotedPostDetail(oid, null, {
+          title: lang.postDetailTitle || lang.quoteViewTitle || 'Post',
+        });
+      }
+    }
+    card.addEventListener('click', openFromCard);
+    card.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') openFromCard(e);
+    });
+  });
+  content.querySelectorAll('button.feed-item-more[data-action-open-post]').forEach(function (btn) {
+    if (btn._aroMoreBound) return;
+    btn._aroMoreBound = true;
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var card = btn.closest('.feed-item');
+      if (card) card.click();
+    });
+  });
   content.querySelectorAll('[data-action-copy-actor]').forEach(function (btn) {
     btn.addEventListener('click', function (e) {
       e.stopPropagation();
@@ -943,9 +1007,9 @@ function renderQuotedObjectHtml(quoted, depth, opts) {
   }
   h += '</div>';
   if (text && !looksLikeBareUrl(text)) {
-    // Full body by default — only clamp in very deep nest when not in detail modal.
-    var body = full ? String(text) : String(text).slice(0, 1200);
-    h += '<div class="feed-item-quoted-text">' + esc(body) + '</div>';
+    // List cards clamp; detail modal (full:true) shows complete body.
+    var body = full ? String(text) : truncateFeedCardText(String(text), 160).text;
+    h += '<div class="feed-item-quoted-text' + (full ? '' : ' is-clamped') + '">' + esc(body) + '</div>';
   } else if (text && looksLikeBareUrl(text)) {
     // Prefer human label over raw activity URL
     h += '<div class="feed-item-quoted-text" style="opacity:.75">'
@@ -996,16 +1060,40 @@ function findAnyFeedItemByObjectId(objectId) {
   return null;
 }
 
+/** Max characters shown on list cards (detail modal shows full body). */
+var FEED_CARD_TEXT_MAX = 280;
+
+function truncateFeedCardText(text, maxChars) {
+  text = String(text || '');
+  maxChars = maxChars || FEED_CARD_TEXT_MAX;
+  if (text.length <= maxChars) return { text: text, truncated: false };
+  // Prefer break near a newline / space
+  var cut = text.slice(0, maxChars);
+  var sp = Math.max(cut.lastIndexOf('\n'), cut.lastIndexOf(' '));
+  if (sp > maxChars * 0.55) cut = cut.slice(0, sp);
+  return { text: cut.replace(/\s+$/, '') + '…', truncated: true };
+}
+
 /**
- * Open quoted/original post detail. Works without following the author:
- * uses embedded snapshot first, then federation.getObject when available.
+ * Open post / quote detail modal.
+ * Works without following the author: local feed item → snapshot → getObject.
+ * @param {string} objectId
+ * @param {object} [snapshot]
+ * @param {{ actor?: object, title?: string, item?: object }} [opts]
  */
-async function openQuotedPostDetail(objectId, snapshot) {
-  if (!objectId && !(snapshot && typeof snapshot === 'object')) return;
+async function openQuotedPostDetail(objectId, snapshot, opts) {
+  if (!objectId && !(snapshot && typeof snapshot === 'object') && !(opts && opts.item)) return;
+  opts = opts || {};
   var dlg = $('quote-view-dialog');
   var bodyEl = $('quote-view-body');
   var titleEl = $('quote-view-title');
-  if (titleEl) titleEl.textContent = lang.quoteViewTitle || lang.quoteRepostQuoted || 'Original post';
+  if (titleEl) {
+    titleEl.textContent = opts.title
+      || lang.postDetailTitle
+      || lang.quoteViewTitle
+      || lang.quoteRepostQuoted
+      || 'Post';
+  }
   if (bodyEl) {
     bodyEl.innerHTML = '<div class="quote-view-loading">'
       + esc(lang.loading || 'Loading…') + '</div>';
@@ -1014,22 +1102,50 @@ async function openQuotedPostDetail(objectId, snapshot) {
   else if (dlg) { dlg.hidden = false; dlg.style.display = ''; }
 
   var object = snapshot && typeof snapshot === 'object' ? snapshot : null;
-  var actor = null;
-  var source = 'snapshot';
+  var actor = opts.actor || null;
+  var source = snapshot ? 'snapshot' : 'feed';
+
+  // Prefer explicit feed item (clicking a timeline card).
+  if (opts.item) {
+    var itemCj = typeof timelineContentObject === 'function'
+      ? timelineContentObject(opts.item)
+      : null;
+    if (itemCj && typeof itemCj === 'object') {
+      object = itemCj;
+      source = 'feed';
+    } else if (!object) {
+      var prev = typeof feedItemPreviewText === 'function'
+        ? feedItemPreviewText(opts.item)
+        : (opts.item.content_preview || '');
+      object = {
+        id: objectId || resolveObjectId(opts.item) || '',
+        type: 'Note',
+        content_preview: prev,
+        content: prev,
+        attributedTo: (opts.item.actor && opts.item.actor.actor_url) || '',
+      };
+      source = 'feed';
+    }
+    if (!actor && opts.item.actor) actor = opts.item.actor;
+    if (!objectId) objectId = resolveObjectId(opts.item) || objectId;
+  }
 
   // Prefer live local feed item when present (may have richer fields).
   var localItem = objectId ? findAnyFeedItemByObjectId(objectId) : null;
   if (localItem) {
     var cj = typeof timelineContentObject === 'function' ? timelineContentObject(localItem) : null;
     if (cj && typeof cj === 'object') {
-      object = cj;
+      // Keep richer of the two (local may have more fields)
+      object = Object.assign({}, object || {}, cj);
       source = 'feed';
     }
-    if (localItem.actor) actor = localItem.actor;
+    if (!actor && localItem.actor) actor = localItem.actor;
   }
 
   // Host API: resolve public object without follow (local DB or remote public).
-  if (objectId && typeof Tapp !== 'undefined' && Tapp.federation
+  // Only when we lack a solid body.
+  var hasBody = object && (quotedObjectText(object) || (extractNoteAttachments(object) || []).length);
+  if (objectId && !hasBody && typeof Tapp !== 'undefined' && Tapp.federation
     && typeof Tapp.federation.getObject === 'function') {
     try {
       var res = await Tapp.federation.getObject(objectId);
@@ -1042,6 +1158,22 @@ async function openQuotedPostDetail(objectId, snapshot) {
     } catch (eFetch) {
       console.warn('[Aro] getObject failed, using snapshot', eFetch);
     }
+  } else if (objectId && hasBody && typeof Tapp !== 'undefined' && Tapp.federation
+    && typeof Tapp.federation.getObject === 'function') {
+    // Background enrich (non-blocking) — optional fuller remote body
+    try {
+      var res2 = await Tapp.federation.getObject(objectId);
+      var data2 = res2 && res2.data ? res2.data : res2;
+      if (data2 && data2.object && typeof data2.object === 'object') {
+        var remoteText = quotedObjectText(data2.object);
+        var localText = quotedObjectText(object);
+        if (remoteText && remoteText.length > (localText || '').length) {
+          object = data2.object;
+          source = data2.source || 'api';
+          if (data2.actor) actor = data2.actor;
+        }
+      }
+    } catch (eBg) { /* ignore */ }
   }
 
   if (!object) {
@@ -1055,6 +1187,18 @@ async function openQuotedPostDetail(objectId, snapshot) {
     bodyEl.innerHTML = renderQuoteViewDetailHtml(object, actor, source);
     bindQuotedObjectClicks(bodyEl);
   }
+}
+
+/** Open detail for a timeline / published feed card. */
+function openFeedPostDetail(item) {
+  if (!item) return;
+  var objectId = typeof resolveObjectId === 'function' ? resolveObjectId(item) : (item.object_id || '');
+  var cj = typeof timelineContentObject === 'function' ? timelineContentObject(item) : null;
+  openQuotedPostDetail(objectId, cj || null, {
+    item: item,
+    actor: item.actor || null,
+    title: lang.postDetailTitle || lang.quoteViewTitle || 'Post',
+  });
 }
 
 /** Bind click/keyboard on quote cards within a container (feed or detail modal). */
@@ -1939,8 +2083,14 @@ function renderTimelineItem(item) {
   if (isRepostCard || (contentJson && (contentJson.type === 'Note' || contentJson['mfp:kind'] === 'repost'))) {
     linkUrl = contentJson && contentJson.link ? String(contentJson.link) : '';
   }
-  var h = '<div class="feed-item' + (isRepostCard ? ' is-repost' : '') + (inReplyTo && !isRepostCard ? ' is-reply' : '') + '" data-object-id="' + esc(objectId) + '"'
+  var canOpenPost = !!(objectId || text || (attachments && attachments.length));
+  var h = '<div class="feed-item'
+    + (isRepostCard ? ' is-repost' : '')
+    + (inReplyTo && !isRepostCard ? ' is-reply' : '')
+    + (canOpenPost ? ' is-openable' : '')
+    + '" data-object-id="' + esc(objectId) + '"'
     + (item.activity_id ? ' data-activity-id="' + esc(String(item.activity_id)) + '"' : '')
+    + (canOpenPost ? ' role="button" tabindex="0" data-action-open-post="1"' : '')
     + '>';
   h += '<div class="feed-item-avatar">' + avatarContentHtml(actor.avatar_url || '', name) + '</div>';
   h += '<div class="feed-item-body">';
@@ -1969,18 +2119,23 @@ function renderTimelineItem(item) {
   }
   h += '</div>';
   if (text) {
+    var trunc = truncateFeedCardText(text, FEED_CARD_TEXT_MAX);
+    var textCls = 'feed-item-text' + (trunc.truncated ? ' is-clamped' : '');
     if (linkUrl) {
-      h += '<div class="feed-item-text"><a href="' + esc(linkUrl) + '" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline">' + esc(text) + '</a></div>';
+      h += '<div class="' + textCls + '"><a href="' + esc(linkUrl) + '" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline">' + esc(trunc.text) + '</a></div>';
     } else {
-      h += '<div class="feed-item-text">' + esc(text) + '</div>';
+      h += '<div class="' + textCls + '">' + esc(trunc.text) + '</div>';
+    }
+    if (trunc.truncated) {
+      h += '<button type="button" class="feed-item-more" data-action-open-post="1">'
+        + esc(lang.postShowMore || 'Show more') + '</button>';
     }
   }
-  // Nested quote chain: each level is an embedded snapshot (mfp:quotedObject).
-  // Full body + clickable to open original (works without following the author).
+  // Nested quote chain: truncated on list; click opens original / parent detail.
   if (isQuoteRepost && contentJson) {
     var quoted = contentJson['mfp:quotedObject'] || contentJson.mfp_quotedObject || null;
     if (quoted && typeof quoted === 'object') {
-      h += renderQuotedObjectHtml(quoted, 0, { interactive: true, full: true });
+      h += renderQuotedObjectHtml(quoted, 0, { interactive: true, full: false });
     } else if (contentJson.quoteUrl || contentJson.inReplyTo || contentJson['mfp:quotedObjectId']) {
       var fallbackId = contentJson['mfp:quotedObjectId'] || contentJson.quoteUrl
         || contentJson.inReplyTo || '';
@@ -1988,7 +2143,7 @@ function renderTimelineItem(item) {
         id: fallbackId,
         type: 'Note',
         content_preview: lang.quoteRepostQuoted || 'Quoted post',
-      }, 0, { interactive: true, full: true });
+      }, 0, { interactive: true, full: false });
     }
   }
   h += renderTimelineMedia(attachments);
@@ -2208,7 +2363,14 @@ function renderPublishedItem(item) {
   if (looksLikeBareUrl(preview)) {
     preview = publishedTypeLabel(item.content_type) || (lang.composePost || 'Post');
   }
-  var h = '<div class="feed-item' + (isRepost ? ' is-repost' : '') + '">';
+  var pubObjectId = item.object_id || '';
+  if (!pubObjectId && item.content_json && item.content_json.id) pubObjectId = String(item.content_json.id);
+  var canOpenPub = !!(pubObjectId || preview || (attachments && attachments.length));
+  var h = '<div class="feed-item' + (isRepost ? ' is-repost' : '') + (canOpenPub ? ' is-openable' : '') + '"'
+    + (pubObjectId ? ' data-object-id="' + esc(String(pubObjectId)) + '"' : '')
+    + (item.activity_id ? ' data-activity-id="' + esc(String(item.activity_id)) + '"' : '')
+    + (canOpenPub ? ' role="button" tabindex="0" data-action-open-post="1"' : '')
+    + '>';
   if (isRepost) {
     h += '<div class="feed-item-avatar">' + icon + '</div>';
   } else {
@@ -2228,9 +2390,14 @@ function renderPublishedItem(item) {
   }
   h += '</div>';
   if (preview && (!titleLine || preview !== titleLine || isRepost)) {
-    h += '<div class="feed-item-text">' + esc(preview) + '</div>';
+    var pTrunc = truncateFeedCardText(preview, FEED_CARD_TEXT_MAX);
+    h += '<div class="feed-item-text' + (pTrunc.truncated ? ' is-clamped' : '') + '">' + esc(pTrunc.text) + '</div>';
+    if (pTrunc.truncated) {
+      h += '<button type="button" class="feed-item-more" data-action-open-post="1">'
+        + esc(lang.postShowMore || 'Show more') + '</button>';
+    }
   }
-  // Quote-repost: prefer full nested mfp:quotedObject from content_json
+  // Quote-repost: truncated nested quote on list; click opens original.
   if (isRepost) {
     var pubCj = item.content_json || item.content || item.object || null;
     if (pubCj && pubCj.object && typeof pubCj.object === 'object'
@@ -2239,7 +2406,7 @@ function renderPublishedItem(item) {
     }
     var pubQuoted = pubCj && (pubCj['mfp:quotedObject'] || pubCj.mfp_quotedObject);
     if (pubQuoted && typeof pubQuoted === 'object') {
-      h += renderQuotedObjectHtml(pubQuoted, 0, { interactive: true, full: true });
+      h += renderQuotedObjectHtml(pubQuoted, 0, { interactive: true, full: false });
     } else if (summary && summary !== preview) {
       var qText = summary.replace(/^↪\s*/, '');
       var qOid = (pubCj && (pubCj['mfp:quotedObjectId'] || pubCj.quoteUrl || pubCj.inReplyTo))
@@ -2249,7 +2416,7 @@ function renderPublishedItem(item) {
           id: qOid,
           type: 'Note',
           content_preview: qText,
-        }, 0, { interactive: true, full: true });
+        }, 0, { interactive: true, full: false });
       }
     }
   }
