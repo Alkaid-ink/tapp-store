@@ -703,6 +703,8 @@ function updateSendState() {
   if (stickerBtn) {
     stickerBtn.disabled = blocked;
     stickerBtn.setAttribute('aria-disabled', blocked ? 'true' : 'false');
+    // Keep hits working when enabled (composer float uses pointer-events tricks)
+    stickerBtn.style.pointerEvents = blocked ? 'none' : 'auto';
     stickerBtn.title = locked
       ? (lockMsg || lang.stickerBtn || lang.stickers || '')
       : (lang.stickerBtn || lang.stickers || '');

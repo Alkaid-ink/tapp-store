@@ -1363,57 +1363,103 @@ button.is-busy{opacity:.72;cursor:wait;pointer-events:none}
 /* ===== Input ===== */
 /* pointer-events:none on the wrap so the gradient does not steal message-area
    scrolls/clicks; only children (composer) are interactive. Never stretch over sidebar. */
-.input-float-wrap{position:absolute;bottom:0;left:0;right:0;z-index:20;padding:8px 12px;padding-bottom:calc(8px + env(safe-area-inset-bottom,0px));background:linear-gradient(to top,var(--bg-primary,#fff) 70%,transparent);pointer-events:none}
+.input-float-wrap{position:absolute;bottom:0;left:0;right:0;z-index:20;padding:8px 12px;padding-bottom:calc(8px + env(safe-area-inset-bottom,0px));background:linear-gradient(to top,var(--bg-primary,#fff) 70%,transparent);pointer-events:none;display:flex;flex-direction:column;align-items:stretch;gap:0}
 .input-float-wrap>*{pointer-events:auto}
-.input-bar{display:flex;align-items:flex-end;gap:8px;padding:8px 10px;background:var(--bg-primary,#fff);border:1px solid rgba(128,128,128,.12);border-radius:18px;box-shadow:0 2px 12px rgba(0,0,0,.06)}
-.attach-btn,.sticker-btn{width:36px;height:36px;border-radius:50%;border:none;background:transparent;color:var(--text-secondary,#999);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,color .15s,transform .12s;margin-bottom:1px}
+.input-float-wrap.sticker-open{z-index:28}
+.input-bar{display:flex;align-items:flex-end;gap:6px;padding:8px 10px;background:var(--bg-primary,#fff);border:1px solid rgba(128,128,128,.12);border-radius:18px;box-shadow:0 2px 12px rgba(0,0,0,.06);position:relative;z-index:2}
+.attach-btn,.sticker-btn{width:36px;height:36px;min-width:36px;min-height:36px;border-radius:50%;border:none;background:transparent;color:var(--text-secondary,#999);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,color .15s,transform .12s,box-shadow .15s;margin-bottom:1px;position:relative;z-index:3;pointer-events:auto!important;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .attach-btn:hover,.sticker-btn:hover{background:rgba(128,128,128,.08);color:var(--text-primary,#555)}
+.attach-btn:active,.sticker-btn:active{transform:scale(.94)}
 .attach-btn.attach-btn-active{background:rgba(var(--tapp-primary-rgb,100,100,255),.1);color:var(--tapp-primary,#6366f1);transform:rotate(45deg)}
-.sticker-btn.sticker-btn-active{background:rgba(var(--tapp-primary-rgb,100,100,255),.1);color:var(--tapp-primary,#6366f1)}
-.sticker-btn:disabled,.attach-btn:disabled{opacity:.4;cursor:not-allowed;pointer-events:none}
-/* Sticker panel (above composer) */
-.sticker-panel{display:none;flex-direction:column;max-height:min(280px,42vh);margin:0 0 8px;padding:8px 10px 10px;background:var(--bg-primary,#fff);border:1px solid rgba(128,128,128,.12);border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,.06);overflow:hidden}
-.sticker-panel.aro-sticker-enter{animation:aroPopIn .16s var(--aro-ease) both}
-.sticker-panel.aro-leaving{animation:aroFadeOut .12s ease both;pointer-events:none!important}
-.sticker-panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-shrink:0}
-.sticker-tabs{display:flex;gap:4px;background:rgba(128,128,128,.08);border-radius:10px;padding:3px}
-.sticker-tab{border:none;background:transparent;color:var(--text-secondary,#888);font-size:12px;font-weight:600;padding:5px 12px;border-radius:8px;cursor:pointer;transition:background .12s,color .12s}
-.sticker-tab.sticker-tab-active{background:var(--bg-primary,#fff);color:var(--text-primary,#1a1a1a);box-shadow:0 1px 3px rgba(0,0,0,.06)}
-.sticker-panel-actions{display:flex;align-items:center;gap:8px}
-.sticker-meta{font-size:11px;color:var(--text-secondary,#999);white-space:nowrap}
-.sticker-add-btn{border:none;background:rgba(var(--tapp-primary-rgb,99,102,241),.12);color:var(--tapp-primary,#6366f1);font-size:12px;font-weight:600;padding:5px 10px;border-radius:8px;cursor:pointer}
+.sticker-btn.sticker-btn-active{background:rgba(var(--tapp-primary-rgb,100,100,255),.12);color:var(--tapp-primary,#6366f1);box-shadow:inset 0 0 0 1px rgba(var(--tapp-primary-rgb,99,102,241),.22)}
+.sticker-btn:disabled,.attach-btn:disabled{opacity:.4;cursor:not-allowed;pointer-events:none!important}
+/* ===== Sticker panel (sheet above composer) ===== */
+.sticker-panel{
+  display:none;flex-direction:column;max-height:min(300px,44vh);min-height:0;
+  margin:0 0 8px;padding:4px 10px 12px;
+  background:rgba(255,255,255,.96);border:1px solid rgba(128,128,128,.12);
+  border-radius:20px;box-shadow:0 10px 32px rgba(0,0,0,.1),0 1px 0 rgba(255,255,255,.6) inset;
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  overflow:hidden;position:relative;z-index:1;pointer-events:none;
+}
+.sticker-panel.is-open{display:flex!important;pointer-events:auto!important}
+.sticker-panel[hidden]:not(.is-open){display:none!important;pointer-events:none!important}
+.sticker-panel.aro-sticker-enter{animation:aroPopIn .18s var(--aro-ease,cubic-bezier(.2,.8,.2,1)) both}
+.sticker-panel.aro-leaving{animation:aroFadeOut .14s ease both;pointer-events:none!important}
+.sticker-panel-grab{display:flex;justify-content:center;padding:4px 0 2px;flex-shrink:0}
+.sticker-panel-grab-bar{width:36px;height:4px;border-radius:99px;background:rgba(128,128,128,.22)}
+.sticker-panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-shrink:0;min-width:0}
+.sticker-tabs{display:inline-flex;gap:2px;background:rgba(128,128,128,.08);border-radius:12px;padding:3px;flex-shrink:0}
+.sticker-tab{
+  border:none;background:transparent;color:var(--text-secondary,#888);
+  font-size:12px;font-weight:650;padding:6px 14px;border-radius:10px;cursor:pointer;
+  transition:background .14s,color .14s,box-shadow .14s;letter-spacing:-.01em;
+  touch-action:manipulation;
+}
+.sticker-tab.sticker-tab-active{
+  background:var(--bg-primary,#fff);color:var(--text-primary,#1a1a1a);
+  box-shadow:0 1px 3px rgba(0,0,0,.08),0 0 0 1px rgba(128,128,128,.04);
+}
+.sticker-panel-actions{display:flex;align-items:center;gap:8px;min-width:0;flex-shrink:0}
+.sticker-meta{font-size:11px;font-weight:600;color:var(--text-secondary,#999);white-space:nowrap;font-variant-numeric:tabular-nums}
+.sticker-add-btn{
+  border:none;display:inline-flex;align-items:center;gap:4px;
+  background:rgba(var(--tapp-primary-rgb,99,102,241),.12);color:var(--tapp-primary,#6366f1);
+  font-size:12px;font-weight:700;padding:6px 10px 6px 8px;border-radius:999px;cursor:pointer;
+  transition:background .14s,transform .12s;touch-action:manipulation;
+}
 .sticker-add-btn:hover{background:rgba(var(--tapp-primary-rgb,99,102,241),.18)}
+.sticker-add-btn:active{transform:scale(.96)}
 .sticker-add-btn:disabled{opacity:.45;cursor:not-allowed}
-.sticker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px;overflow-y:auto;flex:1;min-height:0;padding:2px;align-content:start}
-.sticker-cell{aspect-ratio:1;border:none;background:rgba(128,128,128,.05);border-radius:12px;padding:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,transform .1s}
-.sticker-cell:hover{background:rgba(128,128,128,.1)}
-.sticker-cell:active{transform:scale(.94)}
-.sticker-cell img{max-width:100%;max-height:100%;object-fit:contain;pointer-events:none;user-select:none}
-.sticker-empty{padding:28px 12px;text-align:center;font-size:13px;color:var(--text-secondary,#999);line-height:1.45}
-.sticker-ctx-menu{position:fixed;z-index:200;min-width:140px;background:var(--bg-primary,#fff);border:1px solid rgba(128,128,128,.12);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.14);padding:4px;display:flex;flex-direction:column}
-.sticker-ctx-item{border:none;background:none;text-align:left;padding:10px 12px;border-radius:8px;font-size:13px;cursor:pointer;color:var(--text-primary,#1a1a1a)}
-.sticker-ctx-item:hover{background:rgba(128,128,128,.08)}
+.sticker-add-label{line-height:1}
+.sticker-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:8px;
+  overflow-y:auto;flex:1;min-height:120px;max-height:min(220px,32vh);padding:2px 2px 4px;
+  align-content:start;-webkit-overflow-scrolling:touch;scrollbar-width:thin;
+}
+.sticker-cell{
+  aspect-ratio:1;border:none;background:rgba(128,128,128,.05);border-radius:16px;padding:8px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:background .12s,transform .12s,box-shadow .12s;
+  box-shadow:inset 0 0 0 1px rgba(128,128,128,.04);touch-action:manipulation;
+}
+.sticker-cell:hover{background:rgba(var(--tapp-primary-rgb,99,102,241),.08);box-shadow:inset 0 0 0 1px rgba(var(--tapp-primary-rgb,99,102,241),.18)}
+.sticker-cell:active{transform:scale(.93)}
+.sticker-cell img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;pointer-events:none;user-select:none;filter:drop-shadow(0 1px 2px rgba(0,0,0,.06))}
+.sticker-empty{
+  display:none;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  padding:28px 16px 24px;text-align:center;min-height:140px;
+}
+.sticker-empty-icon{color:var(--text-secondary,#999);margin-bottom:4px}
+.sticker-empty-title{font-size:14px;font-weight:700;color:var(--text-primary,#1a1a1a);letter-spacing:-.01em}
+.sticker-empty-text{font-size:12.5px;color:var(--text-secondary,#999);line-height:1.5;max-width:240px}
+.sticker-ctx-menu{position:fixed;z-index:200;min-width:152px;background:var(--bg-primary,#fff);border:1px solid rgba(128,128,128,.12);border-radius:14px;box-shadow:0 10px 28px rgba(0,0,0,.14);padding:4px;display:flex;flex-direction:column}
+.sticker-ctx-item{border:none;background:none;text-align:left;padding:11px 14px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text-primary,#1a1a1a)}
+.sticker-ctx-item:hover{background:rgba(128,128,128,.07)}
 .sticker-ctx-danger{color:#dc2626}
-.dark .sticker-panel{background:var(--bg-primary,#1a1a1a);border-color:rgba(255,255,255,.1);box-shadow:0 2px 12px rgba(0,0,0,.25)}
+.attach-icon-sticker{background:rgba(250,204,21,.14);color:#ca8a04}
+.dark .sticker-panel{background:rgba(22,22,24,.96);border-color:rgba(255,255,255,.1);box-shadow:0 12px 36px rgba(0,0,0,.45)}
+.dark .sticker-panel-grab-bar{background:rgba(255,255,255,.18)}
 .dark .sticker-tabs{background:rgba(255,255,255,.06)}
 .dark .sticker-tab.sticker-tab-active{background:rgba(255,255,255,.1);color:#fff;box-shadow:none}
-.dark .sticker-cell{background:rgba(255,255,255,.04)}
-.dark .sticker-cell:hover{background:rgba(255,255,255,.08)}
-.dark .sticker-ctx-menu{background:#1a1a1a;border-color:rgba(255,255,255,.1);box-shadow:0 8px 24px rgba(0,0,0,.45)}
+.dark .sticker-cell{background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
+.dark .sticker-cell:hover{background:rgba(var(--tapp-primary-rgb,99,102,241),.16)}
+.dark .sticker-empty-title{color:#fff}
+.dark .sticker-ctx-menu{background:#1a1a1a;border-color:rgba(255,255,255,.1);box-shadow:0 10px 28px rgba(0,0,0,.5)}
 .dark .sticker-ctx-item{color:rgba(255,255,255,.92)}
-.dark .sticker-btn:hover{background:rgba(255,255,255,.08);color:rgba(255,255,255,.85)}
-.composer-locked .sticker-btn{pointer-events:none}
+.dark .sticker-btn:hover{background:rgba(255,255,255,.08);color:rgba(255,255,255,.9)}
+.composer-locked .sticker-btn{pointer-events:none!important}
 /* Pick mine vs group when adding from a chat image */
-.sticker-target-overlay{position:fixed;inset:0;z-index:220;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.35);padding:16px;box-sizing:border-box}
-.sticker-target-sheet{width:100%;max-width:360px;background:var(--bg-primary,#fff);border-radius:16px;padding:14px 12px 12px;box-shadow:0 12px 40px rgba(0,0,0,.2);display:flex;flex-direction:column;gap:6px}
-.sticker-target-title{font-size:14px;font-weight:650;padding:4px 8px 10px;color:var(--text-primary,#1a1a1a)}
-.sticker-target-item{border:none;background:rgba(128,128,128,.06);border-radius:12px;padding:12px 14px;text-align:left;font-size:14px;font-weight:600;cursor:pointer;color:var(--text-primary,#1a1a1a)}
+.sticker-target-overlay{position:fixed;inset:0;z-index:220;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.4);padding:16px;box-sizing:border-box;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+.sticker-target-sheet{width:100%;max-width:360px;background:var(--bg-primary,#fff);border-radius:18px;padding:16px 14px 12px;box-shadow:0 16px 48px rgba(0,0,0,.22);display:flex;flex-direction:column;gap:6px}
+.sticker-target-title{font-size:15px;font-weight:700;padding:2px 8px 12px;color:var(--text-primary,#1a1a1a);letter-spacing:-.01em}
+.sticker-target-item{border:none;background:rgba(128,128,128,.06);border-radius:12px;padding:13px 14px;text-align:left;font-size:14px;font-weight:650;cursor:pointer;color:var(--text-primary,#1a1a1a);transition:background .12s}
 .sticker-target-item:hover{background:rgba(var(--tapp-primary-rgb,99,102,241),.12);color:var(--tapp-primary,#6366f1)}
-.sticker-target-cancel{border:none;background:transparent;padding:12px;font-size:13px;color:var(--text-secondary,#888);cursor:pointer;border-radius:10px}
+.sticker-target-cancel{border:none;background:transparent;padding:12px;font-size:13px;font-weight:600;color:var(--text-secondary,#888);cursor:pointer;border-radius:10px}
 .sticker-target-cancel:hover{background:rgba(128,128,128,.06)}
-.dark .sticker-target-sheet{background:#1a1a1a;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+.dark .sticker-target-sheet{background:#1a1a1a;box-shadow:0 16px 48px rgba(0,0,0,.55)}
 .dark .sticker-target-item{background:rgba(255,255,255,.06);color:#fff}
-.dark .sticker-target-item:hover{background:rgba(var(--tapp-primary-rgb,99,102,241),.2)}
+.dark .sticker-target-item:hover{background:rgba(var(--tapp-primary-rgb,99,102,241),.22)}
 .msg-input{flex:1;min-height:22px;max-height:120px;padding:7px 0;border:none;background:transparent;color:var(--text-primary,#1a1a1a);font-size:14px;line-height:1.45;outline:none;resize:none;overflow-y:auto;font-family:inherit}
 .msg-input::placeholder{color:var(--text-secondary,#bbb)}
 .send-btn{width:36px;height:36px;border-radius:50%;border:none;background:transparent;color:var(--text-secondary,#aaa);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,color .15s,opacity .15s;margin-bottom:1px}
@@ -1458,7 +1504,7 @@ button.is-busy{opacity:.72;cursor:wait;pointer-events:none}
 .attach-preview-remove{width:36px;height:36px;min-width:36px;min-height:36px;border-radius:50%;border:none;background:rgba(128,128,128,.08);color:var(--text-secondary,#999);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .12s;font-size:16px;line-height:1}
 .attach-preview-remove:hover{background:rgba(239,68,68,.1);color:#ef4444}
 .composer-locked .input-bar{opacity:.72;background:rgba(128,128,128,.04)}
-.composer-locked .attach-btn,.composer-locked .send-btn{pointer-events:none}
+.composer-locked .attach-btn,.composer-locked .sticker-btn,.composer-locked .send-btn{pointer-events:none!important}
 .composer-locked .msg-input{cursor:not-allowed}
 .composer-locked .quote-preview,.composer-locked .attach-preview{display:none !important}
 .dark .composer-locked .input-bar{background:rgba(255,255,255,.03)}
@@ -2192,7 +2238,7 @@ button.aro-select-trigger.create-input{
 
 /* Composer disabled locked look */
 .msg-input:disabled{opacity:.55;cursor:not-allowed}
-.attach-btn:disabled{opacity:.4;cursor:not-allowed;pointer-events:none}
+.attach-btn:disabled,.sticker-btn:disabled{opacity:.4;cursor:not-allowed;pointer-events:none!important}
 .input-bar:focus-within{border-color:rgba(var(--tapp-primary-rgb,99,102,241),.35);box-shadow:0 2px 14px rgba(var(--tapp-primary-rgb,99,102,241),.08)}
 .dark .input-bar:focus-within{border-color:rgba(var(--tapp-primary-rgb,99,102,241),.4)}
 

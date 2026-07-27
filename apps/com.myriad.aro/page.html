@@ -70,33 +70,38 @@
             <div id="quote-preview" class="quote-preview" style="display:none"></div>
             <div id="attach-preview" class="attach-preview" style="display:none"></div>
             <!-- Stickers: group pack (rooms) + personal local pack -->
-            <div id="sticker-panel" class="sticker-panel" style="display:none" hidden role="dialog" aria-label="Stickers">
+            <div id="sticker-panel" class="sticker-panel" hidden role="dialog" aria-label="Stickers" aria-hidden="true">
+              <div class="sticker-panel-grab" aria-hidden="true"><span class="sticker-panel-grab-bar"></span></div>
               <div class="sticker-panel-head">
                 <div id="sticker-tabs" class="sticker-tabs" role="tablist">
                   <button type="button" id="sticker-tab-room" class="sticker-tab sticker-tab-active" data-sticker-tab="room" role="tab" aria-selected="true">群贴纸</button>
                   <button type="button" id="sticker-tab-mine" class="sticker-tab" data-sticker-tab="mine" role="tab" aria-selected="false">我的</button>
                 </div>
                 <div class="sticker-panel-actions">
-                  <span id="sticker-meta" class="sticker-meta"></span>
-                  <button type="button" id="sticker-add-btn" class="sticker-add-btn">添加</button>
+                  <span id="sticker-meta" class="sticker-meta" aria-live="polite"></span>
+                  <button type="button" id="sticker-add-btn" class="sticker-add-btn">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                    <span class="sticker-add-label">添加</span>
+                  </button>
                 </div>
               </div>
               <div id="sticker-empty" class="sticker-empty" style="display:none"></div>
               <div id="sticker-grid" class="sticker-grid" role="listbox" aria-label="Stickers"></div>
             </div>
             <div id="input-bar" class="input-bar">
-              <button id="attach-btn" class="attach-btn" title="附件">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              <button type="button" id="attach-btn" class="attach-btn" title="附件" aria-label="附件">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
               </button>
-              <button id="sticker-btn" class="sticker-btn" type="button" title="表情" aria-label="表情" aria-expanded="false" aria-controls="sticker-panel">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="9"/>
-                  <path d="M8.5 10h.01M15.5 10h.01"/>
-                  <path d="M8.2 14.2c1.1 1.3 2.5 2 3.8 2s2.7-.7 3.8-2"/>
+              <button type="button" id="sticker-btn" class="sticker-btn" title="表情贴纸" aria-label="表情贴纸" aria-expanded="false" aria-controls="sticker-panel">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75"/>
+                  <circle cx="9" cy="10" r="1.15" fill="currentColor"/>
+                  <circle cx="15" cy="10" r="1.15" fill="currentColor"/>
+                  <path d="M8.4 13.6c.95 1.45 2.2 2.2 3.6 2.2s2.65-.75 3.6-2.2" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" fill="none"/>
                 </svg>
               </button>
               <textarea id="msg-input" class="msg-input" rows="1" placeholder="输入消息..."></textarea>
-              <button id="send-btn" class="send-btn" disabled aria-label="Send">
+              <button type="button" id="send-btn" class="send-btn" disabled aria-label="Send">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M12 20V4M5 11l7-7 7 7"/>
                 </svg>

@@ -26,7 +26,8 @@ function toggleAttachMenu() {
   menu.className = 'attach-menu';
   menu.setAttribute('role', 'menu');
   menu.innerHTML =
-    '<button type="button" class="attach-menu-item" data-attach="image" role="menuitem"><div class="attach-menu-icon attach-icon-image"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>' + esc(lang.attachImage) + '</button>'
+    '<button type="button" class="attach-menu-item" data-attach="sticker" role="menuitem"><div class="attach-menu-icon attach-icon-sticker"><svg viewBox="0 0 24 24" width="20" height="20" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><circle cx="9" cy="10" r="1.1" fill="currentColor"/><circle cx="15" cy="10" r="1.1" fill="currentColor"/><path d="M8.4 13.6c.95 1.4 2.2 2.15 3.6 2.15s2.65-.75 3.6-2.15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div>' + esc(lang.stickerBtn || lang.stickers || 'Stickers') + '</button>'
+    + '<button type="button" class="attach-menu-item" data-attach="image" role="menuitem"><div class="attach-menu-icon attach-icon-image"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>' + esc(lang.attachImage) + '</button>'
     + '<button type="button" class="attach-menu-item" data-attach="file" role="menuitem"><div class="attach-menu-icon attach-icon-file"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg></div>' + esc(lang.attachFile) + '</button>'
     + '<button type="button" class="attach-menu-item" data-attach="tapp" role="menuitem"><div class="attach-menu-icon attach-icon-tapp"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div>' + esc(lang.attachTapp) + '</button>'
     + '<button type="button" class="attach-menu-item" data-attach="brew" role="menuitem"><div class="attach-menu-icon attach-icon-brew"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8h1a4 4 0 010 8h-1M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/><path d="M6 1v3M10 1v3M14 1v3"/></svg></div>' + esc(lang.attachBrew) + '</button>'
@@ -38,6 +39,10 @@ function toggleAttachMenu() {
     if (!item) return;
     var type = item.dataset.attach;
     closeAttachMenu();
+    if (type === 'sticker') {
+      if (typeof openStickerPanel === 'function') openStickerPanel();
+      return;
+    }
     if (type === 'image') { var inp = $('attach-image-input'); if (inp) inp.click(); }
     else if (type === 'file') { var inp2 = $('attach-file-input'); if (inp2) inp2.click(); }
     else pickFedContent(type);
@@ -1131,7 +1136,9 @@ function ensureStickerState() {
 
 function isStickerPanelOpen() {
   var panel = $('sticker-panel');
-  return !!(panel && panel.style.display !== 'none' && !panel.hidden && _stickerPanelOpen);
+  if (!panel) return false;
+  if (_stickerPanelOpen) return true;
+  return panel.classList.contains('is-open') && !panel.hidden;
 }
 
 function getRoomStickersList() {
@@ -1318,7 +1325,10 @@ function openStickerCtxMenu(x, y, sticker, pack) {
   }, 0);
 }
 
-function toggleStickerPanel() {
+function toggleStickerPanel(ev) {
+  if (ev) {
+    try { ev.preventDefault(); ev.stopPropagation(); } catch (e0) { /* ignore */ }
+  }
   if (isStickerPanelOpen()) {
     closeStickerPanel();
     return;
@@ -1346,7 +1356,12 @@ function openStickerPanel() {
   st.tab = _stickerTab;
   _stickerPanelOpen = true;
 
+  // Class-driven open (avoid fighting [hidden]{display:none!important})
+  try { panel.removeAttribute('hidden'); } catch (eH) { /* ignore */ }
   panel.hidden = false;
+  panel.classList.remove('aro-leaving');
+  panel.classList.add('is-open');
+  panel.setAttribute('aria-hidden', 'false');
   panel.style.display = 'flex';
   panel.style.pointerEvents = 'auto';
   var btn = $('sticker-btn');
@@ -1354,9 +1369,15 @@ function openStickerPanel() {
     btn.classList.add('sticker-btn-active');
     btn.setAttribute('aria-expanded', 'true');
   }
+  // Lift composer chrome so panel sits above message scroll hits
+  var floatWrap = document.querySelector('#chat-container .input-float-wrap');
+  if (floatWrap) floatWrap.classList.add('sticker-open');
   applyStickerLabels();
   renderStickerPanel();
-  if (typeof aroPlayEnter === 'function') aroPlayEnter(panel, 'aro-sticker-enter');
+  if (typeof aroPlayEnter === 'function') {
+    try { panel.classList.remove('aro-sticker-enter'); } catch (eA) { /* ignore */ }
+    aroPlayEnter(panel, 'aro-sticker-enter');
+  }
 }
 
 function closeStickerPanel() {
@@ -1370,26 +1391,31 @@ function closeStickerPanel() {
     btn.classList.remove('sticker-btn-active');
     btn.setAttribute('aria-expanded', 'false');
   }
+  var floatWrap = document.querySelector('#chat-container .input-float-wrap');
+  if (floatWrap) floatWrap.classList.remove('sticker-open');
   if (!panel) return;
-  if (panel.style.display === 'none' || panel.hidden) {
+
+  var seal = function () {
+    panel.classList.remove('is-open', 'aro-sticker-enter', 'aro-leaving');
     panel.hidden = true;
+    try { panel.setAttribute('hidden', ''); } catch (eH) { /* ignore */ }
+    panel.setAttribute('aria-hidden', 'true');
     panel.style.display = 'none';
     panel.style.pointerEvents = 'none';
+  };
+
+  if (!panel.classList.contains('is-open') && (panel.style.display === 'none' || panel.hidden)) {
+    seal();
     return;
   }
   panel.style.pointerEvents = 'none';
-  if (typeof aroDismiss === 'function') {
+  if (typeof aroDismiss === 'function' && panel.style.display !== 'none' && !panel.hidden) {
     aroDismiss(panel, {
-      ms: 140,
-      onDone: function () {
-        panel.hidden = true;
-        panel.style.display = 'none';
-        panel.classList.remove('aro-sticker-enter', 'aro-leaving');
-      },
+      ms: 150,
+      onDone: seal,
     });
   } else {
-    panel.hidden = true;
-    panel.style.display = 'none';
+    seal();
   }
 }
 
@@ -1413,15 +1439,11 @@ function applyStickerLabels() {
   if (tabMine) tabMine.textContent = lang.stickerTabMine || 'Mine';
   var addBtn = $('sticker-add-btn');
   if (addBtn) {
-    addBtn.textContent = lang.stickerAdd || 'Add';
     addBtn.setAttribute('aria-label', lang.stickerAdd || 'Add sticker');
+    addBtn.setAttribute('title', lang.stickerAdd || 'Add');
   }
-  var empty = $('sticker-empty');
-  if (empty && empty.dataset.role === 'empty') {
-    empty.textContent = _stickerTab === 'room'
-      ? (lang.stickerRoomEmpty || 'No group stickers yet. Add one to share with everyone.')
-      : (lang.stickerMineEmpty || 'No personal stickers yet.');
-  }
+  var addLabel = document.querySelector('#sticker-add-btn .sticker-add-label');
+  if (addLabel) addLabel.textContent = lang.stickerAdd || 'Add';
 }
 
 function setStickerTab(tab) {
@@ -1461,11 +1483,24 @@ async function renderStickerPanel() {
   if (!list.length) {
     grid.innerHTML = '';
     if (empty) {
-      empty.style.display = 'block';
+      empty.style.display = 'flex';
       empty.dataset.role = 'empty';
-      empty.textContent = _stickerTab === 'room'
-        ? (lang.stickerRoomEmpty || 'No group stickers yet. Add one to share with everyone.')
-        : (lang.stickerMineEmpty || 'No personal stickers yet.');
+      var emptyTitle = _stickerTab === 'room'
+        ? (lang.stickerRoomEmptyTitle || lang.stickerTabRoom || 'Group stickers')
+        : (lang.stickerMineEmptyTitle || lang.stickerTabMine || 'My stickers');
+      var emptyBody = _stickerTab === 'room'
+        ? (lang.stickerRoomEmpty || 'No group stickers yet. Tap Add to share with everyone.')
+        : (lang.stickerMineEmpty || 'No personal stickers yet. Tap Add to save on this device.');
+      empty.innerHTML =
+        '<div class="sticker-empty-icon" aria-hidden="true">'
+        + '<svg viewBox="0 0 48 48" width="40" height="40" fill="none">'
+        + '<circle cx="24" cy="24" r="18" stroke="currentColor" stroke-width="1.6" opacity=".35"/>'
+        + '<circle cx="18" cy="20" r="2" fill="currentColor" opacity=".45"/>'
+        + '<circle cx="30" cy="20" r="2" fill="currentColor" opacity=".45"/>'
+        + '<path d="M16.5 28c2 3 4.6 4.5 7.5 4.5S29.5 31 31.5 28" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".45"/>'
+        + '</svg></div>'
+        + '<div class="sticker-empty-title">' + esc(emptyTitle) + '</div>'
+        + '<div class="sticker-empty-text">' + esc(emptyBody) + '</div>';
     }
   } else {
     if (empty) empty.style.display = 'none';
@@ -1967,36 +2002,51 @@ function handleStickersChangedEvent(ev) {
 }
 
 function bindStickerUi() {
-  var btn = $('sticker-btn');
-  if (btn) {
-    btn.addEventListener('click', function (e) {
+  // Idempotent: re-entry must not stack listeners.
+  if (bindStickerUi._bound) return;
+  bindStickerUi._bound = true;
+
+  // Delegate from chat shell so hits always reach the button (composer PE + re-renders).
+  var chat = $('chat-container') || document;
+  var onComposerClick = function (e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    if (t.closest('#sticker-btn') || t.closest('.sticker-btn')) {
+      e.preventDefault();
       e.stopPropagation();
-      toggleStickerPanel();
-    });
-  }
-  var tabRoom = $('sticker-tab-room');
-  if (tabRoom) {
-    tabRoom.addEventListener('click', function () { setStickerTab('room'); });
-  }
-  var tabMine = $('sticker-tab-mine');
-  if (tabMine) {
-    tabMine.addEventListener('click', function () { setStickerTab('mine'); });
-  }
-  var addBtn = $('sticker-add-btn');
-  if (addBtn) {
-    addBtn.addEventListener('click', function (e) {
+      toggleStickerPanel(e);
+      return;
+    }
+    if (t.closest('#sticker-add-btn') || t.closest('.sticker-add-btn')) {
+      e.preventDefault();
       e.stopPropagation();
       pickStickerImage();
-    });
+      return;
+    }
+    var tab = t.closest('[data-sticker-tab]');
+    if (tab) {
+      e.preventDefault();
+      e.stopPropagation();
+      setStickerTab(tab.getAttribute('data-sticker-tab'));
+    }
+  };
+  if (typeof pageListen === 'function') {
+    pageListen(chat, 'click', onComposerClick);
+  } else {
+    chat.addEventListener('click', onComposerClick);
   }
+
   var fileInp = $('sticker-file-input');
-  if (fileInp) {
+  if (fileInp && !fileInp.dataset.stickerBound) {
+    fileInp.dataset.stickerBound = '1';
     fileInp.addEventListener('change', function () {
       if (this.files && this.files[0]) handleStickerFileSelected(this.files[0]);
     });
   }
+
   var grid = $('sticker-grid');
-  if (grid) {
+  if (grid && !grid.dataset.stickerBound) {
+    grid.dataset.stickerBound = '1';
     grid.addEventListener('click', function (e) {
       var cell = e.target.closest('.sticker-cell');
       if (!cell || !grid._stickerList) return;
@@ -2012,7 +2062,6 @@ function bindStickerUi() {
       if (isNaN(idx) || idx < 0 || idx >= grid._stickerList.length) return;
       openStickerCtxMenu(e.clientX, e.clientY, grid._stickerList[idx], grid._stickerPack || _stickerTab);
     });
-    // Long-press for touch
     var lpTimer = null;
     var lpCell = null;
     grid.addEventListener('touchstart', function (e) {
