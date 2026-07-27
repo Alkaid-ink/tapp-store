@@ -522,7 +522,7 @@
   "shareOpenX": "打开 X",
   "shareModeIntent": "仅 Intent",
   "shareDefaultText": "来自 Myriad 联邦的分享",
-  "shareNoLink": "暂无链接",
+  "shareNoLink": "此分享没有可播放内容或外链",
   "shareFail": "无法打开分享链接",
   "shareCopiedIntent": "已复制分享链接，请在浏览器中打开",
   "shareOpenedX": "已打开 X 分享",
@@ -537,5 +537,6 @@
   "nowPlaying": "正在播放",
   "mediaPlay": "播放",
   "mediaPlayFail": "无法播放",
-  "mediaPlayHint": "点击播放"
+  "mediaPlayHint": "点击播放",
+  "shareNoAction": "无法打开"
 }

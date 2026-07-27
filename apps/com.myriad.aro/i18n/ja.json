@@ -522,7 +522,7 @@
   "shareOpenX": "X を開く",
   "shareModeIntent": "Intent のみ",
   "shareDefaultText": "Myriad フェデレーションからの共有",
-  "shareNoLink": "リンクがありません",
+  "shareNoLink": "再生可能なメディアやリンクがありません",
   "shareFail": "共有リンクを開けませんでした",
   "shareCopiedIntent": "共有リンクをコピーしました — ブラウザに貼り付けてください",
   "shareOpenedX": "X 共有を開きました",
@@ -537,5 +537,6 @@
   "nowPlaying": "再生中",
   "mediaPlay": "再生",
   "mediaPlayFail": "再生できません",
-  "mediaPlayHint": "タップして再生"
+  "mediaPlayHint": "タップして再生",
+  "shareNoAction": "開けません"
 }

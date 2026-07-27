@@ -1080,16 +1080,15 @@ function renderMessages(opts) {
     });
   });
 
-  // Bind share card click handlers — play (music) / open link / detail sheet
+  // Share cards: library/brew = play or open link (no intermediate detail sheet).
+  // Tapp/report still need install / snapshot sheets.
   container.querySelectorAll('.msg-share-card[data-type], .msg-media-card[data-type]').forEach(function (card) {
     card.addEventListener('click', function (e) {
-      // Don't open detail if clicking on action buttons
       if (e.target.closest('.msg-share-actions')) return;
       e.preventDefault();
       e.stopPropagation();
       var type = card.dataset.type;
       var payload = typeof shareCardPayload === 'function' ? shareCardPayload(card) : {};
-      // Prefer dataset fields for robustness
       if (!payload.platform_id && card.dataset.platformId) payload.platform_id = card.dataset.platformId;
       if (!payload.item_id && card.dataset.itemId) payload.item_id = card.dataset.itemId;
       if (!payload.item_type && card.dataset.itemType) payload.item_type = card.dataset.itemType;
@@ -1097,17 +1096,16 @@ function renderMessages(opts) {
       if (!payload.image && card.dataset.image) payload.image = card.dataset.image;
       if (!payload.artist && card.dataset.artist) payload.artist = card.dataset.artist;
       if (!payload.album && card.dataset.album) payload.album = card.dataset.album;
+      if (!payload.brew_link && card.dataset.brewLink) payload.brew_link = card.dataset.brewLink;
       if (!payload.title) {
         var tEl = card.querySelector('.msg-share-title, .msg-media-title');
         if (tEl) payload.title = tEl.textContent || '';
       }
 
       if (type === 'tapp' && card.dataset.tappId) {
-        // Only open detail if accepted or if sender
         var stKey = (card.dataset.acceptKey || '').trim();
         if (!stKey) {
-          var msgIdx = card.dataset.msgIdx;
-          stKey = 'tapp_accept_' + card.dataset.tappId + '_' + msgIdx;
+          stKey = 'tapp_accept_' + card.dataset.tappId + '_' + (card.dataset.msgIdx || '');
         }
         var status = state.tappAcceptMap && state.tappAcceptMap[stKey];
         var isLocal = card.closest('.msg-local');
@@ -1117,41 +1115,33 @@ function renderMessages(opts) {
         return;
       }
 
-      // Primary: play NetEase / open github·steam·etc. links
-      if (typeof activateShareCard === 'function') {
-        activateShareCard(type, payload, card).then(function (result) {
-          if (result === 'played' || result === 'opened') return;
-          // Secondary: detail sheet
-          if (type === 'brew') {
-            openBrewDetail(
-              card.dataset.brewId ? parseInt(card.dataset.brewId, 10) : 0,
-              card.dataset.brewLink || payload.brew_link || '',
-              card,
-            );
-          } else if (type === 'library') {
-            openLibraryDetail(card);
-          } else if (type === 'report' && (card.dataset.reportId || payload.report_id)) {
-            openReportDetail(card.dataset.reportId || payload.report_id, card);
-          }
-        }).catch(function () {
-          if (type === 'library') openLibraryDetail(card);
-          else if (type === 'brew') {
-            openBrewDetail(
-              card.dataset.brewId ? parseInt(card.dataset.brewId, 10) : 0,
-              card.dataset.brewLink || '',
-              card,
-            );
-          }
-        });
+      if (type === 'report') {
+        var rid = card.dataset.reportId || payload.report_id;
+        if (rid) openReportDetail(rid, card);
         return;
       }
 
-      if (type === 'brew') {
-        openBrewDetail(parseInt(card.dataset.brewId, 10), card.dataset.brewLink, card);
-      } else if (type === 'library') {
-        openLibraryDetail(card);
-      } else if (type === 'report' && card.dataset.reportId) {
-        openReportDetail(card.dataset.reportId, card);
+      // library / brew: direct play or open link — no detail sheet
+      if (typeof activateShareCard === 'function') {
+        activateShareCard(type, payload, card).then(function (result) {
+          if (result === 'played' || result === 'opened') return;
+          try {
+            Tapp.ui.showNotification({
+              title: lang.shareNoAction || lang.openOriginal || lang.loadFail || 'Unavailable',
+              message: type === 'library'
+                ? (lang.shareNoLink || 'No playable media or link for this share')
+                : (lang.shareNoLink || 'No link for this share'),
+              type: 'info',
+            });
+          } catch (eN) { /* ignore */ }
+        }).catch(function () {
+          try {
+            Tapp.ui.showNotification({
+              title: lang.mediaPlayFail || lang.loadFail || 'Failed',
+              type: 'error',
+            });
+          } catch (e2) { /* ignore */ }
+        });
       }
     });
   });
@@ -1649,120 +1639,7 @@ function renderTappDetailView(body, tappId, name, desc, remoteVer, installed, lo
   }
 }
 
-function openBrewDetail(brewId, brewLink, card) {
-  var titleEl = card && card.querySelector('.msg-share-title');
-  var brewSnap = shareCardPayload(card);
-  var overlay = createDetailOverlay((titleEl && titleEl.textContent) || lang.attachBrew || 'Brew', {
-    type: 'brew',
-    subtitle: brewSnap.source_name || '',
-    favicon: brewSnap.source_icon || '',
-    slug: brewSnap.source_name || '',
-    fallback: SVG_ICONS.brew,
-  });
-  var body = overlay.querySelector('.picker-body');
-  showPickerLoading(body);
-  if (!brewId || typeof Tapp.brewList === 'undefined' || typeof Tapp.brewList.get !== 'function') {
-    // Fall back to card payload / link only
-    var descEl = card && card.querySelector('.msg-share-desc');
-    body.innerHTML =
-      '<div class="sheet-pad">'
-      + (descEl && descEl.textContent ? '<div class="sheet-desc">' + esc(descEl.textContent) + '</div>' : '')
-      + brewLinkHtml(brewLink)
-      + '</div>';
-    return;
-  }
-  Tapp.brewList.get(brewId).then(function (detail) {
-    if (!detail) { body.innerHTML = '<div class="picker-empty">' + esc(lang.pickerEmpty) + '</div>'; return; }
-    var brewChips = [];
-    if (detail.source_name) brewChips.push(detail.source_name);
-    if (detail.author) brewChips.push(detail.author);
-    if (detail.published_at) {
-      try { brewChips.push(new Date(detail.published_at).toLocaleDateString(currentLocale)); } catch (e) { /* ignore */ }
-    }
-    body.innerHTML =
-      '<div class="sheet-pad">'
-      + (safeIconUrl(detail.image) ? '<img class="sheet-cover" src="' + esc(detail.image) + '" alt="" />' : '')
-      + sheetMetaHtml(brewChips)
-      + (detail.summary ? '<div class="sheet-desc">' + esc(detail.summary) + '</div>' : '')
-      + brewLinkHtml(brewLink)
-      + '</div>';
-  }).catch(function () {
-    body.innerHTML = '<div class="picker-empty">' + esc(lang.pickerEmpty) + '</div>';
-  });
-}
-
-function openLibraryDetail(card) {
-  // Prefer live message payload snapshot, then data-* attrs, then DOM text.
-  var payloadSnap = shareCardPayload(card);
-  if (card && card.dataset) {
-    if (!payloadSnap.platform_id && card.dataset.platformId) payloadSnap.platform_id = card.dataset.platformId;
-    if (!payloadSnap.item_id && card.dataset.itemId) payloadSnap.item_id = card.dataset.itemId;
-    if (!payloadSnap.item_type && card.dataset.itemType) payloadSnap.item_type = card.dataset.itemType;
-    if (!payloadSnap.external_url && card.dataset.externalUrl) payloadSnap.external_url = card.dataset.externalUrl;
-    if (!payloadSnap.artist && card.dataset.artist) payloadSnap.artist = card.dataset.artist;
-    if (!payloadSnap.album && card.dataset.album) payloadSnap.album = card.dataset.album;
-    if (!payloadSnap.image && card.dataset.image) payloadSnap.image = card.dataset.image;
-  }
-  var titleEl = card && (card.querySelector('.msg-share-title') || card.querySelector('.msg-media-title'));
-  var descEl = card && card.querySelector('.msg-share-desc');
-  var view = resolveShareCardView('library', payloadSnap);
-  var title = view.title || (titleEl && titleEl.textContent) || lang.attachLibrary || 'Library';
-  var desc = view.description || (descEl && descEl.textContent) || '';
-  var platformId = payloadSnap.platform_id || (card && card.dataset.platformId) || '';
-  var itemId = payloadSnap.item_id != null ? String(payloadSnap.item_id) : ((card && card.dataset.itemId) || '');
-  var image = view.image || (card && card.dataset.image) || '';
-  var contentType = payloadSnap.item_type || (payloadSnap.content_type && payloadSnap.content_type !== 'library' ? payloadSnap.content_type : '') || '';
-  var extUrl = (typeof libraryExternalUrl === 'function' ? libraryExternalUrl(payloadSnap) : '')
-    || safeExternalHref(payloadSnap.external_url) || '';
-  var canPlay = typeof isPlayableLibraryShare === 'function' && isPlayableLibraryShare(payloadSnap);
-  var overlay = createDetailOverlay(title, {
-    type: 'library',
-    subtitle: platformId,
-    slug: platformId,
-    fallback: SVG_ICONS.library,
-  });
-  var body = overlay.querySelector('.picker-body');
-  var actions = '';
-  if (canPlay) {
-    actions += '<button type="button" class="sheet-btn lib-action-play">'
-      + SVG_ICONS.playCircle + ' '
-      + esc(lang.mediaPlay || lang.nowPlaying || 'Play')
-      + '</button>';
-  }
-  if (extUrl) {
-    actions += brewLinkHtml(extUrl, lang.openOriginal || 'Open original');
-  }
-  body.innerHTML =
-    '<div class="sheet-pad">'
-    + (safeIconUrl(image) ? '<img class="sheet-cover" src="' + esc(image) + '" alt="" />' : '')
-    + sheetMetaHtml([platformId, contentType, itemId, payloadSnap.artist, payloadSnap.album].filter(Boolean))
-    + (desc ? '<div class="sheet-desc">' + esc(desc) + '</div>' : '')
-    + (actions ? '<div class="sheet-actions" style="display:flex;flex-direction:column;gap:10px;margin-top:12px">' + actions + '</div>' : '')
-    + (!actions && !desc ? '<div class="sheet-hint">' + esc(lang.pickerEmpty || 'No details') + '</div>' : '')
-    + '</div>';
-
-  var playBtn = body.querySelector('.lib-action-play');
-  if (playBtn) {
-    playBtn.addEventListener('click', function () {
-      playBtn.disabled = true;
-      playLibraryShare(payloadSnap).then(function (ok) {
-        playBtn.disabled = false;
-        if (ok) {
-          try { aroDismiss(overlay, { remove: true, ms: 170 }); } catch (eD) { /* ignore */ }
-        } else if (extUrl) {
-          openSafeExternalUrl(extUrl);
-        } else {
-          try {
-            Tapp.ui.showNotification({
-              title: lang.mediaPlayFail || lang.loadFail || 'Playback failed',
-              type: 'error',
-            });
-          } catch (eN) { /* ignore */ }
-        }
-      });
-    });
-  }
-}
+// openBrewDetail / openLibraryDetail removed: card tap plays or opens the link directly.
 
 function openReportDetail(reportId, card) {
   // Prefer live message payload (#120 snapshot fields), then data-* attrs, then DOM text.

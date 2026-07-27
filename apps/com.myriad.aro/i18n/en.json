@@ -522,7 +522,7 @@
   "shareOpenX": "Open X",
   "shareModeIntent": "Intent only",
   "shareDefaultText": "Shared from Myriad federation",
-  "shareNoLink": "No link available",
+  "shareNoLink": "No playable media or link for this share",
   "shareFail": "Couldn't open share link",
   "shareCopiedIntent": "Share link copied — paste in your browser",
   "shareOpenedX": "Opened X share",
@@ -537,5 +537,6 @@
   "nowPlaying": "Now playing",
   "mediaPlay": "Play",
   "mediaPlayFail": "Playback failed",
-  "mediaPlayHint": "Tap to play"
+  "mediaPlayHint": "Tap to play",
+  "shareNoAction": "Unavailable"
 }
