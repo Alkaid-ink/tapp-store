@@ -2,6 +2,19 @@
 
 控制系统音乐播放，查看歌词与播放列表。
 
+## Changelog
+
+### 1.0.2
+
+- 主题色：`primaryColor` / `secondaryColor` 变化视为关键状态更新，异步取色到达后立刻刷新 UI
+- 封面：当前封面高优先级解码；切歌时预解码邻曲封面
+- Windows / 触控：`isLaidOut` 替代易误判的 `offsetParent`；Aurora 无频谱时呼吸底光
+- 权限：保留 `network:fetch` 以加载远程封面
+
+### 1.0.1
+
+- 声明 `network:fetch`（远程封面 CSP）
+
 ## 功能
 
 - **播放控制**：播放/暂停、上一首/下一首、进度拖动

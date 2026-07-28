@@ -2533,6 +2533,42 @@ var lastColors = {
 var lastMode = null;
 var lastCoverUrl = null;
 
+/** 预解码邻曲封面（利用浏览器 HTTP 缓存，切歌时主封面 img 更快出图） */
+var coverPrefetchCache = Object.create(null);
+function prefetchNeighborCovers(currentTrackId) {
+  var list = pageState.playlist;
+  if (!list || !list.length || currentTrackId == null) return;
+  var idx = -1;
+  for (var i = 0; i < list.length; i++) {
+    if (list[i] && String(list[i].id) === String(currentTrackId)) {
+      idx = i;
+      break;
+    }
+  }
+  if (idx < 0) return;
+  var offsets = [-1, 1, 2];
+  for (var j = 0; j < offsets.length; j++) {
+    var s = list[idx + offsets[j]];
+    if (!s) continue;
+    var url = getTrackCoverUrl(s);
+    if (!url || coverPrefetchCache[url]) continue;
+    coverPrefetchCache[url] = true;
+    try {
+      var img = new Image();
+      img.decoding = 'async';
+      img.referrerPolicy = 'no-referrer';
+      img.src = url;
+    } catch (_e) { /* ignore */ }
+  }
+  // 限制缓存键数量，避免无限增长
+  var keys = Object.keys(coverPrefetchCache);
+  if (keys.length > 80) {
+    for (var k = 0; k < keys.length - 40; k++) {
+      delete coverPrefetchCache[keys[k]];
+    }
+  }
+}
+
 function getTrackCoverUrl(track) {
   if (!track) return '';
   return track.cover ||
@@ -2898,6 +2934,13 @@ function updatePlayerUI(status) {
       // 仅在 URL 变化时重载，避免同曲状态事件反复触发闪烁
       if (coverEl.getAttribute('data-src') !== coverUrl) {
         coverEl.setAttribute('data-src', coverUrl);
+        // 连点切歌：优先解码当前封面
+        try {
+          coverEl.decoding = 'async';
+          coverEl.fetchPriority = 'high';
+          coverEl.loading = 'eager';
+          coverEl.referrerPolicy = 'no-referrer';
+        } catch (_e) { /* ignore */ }
         coverEl.src = coverUrl;
       }
       coverEl.style.display = 'block';
@@ -3065,7 +3108,10 @@ var lastStateSnapshot = {
   isPlaying: null,
   position: -1,
   volume: -1,
-  mode: null
+  mode: null,
+  // 异步取色完成后必须触发 UI 刷新；旧版忽略 primaryColor 会导致颜色长期滞后
+  primaryColor: null,
+  secondaryColor: null
 };
 
 // 检查状态是否有关键变化
@@ -3084,11 +3130,13 @@ function hasSignificantChange(state) {
   var coverUrl = getTrackCoverUrl(state.currentTrack);
   var position = state.position || (state.progress ? state.progress.current : 0) || 0;
   
-  // 歌曲切换、封面到达、播放状态变化、模式变化是关键变化
+  // 歌曲切换、封面到达、播放状态、模式、主题色变化都是关键变化
   if (trackId !== lastStateSnapshot.trackId ||
       coverUrl !== lastStateSnapshot.coverUrl ||
       state.isPlaying !== lastStateSnapshot.isPlaying ||
-      state.mode !== lastStateSnapshot.mode) {
+      state.mode !== lastStateSnapshot.mode ||
+      (state.primaryColor || null) !== lastStateSnapshot.primaryColor ||
+      (state.secondaryColor || null) !== lastStateSnapshot.secondaryColor) {
     return true;
   }
   
@@ -3114,6 +3162,8 @@ function updateStateSnapshot(state) {
   lastStateSnapshot.position = state.position || (state.progress ? state.progress.current : 0) || 0;
   lastStateSnapshot.volume = state.volume || 0;
   lastStateSnapshot.mode = state.mode;
+  lastStateSnapshot.primaryColor = state.primaryColor || null;
+  lastStateSnapshot.secondaryColor = state.secondaryColor || null;
 }
 
 // 初始化页面
@@ -3242,6 +3292,8 @@ async function initPage() {
       pageState.verbatimLyrics = [];
       pageState.lastKaraokeLine = -1;
       pageState.hasTranslation = false;
+      // 预解码邻曲封面，连点切歌时 img 已在浏览器缓存
+      prefetchNeighborCovers(nextTrackId);
       // 仅当已展示歌词不属于新曲时清空（自载成功且 id 匹配则保留）
       if (pageState.lyricsSongId == null ||
           String(pageState.lyricsSongId) !== String(nextTrackId || '')) {
@@ -3979,15 +4031,36 @@ function bindControls() {
 // ========================================
 
 // 检测是否为移动端（全局统一缓存）
+// 窄视口 + 粗指针 才算「移动」：纯桌面窗口缩窄仍可开动效；
+// Windows 触控本宽屏（>768）不当移动，避免误关 Aurora/涟漪。
 var isMobileDevice = null;
 var lastWindowWidth = 0;
+var lastCoarsePtr = null;
 function checkIsMobile() {
   var w = window.innerWidth;
-  if (w !== lastWindowWidth) {
+  var coarse = false;
+  try {
+    coarse = !!(window.matchMedia &&
+      window.matchMedia('(hover: none) and (pointer: coarse)').matches);
+  } catch (e) { /* ignore */ }
+  if (w !== lastWindowWidth || coarse !== lastCoarsePtr) {
     lastWindowWidth = w;
-    isMobileDevice = w <= 768;
+    lastCoarsePtr = coarse;
+    // 触控手机：窄；或明确粗指针且 ≤900（竖屏平板）
+    isMobileDevice = w <= 768 || (coarse && w <= 900);
   }
   return isMobileDevice;
+}
+
+/** 元素是否有可绘制布局（避免 offsetParent 在 transform/fixed 祖先下误判 null） */
+function isLaidOut(el) {
+  if (!el) return false;
+  try {
+    var r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  } catch (e) {
+    return false;
+  }
 }
 // 注意: resize 事件在 bindControls 中统一处理
 
@@ -4069,8 +4142,8 @@ function renderAurora(ts) {
     if (!aurora.el) return;
     aurora.blobs = aurora.el.getElementsByClassName('aurora-blob');
   }
-  // display:none / 无布局 → offsetParent null；visibility:hidden（visual-fx-off）也跳过
-  if (aurora.el.offsetParent === null || !aurora.blobs || aurora.blobs.length < 3) return;
+  // 不用 offsetParent：Windows Chromium 在 transform 祖先下常为 null，导致 Aurora 永不绘制
+  if (!isLaidOut(aurora.el) || !aurora.blobs || aurora.blobs.length < 3) return;
   if (document.documentElement.classList.contains('visual-fx-off')) return;
 
   var dt = Math.min(0.1, (ts - (aurora.lastT || ts)) / 1000);
@@ -4081,14 +4154,22 @@ function renderAurora(ts) {
   aurora.phase += dt * orbit;
 
   // 频段目标：低(0-1) / 中(3-4) / 高(5-7)
+  // 频谱全 0（CORS / AudioContext 未接）时用相位呼吸底光，避免桌面「完全没动效」
   var b = aurora.bands;
-  var targets = b && b.length >= 8
+  var hasAudio = false;
+  if (b && b.length >= 8) {
+    for (var hi = 0; hi < 8; hi++) {
+      if (b[hi] > 0.02) { hasAudio = true; break; }
+    }
+  }
+  var breath = 0.22 + 0.12 * Math.sin((ts || 0) * 0.0018);
+  var targets = hasAudio
     ? [
         Math.min(1, (b[0] + b[1]) * 0.7),
         Math.min(1, (b[3] + b[4]) * 0.75),
         Math.min(1, (b[5] + b[6] + b[7]) * 0.55),
       ]
-    : [0, 0, 0];
+    : [breath, breath * 0.85, breath * 0.65];
 
   // 攻击/释放包络（经典 VU 手感：起得快、落得慢）
   // 释放随情绪：缓和 → 长余韵（光慢慢消散）；激烈 → 收得利落
@@ -4485,7 +4566,7 @@ function scheduleEqNext() {
     delay = EQ_LIGHT_MS;
   } else {
     var eq = getActiveEqEl();
-    var needEq = !!(eq && eq.offsetParent !== null);
+    var needEq = !!(eq && isLaidOut(eq));
     delay = needEq ? EQ_INTERVAL : EQ_MAINT_MS;
   }
   pageState.eqTimer = setTimeout(function() {
@@ -4542,10 +4623,10 @@ function eqTickBody(ts) {
         pageState.healStreak = 0;
       }
     }
-    // offsetParent 为 null 说明被 display:none 祖先隐藏，跳过对应消费方
+    // 无布局（display:none 等）跳过列表 EQ；不用 offsetParent（Windows 易误判）
     // needEq 与动效开关无关（列表 EQ 始终可驱动）；Aurora/节奏频谱仅在 FX 开时需要
     var eq = getActiveEqEl();
-    var needEq = !!(eq && eq.offsetParent !== null);
+    var needEq = !!(eq && isLaidOut(eq));
     // 单飞：上一次 getSpectrum 未 settle 则跳过本拍（不排队堆积）
     if ((needEq || needFx) && !spectrumInFlight) {
       spectrumInFlight = true;

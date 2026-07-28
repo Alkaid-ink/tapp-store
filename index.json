@@ -1,10 +1,10 @@
 {
   "$schema": "https://myriad.you/schemas/tapp-store-v1.json",
   "name": "Myriad Official Tapp Store",
-  "version": "1.8.37",
+  "version": "1.8.38",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-07-28T12:30:00Z",
+  "updated_at": "2026-07-28T06:39:36Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.you",
@@ -14,9 +14,9 @@
     {
       "id": "com.myriad.music-player",
       "name": "音乐播放器",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "description": "控制系统音乐播放，查看歌词与播放列表",
-      "long_description": "对接系统播放器，显示封面、进度与播放控制；支持同步歌词、列表搜索，以及顺序、循环、单曲和随机模式。",
+      "long_description": "1.0.2: 切歌时主题色及时同步（识别 primaryColor 变化）、封面高优先级解码、邻曲封面预取；Windows/触控布局与 Aurora 频谱更稳健。\n\n对接系统播放器，显示封面、进度与播放控制；支持同步歌词、列表搜索，以及顺序、循环、单曲和随机模式。",
       "locales": {
         "en-US": {
           "name": "Music Player",
@@ -60,13 +60,13 @@
         "page_styles": "apps/com.myriad.music-player/page.css",
         "page_template": "apps/com.myriad.music-player/page.html"
       },
-      "size": 18432,
+      "size": 249267,
       "downloads": 0,
       "rating": 0,
       "featured": true,
       "verified": true,
       "created_at": "2025-12-10T00:00:00Z",
-      "updated_at": "2026-07-19T11:28:19Z"
+      "updated_at": "2026-07-28T06:39:36Z"
     },
     {
       "id": "com.myriad.quick-notes",
