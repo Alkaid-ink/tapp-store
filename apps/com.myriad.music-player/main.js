@@ -887,13 +887,16 @@ function relayoutLyricsIfNeeded(allowUnmeasured, force) {
   }
 }
 
-// 打开歌词面板 / 侧栏展开：立刻测 + 双 rAF + 列宽过渡结束后再兜底
-// （grid-template-columns 过渡约 0.42s；首帧可能已有非 0 宽可立刻就位）
+// 打开歌词面板 / 侧栏展开：立刻测 + 双 rAF + 过渡结束后再兜底
+// 桌面：grid 列宽约 0.46s；移动端：sheet slideUp 约 0.38s，且从 display:none 起量
 function forceLyricsPanelRelayout() {
   if (lyricFx.items.length === 0) return;
   relayoutLyricsIfNeeded(true, true);
-  // 列宽过渡约 0.46s，终态再测一次
-  scheduleLyricLayoutRemeasure(480);
+  var afterMs = 480;
+  try {
+    if (typeof checkIsMobile === 'function' && checkIsMobile()) afterMs = 400;
+  } catch (e) { /* ignore */ }
+  scheduleLyricLayoutRemeasure(afterMs);
 }
 
 // 监听歌词容器尺寸：侧栏展开/resize/面板切换时立即重测，避免 0 宽炸高后锁死
@@ -4006,25 +4009,27 @@ function bindControls() {
 
     if (playerRight) playerRight.classList.add('side-open');
 
-    syncNoLyricsLayout();
-
-    if (tab === 'playlist') {
-      requestAnimationFrame(revealPlaylist);
-    }
-    if (tab === 'lyrics') {
-      // 同步强制重测 + 过渡结束后再测：避免 0 宽炸高 / 打开半秒空白
-      requestAnimationFrame(function() {
-        forceLyricsPanelRelayout();
-      });
-    }
-
-    // 移动端：打开/切换底部面板
+    // 移动端：先 display 出 sheet，再测歌词/列表（否则 clientWidth=0）
     if (isMobile() && playerRight) {
       cancelPanelClose();
       playerRight.classList.add('mobile-visible');
       if (mobilePanelTitle) {
         mobilePanelTitle.textContent = panelTitles[tab] || tab;
       }
+    }
+
+    syncNoLyricsLayout();
+
+    if (tab === 'playlist') {
+      requestAnimationFrame(revealPlaylist);
+    }
+    if (tab === 'lyrics') {
+      // 等 layout 出非 0 宽后再测；移动端 sheet 从 none→grid 需多一帧
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() {
+          forceLyricsPanelRelayout();
+        });
+      });
     }
   }
 

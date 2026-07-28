@@ -2071,49 +2071,76 @@ html, body {
 }
 
 /* ========================================
-   响应式设计 - 移动端优先
+   响应式设计 - 移动端
    ======================================== */
 @media (max-width: 768px) {
   /* 仅移动端：歌词字号明显加大（桌面仍用 :root 原 clamp） */
   :root {
-    --lyric-fs: clamp(34px, 5.5vw, 44px);
+    --lyric-fs: clamp(32px, 7.2vw, 42px);
   }
 
   /* 动效 Fab 由 .fab-btn--desktop-only 统一隐藏 */
 
   #tapp-content {
     grid-template-rows: 1fr auto;
-    gap: 6px;
+    gap: 8px;
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
   }
   
-  /* 内容区只显示左侧（封面信息） */
+  /* 内容区只显示左侧（封面信息）；底栏之上留白 */
   .content-area {
     display: flex;
     flex-direction: column;
-    margin: 20px 16px 0px 16px;
+    margin: 12px 16px 0;
+    min-height: 0;
   }
   
-  /* 左侧区域 - 居左布局 */
+  /* 左侧：间距只在 hero 内；给封面+信息更多呼吸 */
   .player-left {
     flex: 1;
-    padding: 12px 6px;
-    gap: 20px;
-    justify-content: flex-start;
+    min-height: 0;
+    padding: 8px 4px 4px;
+    gap: 0;
+    justify-content: center;
     align-items: flex-start;
   }
-  
+
+  /* hero 绑定封面与信息同宽（与桌面一致） */
+  .player-hero {
+    gap: 12px;
+    width: min(100%, 200px);
+    max-width: min(72vw, 220px);
+  }
+
+  .player-hero .artwork-wrapper,
+  .player-hero .artwork-aurora {
+    width: 100%;
+    max-width: none;
+  }
+
   .artwork-wrapper {
-    max-width: 186px;
-    width: 47%;
+    max-width: none;
+    width: 100%;
+    border-radius: calc(var(--radius-lg) - 2px);
+    /* 移动端无 hover 放大，避免粘滞态 */
+  }
+
+  .artwork-wrapper:hover {
+    transform: none;
+  }
+
+  .artwork-wrapper.paused:hover {
+    transform: scale(0.8);
   }
 
   .artwork-aurora {
-    max-width: 186px;
-    width: 47%;
+    max-width: none;
+    width: 100%;
   }
 
   .aurora-blob {
-    filter: blur(34px);
+    filter: blur(28px);
   }
   
   .track-info {
@@ -2126,22 +2153,19 @@ html, body {
   }
   
   .track-title {
-    font-size: 20px;
+    font-size: 19px;
+    line-height: 1.28;
   }
   
   .track-artist {
-    font-size: 16px;
-  }
-
-  .player-hero {
-    gap: 14px;
+    font-size: 15px;
   }
   
-  /* 右侧面板默认隐藏；打开后歌词/列表同盒叠层切换 */
+  /* 底部 Sheet：歌词/列表同盒叠层；安全区 + 顶栏把手区 */
   .player-right {
     display: none;
     position: fixed;
-    top: 70px;
+    top: max(56px, env(safe-area-inset-top, 0px) + 48px);
     left: 0;
     right: 0;
     bottom: 0;
@@ -2149,15 +2173,16 @@ html, body {
     background: var(--glass-bg);
     -webkit-backdrop-filter: blur(40px) saturate(1.8);
     backdrop-filter: blur(40px) saturate(1.8);
-    padding: 6px;
-    padding-top: 50px;
+    padding: 0 4px calc(8px + env(safe-area-inset-bottom, 0px));
+    padding-top: 52px;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);
     /* 重置桌面侧栏的 opacity/transform，避免 fixed 层透明 */
     opacity: 1;
     visibility: visible;
     transform: none;
     pointer-events: auto;
-    animation: slideUp 0.34s cubic-bezier(0.32, 0.72, 0, 1);
+    animation: slideUp 0.38s cubic-bezier(0.33, 0.86, 0.2, 1);
   }
   
   /* 移动端面板显示：grid 叠层，歌词与列表占地相同 */
@@ -2175,6 +2200,12 @@ html, body {
     min-height: 0;
     width: 100%;
     height: 100%;
+    /* sheet 内切换：更轻位移，避免与 slideUp 叠加重 */
+    transform: translateY(4px) scale(0.995);
+  }
+
+  .player-right.mobile-visible .panel.active {
+    transform: none;
   }
 
   /* 移动端：VIP 开关只留图标（皇冠已足够表意），给搜索框腾空间 */
@@ -2188,24 +2219,24 @@ html, body {
     justify-content: center;
   }
 
-  /* 移动端歌词：边距收窄，字重降一档减少拥挤感 */
+  /* 移动端歌词：边距与安全区；字重降一档减少拥挤 */
   .lyric-line {
-    left: 12px;
-    right: 12px;
+    left: max(12px, env(safe-area-inset-left, 0px));
+    right: max(12px, env(safe-area-inset-right, 0px));
     padding: 8px 6px;
     font-weight: 600;
   }
 
   /* 移动端 Fab：更大触控热区 + 避开底部安全区 */
   .fab-host--br {
-    right: 16px;
-    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    right: max(14px, env(safe-area-inset-right, 0px));
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
     gap: 10px;
   }
 
   #lyrics-fabs.fab-host--br {
-    right: 20px;
-    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    right: max(16px, env(safe-area-inset-right, 0px));
+    bottom: calc(18px + env(safe-area-inset-bottom, 0px));
   }
 
   .fab-btn {
@@ -2214,8 +2245,8 @@ html, body {
   }
 
   .lyric-interlude {
-    left: 12px;
-    right: 12px;
+    left: max(12px, env(safe-area-inset-left, 0px));
+    right: max(12px, env(safe-area-inset-right, 0px));
     height: calc(1.35 * var(--lyric-fs, 34px) + 16px);
     padding: 8px 6px;
   }
@@ -2224,8 +2255,8 @@ html, body {
   .mobile-close-btn {
     display: flex;
     position: absolute;
-    top: 12px;
-    right: 8px;
+    top: 8px;
+    right: max(8px, env(safe-area-inset-right, 0px));
     width: 44px;
     height: 44px;
     border-radius: 50%;
@@ -2235,7 +2266,6 @@ html, body {
     justify-content: center;
     cursor: pointer;
     z-index: 110;
-    /* 移动端点击优化 */
     -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
     -webkit-touch-callout: none;
     -webkit-user-select: none;
@@ -2246,7 +2276,6 @@ html, body {
     width: 20px;
     height: 20px;
     fill: var(--text-secondary);
-    /* 🎯 WebKit 兼容性：确保 SVG 不阻止触摸事件 */
     pointer-events: none;
   }
   
@@ -2265,9 +2294,10 @@ html, body {
     display: block;
     position: absolute;
     top: 18px;
-    left: 24px;
-    font-size: 18px;
+    left: max(20px, env(safe-area-inset-left, 0px) + 12px);
+    font-size: 17px;
     font-weight: 600;
+    letter-spacing: -0.01em;
     color: var(--text-primary);
   }
   
@@ -2277,7 +2307,8 @@ html, body {
     align-items: flex-start;
     gap: 12px;
     border-radius: var(--radius-lg);
-    margin-bottom: 48px;
+    margin-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+    padding-bottom: 4px;
   }
   
   /* 第一行：进度条 */
@@ -2351,13 +2382,44 @@ html, body {
     width: 20px;
     height: 20px;
   }
+
+  /* 横屏矮屏：压缩封面，保证控制区可见 */
+  @media (max-height: 480px) {
+    .player-left {
+      justify-content: flex-start;
+      padding-top: 4px;
+    }
+
+    .player-hero {
+      width: min(100%, 120px);
+      max-width: min(36vw, 140px);
+      gap: 8px;
+    }
+
+    .track-title {
+      font-size: 16px;
+    }
+
+    .track-artist {
+      font-size: 13px;
+    }
+
+    .controls-bar {
+      gap: 8px;
+    }
+
+    .control-play {
+      width: 48px;
+      height: 48px;
+    }
+  }
 }
 
 /* 滑入动画 */
 @keyframes slideUp {
   from {
     opacity: 0;
-    transform: translateY(100%);
+    transform: translateY(12%);
   }
   to {
     opacity: 1;
@@ -2365,11 +2427,13 @@ html, body {
   }
 }
 
-/* 移动端面板关闭：下滑退场（两段式：先播动画，animationend 后再 display:none） */
+/* 移动端面板关闭：下滑退场（两段式：先播动画，结束后再 display:none）
+   关闭过程保持 grid，避免叠层面板塌缩闪一下 */
 .player-right.mobile-closing {
-  display: flex !important;
-  flex-direction: column;
-  animation: slideDownOut 0.26s cubic-bezier(0.4, 0, 1, 1) forwards;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  animation: slideDownOut 0.28s cubic-bezier(0.4, 0, 1, 1) forwards;
 }
 
 @keyframes slideDownOut {
@@ -2379,7 +2443,7 @@ html, body {
   }
   to {
     opacity: 0;
-    transform: translateY(100%);
+    transform: translateY(10%);
   }
 }
 
@@ -2395,16 +2459,39 @@ html, body {
    平板段（769~1080px）：桌面网格但比例收紧
    ======================================== */
 @media (min-width: 769px) and (max-width: 1080px) {
-  /* 左侧封面区收窄，把空间让给歌词 */
-  .content-area {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
-    gap: 16px;
+  /* 侧栏打开时比例略让给歌词；none 态仍由 mp-side-none 折叠右列 */
+  html.mp-side-lyrics .content-area,
+  html.mp-side-playlist .content-area {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.55fr);
+    column-gap: 16px;
   }
 
-  /* 平板上封面上限收小一档 */
+  html.mp-side-lyrics .player-left,
+  html.mp-side-playlist .player-left {
+    padding: 28px 20px 28px 8%;
+  }
+
+  html.mp-side-lyrics .player-hero,
+  html.mp-side-playlist .player-hero {
+    max-width: min(100%, 220px);
+  }
+
+  html.mp-side-none .player-hero {
+    max-width: min(100%, 300px);
+    width: min(100%, 300px);
+  }
+
   .artwork-wrapper,
   .artwork-aurora {
     max-width: 220px;
+  }
+
+  .track-title {
+    font-size: 20px;
+  }
+
+  .track-artist {
+    font-size: 16px;
   }
 
   .lyric-line {
@@ -2645,24 +2732,29 @@ html.mp-no-lyrics #lyric-trans-btn {
   display: none !important;
 }
 
-/* 移动端：无歌词时封面略放大，空态更居中 */
+/* 移动端：无歌词 / 默认态封面+信息居中，略放大 hero */
 @media (max-width: 768px) {
-  html.mp-no-lyrics-layout .artwork-wrapper,
-  html.mp-no-lyrics-layout .artwork-aurora {
-    max-width: 220px;
-    width: 56%;
-  }
-
-  html.mp-no-lyrics .player-left {
+  html.mp-no-lyrics-layout .player-left,
+  html.mp-side-none .player-left {
     align-items: center;
   }
 
-  html.mp-no-lyrics .track-info {
+  html.mp-no-lyrics-layout .player-hero,
+  html.mp-side-none .player-hero {
+    align-items: center;
+    margin-inline: auto;
+    width: min(100%, 240px);
+    max-width: min(78vw, 260px);
+  }
+
+  html.mp-no-lyrics-layout .track-info,
+  html.mp-side-none .player-hero .track-info {
     align-items: center;
     text-align: center;
   }
 
-  html.mp-no-lyrics .track-title-row {
+  html.mp-no-lyrics-layout .track-title-row,
+  html.mp-side-none .track-title-row {
     justify-content: center;
   }
 
