@@ -2079,8 +2079,8 @@ html.mp-has-lyrics .track-title {
 }
 
 /* ========================================
-   移动端布局（≤768）— 标题写在封面上
-   - 封面为舞台；歌名/歌手叠在封面底部渐变上（不要玻璃岛）
+   移动端布局（≤768）
+   - 封面 + 下方文本（不叠在封面上）
    - 控制坞悬浮胶囊
    ======================================== */
 @media (max-width: 768px) {
@@ -2088,7 +2088,7 @@ html.mp-has-lyrics .track-title {
     --lyric-fs: clamp(30px, 6.8vw, 40px);
     --m-pad-x: max(18px, env(safe-area-inset-left, 0px));
     --m-pad-r: max(18px, env(safe-area-inset-right, 0px));
-    --m-stage: min(86vw, min(340px, 54vh));
+    --m-stage: min(86vw, min(340px, 50vh));
   }
 
   #tapp-content {
@@ -2119,14 +2119,13 @@ html.mp-has-lyrics .track-title {
     align-items: center;
   }
 
-  /* hero 只包封面一块；信息绝对叠在封面上 */
   .player-hero {
     position: relative;
     width: var(--m-stage);
     max-width: var(--m-stage);
-    gap: 0;
+    gap: 12px;
     align-items: stretch;
-    overflow: visible;
+    overflow: hidden;
   }
 
   .player-hero .artwork-container {
@@ -2171,84 +2170,66 @@ html.mp-has-lyrics .track-title {
     filter: blur(36px);
   }
 
-  /* 标题直接写在封面底部：压在 artwork 上，无独立岛卡片 */
+  /* 文本在封面下方，居中、无浮岛/无叠字 */
   .player-hero .track-info {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 3;
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    z-index: 1;
     width: 100%;
     max-width: 100%;
     margin: 0;
-    padding: 48px 16px 16px;
-    gap: 3px;
-    text-align: left;
-    align-items: flex-start;
-    border-radius: 0 0 20px 20px;
-    /* 仅底部渐变 scrim，不是浮岛 */
-    background: linear-gradient(
-      to top,
-      rgba(0, 0, 0, 0.72) 0%,
-      rgba(0, 0, 0, 0.45) 42%,
-      rgba(0, 0, 0, 0) 100%
-    );
+    padding: 0 4px;
+    gap: 4px;
+    text-align: center;
+    align-items: center;
+    border-radius: 0;
+    background: none;
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
     box-shadow: none;
     border: none;
     overflow: hidden;
     box-sizing: border-box;
-    pointer-events: none; /* 不挡封面点击/手势；文字纯展示 */
-  }
-
-  .player-hero .track-info .track-title-row,
-  .player-hero .track-info .track-title,
-  .player-hero .track-info .track-artist,
-  .player-hero .track-info .badge-vip {
     pointer-events: auto;
   }
 
   .track-title-row {
-    justify-content: flex-start;
+    justify-content: center;
     width: 100%;
   }
 
   .track-title {
-    font-size: 20px;
-    line-height: 1.22;
+    font-size: 19px;
+    line-height: 1.25;
     letter-spacing: -0.02em;
-    text-align: left;
+    text-align: center;
     font-weight: 700;
-    color: #fff;
-    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.35);
+    color: var(--text-primary);
+    text-shadow: none;
   }
 
   .track-title .marquee-inner {
-    color: #fff;
-    -webkit-text-fill-color: #fff;
+    color: inherit;
+    -webkit-text-fill-color: unset;
   }
 
   html.mp-has-lyrics .track-title {
-    font-size: 19px;
+    font-size: 18px;
   }
 
   .track-artist {
     font-size: 13px;
-    text-align: left;
-    opacity: 0.92;
-    color: rgba(255, 255, 255, 0.88);
-    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+    text-align: center;
+    opacity: 0.85;
+    color: var(--text-secondary);
+    text-shadow: none;
   }
 
   .track-artist .marquee-inner {
-    color: rgba(255, 255, 255, 0.9);
-    -webkit-text-fill-color: rgba(255, 255, 255, 0.9);
-    background: none;
-  }
-
-  .badge-vip {
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    /* 保留主题渐变字（桌面同款），居中展示 */
+    opacity: 1;
   }
 
   /* —— 悬浮控制坞：更紧凑的胶囊 —— */
@@ -2549,9 +2530,12 @@ html.mp-has-lyrics .track-title {
       justify-content: flex-start;
     }
 
+    .player-hero {
+      gap: 8px;
+    }
+
     .player-hero .track-info {
-      padding: 28px 12px 10px;
-      border-radius: 0 0 16px 16px;
+      padding: 0 2px;
     }
 
     .track-title,
@@ -3009,7 +2993,7 @@ html.mp-no-lyrics #lyric-trans-btn {
   display: none !important;
 }
 
-/* 移动端兜底：标题始终压在封面上，禁止被其它 class 拆回岛/堆叠 */
+/* 移动端兜底：封面下文本，全态一致 */
 @media (max-width: 768px) {
   .player-left {
     align-items: center;
@@ -3023,12 +3007,12 @@ html.mp-no-lyrics #lyric-trans-btn {
   }
 
   .player-hero .track-info {
-    text-align: left;
-    align-items: flex-start;
+    text-align: center;
+    align-items: center;
   }
 
   .track-title-row {
-    justify-content: flex-start;
+    justify-content: center;
   }
 }
 
