@@ -1017,6 +1017,7 @@ html, body {
 
 /* 播放列表面板 */
 .panel-playlist {
+  position: relative;
   padding: 0;
 }
 
@@ -2406,31 +2407,51 @@ html.mp-empty .artwork-container {
   opacity: 0.88;
 }
 
-.playlist-toolbar-extra {
-  display: flex;
-  justify-content: flex-end;
-  padding: 0 8px 6px;
-}
-
+/* 列表右下角浮动：定位当前（仅图标） */
 .jump-current-btn {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 8;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
   border: none;
-  background: rgba(127, 127, 127, 0.12);
-  color: var(--text-secondary, #aeaeb2);
-  font-size: 12px;
-  padding: 5px 10px;
-  border-radius: 999px;
+  border-radius: 50%;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  color: var(--text-primary, #f5f5f7);
+  background: color-mix(in srgb, var(--music-primary, #8e8e93) 28%, rgba(28, 28, 30, 0.72));
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.22),
+    0 0 0 1px color-mix(in srgb, var(--music-primary, #8e8e93) 35%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition:
+    transform 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .jump-current-btn:hover,
 .jump-current-btn:focus-visible {
-  background: color-mix(in srgb, var(--music-primary, #8e8e93) 22%, transparent);
-  color: var(--text-primary, #f5f5f7);
+  transform: scale(1.06);
+  background: color-mix(in srgb, var(--music-primary, #8e8e93) 42%, rgba(28, 28, 30, 0.75));
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.28),
+    0 0 0 1px color-mix(in srgb, var(--music-primary, #8e8e93) 50%, transparent);
   outline: none;
+}
+
+.jump-current-btn:active {
+  transform: scale(0.96);
+}
+
+/* 仅在列表面板激活时显示 */
+.panel-playlist:not(.active) .jump-current-btn {
+  display: none;
 }
 
 .control-btn:focus-visible,
@@ -2446,8 +2467,11 @@ html.mp-empty .artwork-container {
     top: max(8px, env(safe-area-inset-top, 0px));
     font-size: 11px;
   }
-  .jump-current-label {
-    /* 窄屏仍显示短文案 */
+  .jump-current-btn {
+    right: 10px;
+    bottom: 10px;
+    width: 38px;
+    height: 38px;
   }
   .player-empty-hint {
     font-size: 12px;

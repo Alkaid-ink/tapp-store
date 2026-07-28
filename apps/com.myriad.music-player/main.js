@@ -1,4 +1,4 @@
-// Music Player Tapp v1.0.8
+// Music Player Tapp v1.0.9
 
 var MP_DEBUG = false;
 function mpDebug() {
@@ -146,10 +146,12 @@ function setLocale(locale) {
   currentLocale = locale;
   currentDict = i18n[locale] || i18n['zh-CN'];
   // 刷新依赖 i18n 的静态控件文案
-  var jumpLabel = document.querySelector('.jump-current-label');
-  if (jumpLabel) jumpLabel.textContent = t('jumpToCurrent');
   var jumpBtn = $('jump-current-btn');
-  if (jumpBtn) jumpBtn.setAttribute('aria-label', t('jumpToCurrent'));
+  if (jumpBtn) {
+    var jumpTip = t('jumpToCurrent');
+    jumpBtn.setAttribute('aria-label', jumpTip);
+    jumpBtn.setAttribute('title', jumpTip);
+  }
   var emptyHint = $('player-empty-hint');
   if (emptyHint && !emptyHint.hidden) emptyHint.textContent = t('emptyHint');
   var searchInput = $('playlist-search');
