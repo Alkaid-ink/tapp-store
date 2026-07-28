@@ -2502,3 +2502,166 @@ html.mp-empty .artwork-container {
 html.mp-has-error .status-banner.visible {
   background: color-mix(in srgb, #ff453a 40%, rgba(0, 0, 0, 0.55));
 }
+
+/* ========================================
+   无歌词模式（html.mp-no-lyrics / mp-lyrics-loading / mp-has-lyrics）
+   ======================================== */
+
+/* 桌面：无歌词时扩大封面列，弱化右侧空歌词区 */
+@media (min-width: 769px) {
+  html.mp-no-lyrics .content-area,
+  html.mp-lyrics-loading .content-area {
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    transition: grid-template-columns 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  html.mp-no-lyrics .player-left,
+  html.mp-lyrics-loading .player-left {
+    align-items: center;
+    padding-left: 10%;
+    padding-right: 10%;
+  }
+
+  html.mp-no-lyrics .artwork-wrapper,
+  html.mp-no-lyrics .artwork-aurora {
+    max-width: min(360px, 100%);
+    width: 100%;
+  }
+
+  html.mp-no-lyrics .track-info,
+  html.mp-lyrics-loading .track-info {
+    align-items: center;
+    text-align: center;
+    width: 100%;
+  }
+
+  html.mp-no-lyrics .track-title-row,
+  html.mp-lyrics-loading .track-title-row {
+    justify-content: center;
+  }
+
+  /* 歌词面板激活且无词：右侧展示精致空态，列表面板不受影响 */
+  html.mp-no-lyrics .panel-lyrics.active {
+    justify-content: center;
+  }
+}
+
+/* 有歌词时恢复默认左对齐标题感 */
+html.mp-has-lyrics .player-left {
+  /* 保持默认 .player-left 规则 */
+}
+
+/* 丰富空态 */
+.lyrics-empty.lyrics-empty-rich {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 180px;
+  gap: 10px;
+  padding: 24px 20px;
+  text-align: center;
+  opacity: 1;
+  color: var(--text-secondary);
+  animation: lyricsEmptyIn 0.45s cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+
+@keyframes lyricsEmptyIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.lyrics-empty-visual {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+  background:
+    radial-gradient(circle at 35% 30%,
+      color-mix(in srgb, var(--music-primary) 28%, transparent),
+      transparent 62%),
+    color-mix(in srgb, var(--music-primary) 10%, rgba(120, 120, 128, 0.12));
+  box-shadow:
+    0 8px 28px color-mix(in srgb, var(--music-primary) 18%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--music-primary) 22%, transparent);
+}
+
+.lyrics-empty-icon {
+  width: 32px;
+  height: 32px;
+  color: var(--music-primary);
+  opacity: 0.92;
+}
+
+.lyrics-empty-spinner {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2.5px solid color-mix(in srgb, var(--music-primary) 25%, transparent);
+  border-top-color: var(--music-primary);
+  animation: spin 0.8s linear infinite;
+}
+
+.lyrics-empty-title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-primary);
+}
+
+.lyrics-empty-hint {
+  font-size: 13px;
+  line-height: 1.45;
+  max-width: 220px;
+  color: var(--text-tertiary);
+  opacity: 0.9;
+}
+
+html.mp-lyrics-loading .lyrics-empty-title {
+  color: var(--text-secondary);
+}
+
+/* 无歌词时隐藏歌词角按钮中的翻译（无意义）——动效钮桌面仍可点 */
+html.mp-no-lyrics #lyric-trans-btn {
+  display: none !important;
+}
+
+/* 移动端：无歌词时封面略放大，空态更居中 */
+@media (max-width: 768px) {
+  html.mp-no-lyrics .artwork-wrapper,
+  html.mp-no-lyrics .artwork-aurora {
+    max-width: 220px;
+    width: 56%;
+  }
+
+  html.mp-no-lyrics .player-left {
+    align-items: center;
+  }
+
+  html.mp-no-lyrics .track-info {
+    align-items: center;
+    text-align: center;
+  }
+
+  html.mp-no-lyrics .track-title-row {
+    justify-content: center;
+  }
+
+  .lyrics-empty.lyrics-empty-rich {
+    min-height: 40vh;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lyrics-empty.lyrics-empty-rich {
+    animation: none;
+  }
+  .lyrics-empty-spinner {
+    animation: none;
+    border-top-color: transparent;
+  }
+}

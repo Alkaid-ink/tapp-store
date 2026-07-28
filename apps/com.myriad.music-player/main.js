@@ -1,4 +1,4 @@
-// Music Player Tapp v1.0.10
+// Music Player Tapp v1.1.0
 
 var MP_DEBUG = false;
 function mpDebug() {
@@ -26,6 +26,8 @@ var i18n = {
     playlist: '播放列表',
     lyrics: '歌词',
     noLyrics: '暂无歌词',
+    noLyricsHint: '纯音乐，或暂未获取到歌词',
+    lyricsLoading: '歌词加载中…',
     translate: '翻译',
     visualFx: '动效',
     searchPlaceholder: '搜索歌曲...',
@@ -65,6 +67,8 @@ var i18n = {
     playlist: 'Playlist',
     lyrics: 'Lyrics',
     noLyrics: 'No Lyrics',
+    noLyricsHint: 'Instrumental, or lyrics unavailable',
+    lyricsLoading: 'Loading lyrics…',
     translate: 'Translate',
     visualFx: 'Effects',
     searchPlaceholder: 'Search songs...',
@@ -104,6 +108,8 @@ var i18n = {
     playlist: 'プレイリスト',
     lyrics: '歌詞',
     noLyrics: '歌詞なし',
+    noLyricsHint: 'インスト、または歌詞を取得できません',
+    lyricsLoading: '歌詞を読込中…',
     translate: '翻訳',
     visualFx: '演出',
     searchPlaceholder: '曲を検索...',
@@ -330,6 +336,7 @@ var pageState = {
   verbatimLyrics: [],
   lyricsSongId: null,      // 已成功加载并展示的歌词所属歌曲 id
   lyricsRequestGen: 0,     // 歌词请求代数：快速切歌时丢弃过期 getLyrics 回包
+  lyricsLoadState: 'idle', // idle | loading | ready | empty — 驱动无歌词布局
   // 宿主切歌世代：与 status.generation / track.id 对齐，丢弃过期 UI 补丁
   boundTrackId: null,
   boundGeneration: 0,
@@ -1285,6 +1292,38 @@ function updateInterludeDots() {
   }
 }
 
+
+/** 同步无歌词 / 有歌词 / 加载中布局（html.mp-no-lyrics 等） */
+function setLyricsUiMode(state) {
+  // state: 'idle' | 'loading' | 'ready' | 'empty'
+  pageState.lyricsLoadState = state || 'idle';
+  var root = document.documentElement;
+  var loading = state === 'loading';
+  var empty = state === 'empty';
+  var ready = state === 'ready';
+  root.classList.toggle('mp-lyrics-loading', loading);
+  root.classList.toggle('mp-no-lyrics', empty);
+  root.classList.toggle('mp-has-lyrics', ready);
+}
+
+function buildLyricsEmptyHtml(kind) {
+  // kind: 'empty' | 'loading'
+  var title = kind === 'loading' ? t('lyricsLoading') : t('noLyrics');
+  var hint = kind === 'loading' ? '' : t('noLyricsHint');
+  var icon = kind === 'loading'
+    ? '<span class="lyrics-empty-spinner" aria-hidden="true"></span>'
+    : ('<svg class="lyrics-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+      + '<path d="M9 18V5l12-2v13"/>'
+      + '<circle cx="6" cy="18" r="3"/>'
+      + '<circle cx="18" cy="16" r="3"/>'
+      + '</svg>');
+  return '<div class="lyrics-empty lyrics-empty-rich' + (kind === 'loading' ? ' is-loading' : '') + '">'
+    + '<div class="lyrics-empty-visual">' + icon + '</div>'
+    + '<div class="lyrics-empty-title">' + title + '</div>'
+    + (hint ? '<div class="lyrics-empty-hint">' + hint + '</div>' : '')
+    + '</div>';
+}
+
 // 渲染歌词 - Apple Music 式：DOM/类名在此维护，位置与缩放由波浪引擎接管
 function renderLyrics(lyrics, currentIndex) {
   var container = $('lyrics-container');
@@ -1297,9 +1336,16 @@ function renderLyrics(lyrics, currentIndex) {
     lyricFx.songId = null;
     resetLyricFxLayoutCache();
     stopLyricWave();
-    container.innerHTML = '<div class="lyrics-empty">' + t('noLyrics') + '</div>';
+    // 加载中 vs 确认无歌词：切歌瞬间用 loading，加载结束仍空则 empty
+    var emptyKind = (pageState.lyricsLoadState === 'loading') ? 'loading' : 'empty';
+    if (pageState.lyricsLoadState !== 'loading') setLyricsUiMode('empty');
+    else setLyricsUiMode('loading');
+    container.innerHTML = buildLyricsEmptyHtml(emptyKind);
+    container.classList.remove('karaoke');
     return;
   }
+
+  setLyricsUiMode('ready');
 
   // 逐字模式：verbatim 与 lyrics 行数一致时启用卡拉OK字级填充
   var isKaraoke = pageState.verbatimLyrics.length > 0 &&
@@ -2064,6 +2110,7 @@ function loadLyricsForTrack(track) {
   if (!track || !track.id) return;
   // 已成功加载本曲且仍有内容：跳过
   if (pageState.lyricsSongId === track.id && pageState.lyrics && pageState.lyrics.length > 0) {
+    setLyricsUiMode('ready');
     return;
   }
   // 防御旧版 SDK（前端 bundle 未更新时 getLyrics 不存在）：优雅回退逐行
@@ -2077,6 +2124,13 @@ function loadLyricsForTrack(track) {
   var requestGen = ++pageState.lyricsRequestGen;
   var trackId = track.id;
 
+  // 进入加载态：桌面展开封面优先布局前先显示 loading 空态
+  pageState.lyrics = [];
+  pageState.verbatimLyrics = [];
+  pageState.lyricsSongId = null;
+  setLyricsUiMode('loading');
+  renderLyrics([], -1);
+
   Tapp.media.getLyrics({ songId: track.id, source: track.source }).then(function(res) {
     try { mpDebug('[music-player] getLyrics', track.id, 'verbatim=', res && res.verbatim ? res.verbatim.length : 0, 'lines=', res && res.lines ? res.lines.length : 0); } catch (e) {}
     // 过期请求 / 当前曲已不是目标曲：丢弃
@@ -2087,7 +2141,9 @@ function loadLyricsForTrack(track) {
     if (currentId != null && String(currentId) !== String(trackId)) return;
 
     if (!res) {
-      // 无效回包：允许后续状态事件重试
+      // 无效回包：允许后续状态事件重试；先保持 loading 或标 empty
+      setLyricsUiMode('empty');
+      renderLyrics([], -1);
       return;
     }
 
@@ -2100,10 +2156,14 @@ function loadLyricsForTrack(track) {
     } else {
       pageState.verbatimLyrics = [];
       if (res.lines && res.lines.length) pageState.lyrics = res.lines;
+      else pageState.lyrics = [];
     }
 
     // 成功应用后再标记归属，避免「标记已是新曲、内容仍是旧曲」
     pageState.lyricsSongId = trackId;
+    if (!pageState.lyrics || pageState.lyrics.length === 0) {
+      setLyricsUiMode('empty');
+    }
 
     // 翻译可用性（各行 translation 已由桥接层按时间对齐嵌入）
     // 必须先同步 show-trans，再 render/measure，否则会用「无翻译」行高定位
@@ -2132,6 +2192,10 @@ function loadLyricsForTrack(track) {
     pageState.verbatimLyrics = [];
     pageState.hasTranslation = false;
     syncLyricTransUI();
+    if (!pageState.lyrics || pageState.lyrics.length === 0) {
+      setLyricsUiMode('empty');
+      renderLyrics([], -1);
+    }
   });
 }
 
@@ -3529,6 +3593,7 @@ async function initPage() {
       pageState.verbatimLyrics = [];
       pageState.lastKaraokeLine = -1;
       pageState.hasTranslation = false;
+      setLyricsUiMode('loading');
       // 预解码邻曲封面，连点切歌时 img 已在浏览器缓存
       prefetchNeighborCovers(nextTrackId);
       // 仅当已展示歌词不属于新曲时清空（自载成功且 id 匹配则保留）
