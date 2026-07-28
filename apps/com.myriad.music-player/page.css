@@ -2125,13 +2125,17 @@ html.mp-has-lyrics .track-title {
     max-width: var(--m-stage);
     gap: 12px;
     align-items: stretch;
-    overflow: hidden;
+    /* 勿 hidden：会裁掉封面下左右圆角与阴影 */
+    overflow: visible;
   }
 
   .player-hero .artwork-container {
     width: 100%;
     position: relative;
     z-index: 0;
+    /* 与封面同圆角；overflow 只由 wrapper 裁图，避免容器直角切角 */
+    overflow: visible;
+    border-radius: 20px;
   }
 
   .player-hero .artwork-wrapper,
@@ -2144,9 +2148,18 @@ html.mp-has-lyrics .track-title {
     max-width: none;
     width: 100%;
     border-radius: 20px;
+    overflow: hidden;
+    /* 独立合成层，减少 WebKit 圆角+阴影裁切毛刺 */
+    isolation: isolate;
+    -webkit-mask-image: -webkit-radial-gradient(white, black);
     box-shadow:
       0 28px 64px color-mix(in srgb, var(--music-primary) 32%, transparent),
       0 8px 24px rgba(0, 0, 0, 0.22);
+  }
+
+  .artwork-wrapper .artwork-image,
+  .artwork-wrapper .artwork-placeholder {
+    border-radius: inherit;
   }
 
   .artwork-wrapper:hover {
@@ -2164,13 +2177,16 @@ html.mp-has-lyrics .track-title {
   .artwork-aurora {
     max-width: none;
     width: 100%;
+    /* aurora 在 wrapper 外时不要被直角父级裁 */
+    border-radius: 20px;
+    overflow: visible;
   }
 
   .aurora-blob {
     filter: blur(36px);
   }
 
-  /* 文本在封面下方，居中、无浮岛/无叠字 */
+  /* 文本在封面下方，居中 */
   .player-hero .track-info {
     position: relative;
     left: auto;
@@ -2190,7 +2206,7 @@ html.mp-has-lyrics .track-title {
     backdrop-filter: none;
     box-shadow: none;
     border: none;
-    overflow: hidden;
+    overflow: hidden; /* 仅裁跑马灯，不动封面 */
     box-sizing: border-box;
     pointer-events: auto;
   }
