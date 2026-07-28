@@ -261,12 +261,21 @@ html, body {
     column-gap 0.46s cubic-bezier(0.33, 0.86, 0.2, 1);
 }
 
-.content-area > .player-left,
+/* 左右列分流：左列可见以保留封面圆角/阴影；右列必须 hidden+min-height:0
+   才能在 grid 里锁住高度（歌词绝对定位不撑高，clientHeight=0 则全端滚不动） */
+.content-area > .player-left {
+  min-width: 0;
+  max-width: 100%;
+  overflow: visible;
+}
+
 .content-area > .player-right {
   min-width: 0;
   max-width: 100%;
-  /* 左列勿裁封面阴影/圆角；标题外溢靠 track-info overflow */
-  overflow: visible;
+  min-height: 0;
+  height: 100%;
+  align-self: stretch;
+  overflow: hidden;
 }
 
 /* ========================================
@@ -696,6 +705,8 @@ html.mp-has-lyrics .track-title {
   overflow: hidden;
   min-height: 0;
   min-width: 0;
+  height: 100%;
+  align-self: stretch;
 }
 
 /* ========================================
@@ -745,8 +756,9 @@ html.mp-has-lyrics .track-title {
 }
 
 .lyrics-scroll {
-  flex: 1;
-  min-height: 0; /* flex 链关键：否则移动端 Sheet 内高度塌成 0，滚动/测量全坏 */
+  flex: 1 1 auto;
+  min-height: 0; /* flex 链关键：否则高度塌成 0，滚动/测量全坏 */
+  height: 100%; /* 绝对定位歌词不撑高；必须吃满 panel 高度 */
   /* Apple Music 式逐行波浪引擎：滚动完全由 JS 接管（每行独立弹簧 transform），
      容器不再原生滚动 */
   overflow: hidden;
@@ -3161,4 +3173,150 @@ html.mp-no-lyrics #lyric-trans-btn {
 .lyrics-empty,
 .lyrics-empty-rich {
   display: none !important;
+}
+
+/* ========================================
+   触控平板 769–900：与 checkIsMobile 对齐
+   JS 挂 html.mp-is-mobile；纯 @media (max-width:768) 盖不到，
+   若不补 Sheet，会走桌面侧栏但高度/测量在窄触控上易坏。
+   必须写在桌面侧栏规则之后以便覆盖。
+   ======================================== */
+@media (min-width: 769px) and (max-width: 900px) {
+  html.mp-is-mobile #tapp-content {
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 0;
+    max-width: 100%;
+    padding:
+      0
+      env(safe-area-inset-right, 0px)
+      env(safe-area-inset-bottom, 0px)
+      env(safe-area-inset-left, 0px);
+  }
+
+  html.mp-is-mobile {
+    --m-gutter: 16px;
+    --lyric-fs: clamp(30px, 5.5vw, 38px);
+  }
+
+  html.mp-is-mobile .content-area {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding:
+      max(16px, env(safe-area-inset-top, 0px))
+      var(--m-gutter, 16px)
+      12px
+      var(--m-gutter, 16px);
+    min-height: 0;
+    flex: 1;
+    /* 关掉桌面双栏过渡列宽，避免 0fr 侧栏残留 */
+    grid-template-columns: none;
+    column-gap: 0;
+  }
+
+  html.mp-is-mobile.mp-side-lyrics .content-area,
+  html.mp-is-mobile.mp-side-playlist .content-area,
+  html.mp-is-mobile.mp-side-none .content-area {
+    grid-template-columns: none;
+    column-gap: 0;
+  }
+
+  html.mp-is-mobile .player-left {
+    flex: 1;
+    min-height: 0;
+    padding: 0 0 8px;
+    gap: 0;
+    justify-content: center;
+    align-items: center;
+  }
+
+  html.mp-is-mobile .player-hero {
+    width: min(86vw, min(340px, 50vh));
+    max-width: min(86vw, min(340px, 50vh));
+  }
+
+  html.mp-is-mobile .controls-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    margin: 0 var(--m-gutter, 16px) var(--m-gutter, 16px);
+    padding: 8px 12px 8px;
+    border-radius: 22px;
+  }
+
+  html.mp-is-mobile .mobile-close-btn {
+    display: flex !important;
+  }
+
+  html.mp-is-mobile .mobile-panel-title {
+    display: block !important;
+  }
+
+  /* Sheet：与手机端同结构，保证歌词 clientHeight 可测 */
+  html.mp-is-mobile .player-right {
+    display: none;
+    position: fixed;
+    top: max(12%, env(safe-area-inset-top, 0px) + 40px);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 100;
+    height: auto;
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(48px) saturate(1.85);
+    backdrop-filter: blur(48px) saturate(1.85);
+    padding: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.22);
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    pointer-events: auto;
+    overflow: hidden;
+    flex-direction: column;
+  }
+
+  html.mp-is-mobile .player-right.side-open {
+    /* 桌面 side-open 透明/位移不要干扰 Sheet */
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    pointer-events: auto;
+  }
+
+  html.mp-is-mobile .player-right.mobile-visible {
+    display: flex;
+    flex-direction: column;
+    padding-top: 22px;
+  }
+
+  html.mp-is-mobile .player-right.mobile-visible .panel {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 56px;
+    bottom: 0;
+    display: none;
+    flex-direction: column;
+    min-height: 0;
+    width: auto;
+    height: auto;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: none;
+  }
+
+  html.mp-is-mobile .player-right.mobile-visible .panel.active {
+    display: flex;
+    z-index: 1;
+  }
+
+  html.mp-is-mobile .player-right.mobile-visible .panel-lyrics .lyrics-scroll,
+  html.mp-is-mobile .player-right.mobile-visible .panel-playlist .playlist-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+  }
 }

@@ -697,12 +697,17 @@ function resetLyricFxLayoutCache(opts) {
 // 但翻译副行 display 会改变行高，故 must 与 show-trans 状态一致后测）
 // 关键：侧栏 0fr / 展开过渡中宽度为 0 时，pre-wrap 行会按逐字换行 → offsetHeight 爆炸，
 // 必须同时要求 clientWidth > 0，否则拒绝测量并等面板可见后再测。
+// 侧栏 0fr→展开过渡中会出现极窄宽度；pre-wrap 会按逐字换行把行高炸到几千 px。
+// 仅 w===0 不够，窄宽测量同样必须拒绝，等面板接近终态再测。
+var LYRIC_MEASURE_MIN_W = 48;
+var LYRIC_MEASURE_MIN_H = 48;
+
 function measureLyricLayout() {
   var container = $('lyrics-container');
   if (!container || !lyricFx.inner || lyricFx.items.length === 0) return false;
   var h = container.clientHeight;
   var w = container.clientWidth;
-  if (h === 0 || w === 0) return false; // 面板隐藏或侧栏折叠，待可见后重测
+  if (h < LYRIC_MEASURE_MIN_H || w < LYRIC_MEASURE_MIN_W) return false;
   // 强制样式刷盘：保证 show-trans 的 display:block/none 已生效再读 offsetHeight
   void container.offsetHeight;
   var showingTrans = container.classList.contains('show-trans');
@@ -717,6 +722,12 @@ function measureLyricLayout() {
     y += it.h;
   }
   if (!anyH) {
+    lyricFx.measured = false;
+    return false;
+  }
+  // 窄宽炸高后的守卫：总高度异常时拒绝锁定，避免挤顶/间距离谱一直持续
+  var avgH = y / lyricFx.items.length;
+  if (avgH > h * 0.9 && lyricFx.items.length > 3) {
     lyricFx.measured = false;
     return false;
   }
@@ -741,7 +752,7 @@ function ensureLyricLayoutReady() {
   if (!container) return false;
   var h = container.clientHeight;
   var w = container.clientWidth;
-  if (h === 0 || w === 0) return false;
+  if (h < LYRIC_MEASURE_MIN_H || w < LYRIC_MEASURE_MIN_W) return false;
   var showingTrans = container.classList.contains('show-trans');
   if (lyricFx.measured &&
       lyricFx.measuredWithTrans === showingTrans &&
@@ -882,7 +893,7 @@ function relayoutLyricsIfNeeded(allowUnmeasured, force) {
   if (!c) return;
   var h = c.clientHeight;
   var w = c.clientWidth;
-  if (h <= 0 || w <= 0) return;
+  if (h < LYRIC_MEASURE_MIN_H || w < LYRIC_MEASURE_MIN_W) return;
   var showingTrans = c.classList.contains('show-trans');
   var need =
     force ||
@@ -935,7 +946,9 @@ function forceLyricsPanelRelayout(soft) {
       needNow = true;
     }
   }
-  if (needNow && c && c.clientWidth > 0 && c.clientHeight > 0) {
+  if (needNow && c &&
+      c.clientWidth >= LYRIC_MEASURE_MIN_W &&
+      c.clientHeight >= LYRIC_MEASURE_MIN_H) {
     relayoutLyricsIfNeeded(true, true);
   }
 
@@ -1218,7 +1231,11 @@ function userLyricScrollBegin() {
 function snapFocusCurrentLyricIfPossible() {
   if (lyricFx.items.length === 0 || !lyricFx.inner) return false;
   var c = $('lyrics-container');
-  if (!c || c.clientWidth <= 0 || c.clientHeight <= 0) return false;
+  if (!c ||
+      c.clientWidth < LYRIC_MEASURE_MIN_W ||
+      c.clientHeight < LYRIC_MEASURE_MIN_H) {
+    return false;
+  }
   if (!lyricFx.measured) {
     if (!measureLyricLayout()) return false;
   } else if (!ensureLyricLayoutReady()) {
@@ -4008,6 +4025,8 @@ function updateStateSnapshot(state) {
 
 // 初始化页面
 async function initPage() {
+  // 尽早同步移动/平板 class，避免首帧走错布局（Sheet vs 桌面侧栏）
+  try { checkIsMobile(); } catch (e) { /* ignore */ }
   // 设置标题
   var titleEl = document.getElementById('page-title');
   if (titleEl) titleEl.textContent = t('title');
@@ -4470,14 +4489,13 @@ function bindControls() {
         setLyricsUiMode('loading');
       }
       revalidateLyricsContentMode({ fromTabOpen: true });
-      // 移动端 Sheet 刚 display 出来：下一帧硬重测，否则 clientHeight=0 滚不动
-      if (isMobile()) {
+      // 全端硬重测：桌面/平板侧栏 0fr→展开、移动端 Sheet display 切换，
+      // 都可能在首帧 w/h 不足；仅 mobile 重测会导致桌面/平板锁死错误布局。
+      requestAnimationFrame(function() {
         requestAnimationFrame(function() {
-          requestAnimationFrame(function() {
-            forceLyricsPanelRelayout(false);
-          });
+          forceLyricsPanelRelayout(false);
         });
-      }
+      });
     } else {
       syncNoLyricsLayout();
     }
@@ -5078,6 +5096,10 @@ function checkIsMobile() {
     lastCoarsePtr = coarse;
     // 触控手机：窄；或明确粗指针且 ≤900（竖屏平板）
     isMobileDevice = w <= 768 || (coarse && w <= 900);
+    // 与 CSS 同步：html.mp-is-mobile 覆盖 769–900 触控平板（纯 media 768 对不齐）
+    try {
+      document.documentElement.classList.toggle('mp-is-mobile', !!isMobileDevice);
+    } catch (e2) { /* ignore */ }
   }
   return isMobileDevice;
 }
