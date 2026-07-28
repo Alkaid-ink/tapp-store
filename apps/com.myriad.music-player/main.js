@@ -1471,48 +1471,47 @@ function getSidePanelFocus() {
 }
 
 /**
- * 无歌词布局策略：
- * - 无词（0 有效行）+ 歌词 Tab 开着 → 封面优先（无歌词模式），侧栏按 none 收起
- * - 无词 + 都不选 → 封面优先
- * - 有词（≥5 行实质内容）+ 歌词 Tab → 正常双栏歌词
- * - 列表 Tab → 始终双栏，不因无词改 hero
+ * 无歌词布局策略（顺序：先按有词 → 确认后再无词）：
+ * - loading / ready：乐观有词布局（双栏、侧栏可开）
+ * - empty（已确认无词或实质行 <5）：封面优先；歌词 Tab 开着也收侧栏
+ * - 列表 Tab：始终双栏
  */
 function syncNoLyricsLayout() {
   var root = document.documentElement;
   var state = pageState.lyricsLoadState || 'idle';
-  var ready = state === 'ready';
-  // loading 与 empty 同等：静默无词布局，无加载动画
-  var noLyricsContent = !ready;
+  // 仅「确认 empty」才无词；loading 先当有词，避免一进来就进无词模式
+  var confirmedEmpty = state === 'empty';
+  var assumeHasLyrics = state === 'ready' || state === 'loading';
   var focus = getSidePanelFocus();
 
-  // 歌词开着但确认无词：布局上当作 none（封面优先），Tab 仍可保持选中
+  // 歌词开着且已确认无词：布局当 none；loading/ready 保持 lyrics 双栏
   var layoutFocus = focus;
-  if (noLyricsContent && focus === 'lyrics') {
+  if (confirmedEmpty && focus === 'lyrics') {
     layoutFocus = 'none';
   }
 
   root.classList.remove('mp-lyrics-loading'); // 废弃加载动画类
-  root.classList.toggle('mp-no-lyrics', noLyricsContent);
-  root.classList.toggle('mp-has-lyrics', ready);
+  root.classList.toggle('mp-no-lyrics', confirmedEmpty);
+  root.classList.toggle('mp-has-lyrics', assumeHasLyrics);
   root.classList.toggle('mp-side-playlist', layoutFocus === 'playlist');
   root.classList.toggle('mp-side-lyrics', layoutFocus === 'lyrics');
   root.classList.toggle('mp-side-none', layoutFocus === 'none');
 
-  // 无词 + 未在列表 → 封面优先 hero
-  var layoutHero = noLyricsContent && focus !== 'playlist';
+  // 确认无词 + 未在列表 → 封面优先 hero
+  var layoutHero = confirmedEmpty && focus !== 'playlist';
   root.classList.toggle('mp-no-lyrics-layout', layoutHero);
 
-  // 歌词 Tab 仍选中时：无词收起侧栏；有词自动展开（桌面+移动）
+  // 歌词 Tab：loading/ready 展开侧栏；仅 empty 收起
   var playerRight = $('player-right');
   if (playerRight && focus === 'lyrics') {
     var mobile = typeof checkIsMobile === 'function' && checkIsMobile();
-    if (noLyricsContent) {
+    if (confirmedEmpty) {
       playerRight.classList.remove('side-open');
       if (mobile) {
         playerRight.classList.remove('mobile-visible');
         playerRight.classList.remove('mobile-closing');
       }
-    } else if (ready) {
+    } else if (assumeHasLyrics) {
       playerRight.classList.add('side-open');
       if (mobile) {
         playerRight.classList.add('mobile-visible');
@@ -1595,28 +1594,32 @@ function shouldApplyNoLyricsMode() {
 }
 
 /**
- * 按当前歌词刷新 ready/empty（实质行 ≥5 为 ready；少于 5 视作无词）。
- * 已 ready 且 DOM 在时：只同步侧栏 class，不强制全量 relayout。
+ * 应用「确认后的」有词/无词结果。
+ * confirmed=true：已拿到最终结果，不足 5 行才进 empty。
+ * confirmed=false：仍在加载 → loading（乐观有词布局），绝不先 empty。
  */
-function revalidateLyricsContentMode(opts) {
+function applyLyricsVerdict(lyrics, opts) {
   opts = opts || {};
+  var confirmed = opts.confirmed !== false;
   var fromTabOpen = !!opts.fromTabOpen;
 
-  if (!shouldApplyNoLyricsMode()) {
-    var okList = areLyricsUsable(pageState.lyrics);
-    if (okList && pageState.lyricsLoadState !== 'ready') {
-      setLyricsUiMode('ready');
-    } else if (!okList && pageState.lyricsLoadState === 'ready') {
-      setLyricsUiMode('empty');
+  if (!confirmed) {
+    // 加载中：先按有词
+    if (pageState.lyricsLoadState !== 'loading' && pageState.lyricsLoadState !== 'ready') {
+      setLyricsUiMode('loading');
+    } else {
+      syncNoLyricsLayout();
     }
     return;
   }
 
-  if (!pageState.lyrics || pageState.lyrics.length === 0 || !areLyricsUsable(pageState.lyrics)) {
-    if (pageState.lyricsLoadState !== 'empty') setLyricsUiMode('empty');
-    else syncNoLyricsLayout();
+  var usable = areLyricsUsable(lyrics);
+
+  if (!usable) {
+    // 确认无词 / 过短 → 才进无歌词模式
+    setLyricsUiMode('empty');
     var container = $('lyrics-container');
-    if (container && (lyricFx.inner || lyricFx.items.length > 0)) {
+    if (container) {
       lyricFx.items = [];
       lyricFx.inner = null;
       lyricFx.dotsItems = [];
@@ -1628,14 +1631,15 @@ function revalidateLyricsContentMode(opts) {
     return;
   }
 
+  // 确认有词
   var lyricsTabOn = false;
   try {
     var lyBtn = document.querySelector('.tab-btn[data-tab="lyrics"]');
     lyricsTabOn = !!(lyBtn && lyBtn.classList.contains('active'));
   } catch (e) { lyricsTabOn = false; }
 
-  // 已有完整歌词 DOM：进歌词 Tab 只同步布局类，不 render / 不 force 重排
   if (pageState.lyricsLoadState === 'ready' && lyricFx.inner && lyricFx.items.length > 0) {
+    setLyricsUiMode('ready');
     if (lyricsTabOn) {
       var pr = $('player-right');
       if (pr) {
@@ -1647,21 +1651,17 @@ function revalidateLyricsContentMode(opts) {
       }
     }
     syncNoLyricsLayout();
-    // Tab 打开：立刻回焦 + soft 精修（不再干等 settle 才跟焦）
-    if (fromTabOpen) {
-      forceLyricsPanelRelayout(true);
-    } else {
-      snapFocusCurrentLyricIfPossible();
-    }
+    if (fromTabOpen) forceLyricsPanelRelayout(true);
+    else snapFocusCurrentLyricIfPossible();
     return;
   }
 
-  // 无 DOM / 非 ready：构建或恢复
   var st = pageState.status || {};
   var pos = st.position || (st.progress ? st.progress.current : 0) || 0;
-  var idx = updateLyricIndex(pos, pageState.lyrics);
+  var idx = updateLyricIndex(pos, lyrics || pageState.lyrics || []);
   pageState.currentLyricIndex = idx;
-  renderLyrics(pageState.lyrics, idx);
+  // render 内会 set ready（数据已确认 usable）
+  renderLyrics(lyrics || pageState.lyrics, idx, { confirmed: true });
 
   if (lyricsTabOn && pageState.lyricsLoadState === 'ready') {
     var pr2 = $('player-right');
@@ -1675,6 +1675,50 @@ function revalidateLyricsContentMode(opts) {
     syncNoLyricsLayout();
     forceLyricsPanelRelayout(true);
   }
+}
+
+/**
+ * 按当前歌词刷新（确认后才 empty；加载中保持 loading 乐观有词）。
+ */
+function revalidateLyricsContentMode(opts) {
+  opts = opts || {};
+  var fromTabOpen = !!opts.fromTabOpen;
+  // 仍在等 getLyrics：不降级 empty
+  var pending = pageState.lyricsLoadState === 'loading' ||
+    (pageState.lyricsSongId == null && pageState.lyricsRequestGen > 0 &&
+      pageState.status && pageState.status.currentTrack);
+
+  if (!shouldApplyNoLyricsMode()) {
+    if (pending) {
+      if (pageState.lyricsLoadState !== 'loading') setLyricsUiMode('loading');
+      return;
+    }
+    applyLyricsVerdict(pageState.lyrics, { confirmed: true, fromTabOpen: fromTabOpen });
+    return;
+  }
+
+  if (pending && !areLyricsUsable(pageState.lyrics)) {
+    // 先有词布局，等结果
+    applyLyricsVerdict(pageState.lyrics, { confirmed: false, fromTabOpen: fromTabOpen });
+    if (fromTabOpen) {
+      // 乐观开侧栏
+      var pr = $('player-right');
+      if (pr) {
+        pr.classList.add('side-open');
+        if (typeof checkIsMobile === 'function' && checkIsMobile()) {
+          pr.classList.add('mobile-visible');
+          pr.classList.remove('mobile-closing');
+        }
+      }
+      syncNoLyricsLayout();
+    }
+    return;
+  }
+
+  applyLyricsVerdict(pageState.lyrics, {
+    confirmed: true,
+    fromTabOpen: fromTabOpen
+  });
 }
 
 function buildLyricsEmptyHtml() {
@@ -1692,11 +1736,18 @@ function buildLyricsEmptyHtml() {
 }
 
 // 渲染歌词 - Apple Music 式：DOM/类名在此维护，位置与缩放由波浪引擎接管
-function renderLyrics(lyrics, currentIndex) {
+// opts.confirmed：false=仍在加载（乐观有词，不进 empty）；true/默认=最终结果可判 empty
+function renderLyrics(lyrics, currentIndex, opts) {
   var container = $('lyrics-container');
   if (!container) return;
+  opts = opts || {};
+  var confirmed = opts.confirmed !== false;
+  // 加载中且尚未确认：保留 loading 布局，不先跳无词模式
+  if (pageState.lyricsLoadState === 'loading' && opts.confirmed !== true) {
+    confirmed = false;
+  }
 
-  // 无词或实质行 < 5 → 无歌词模式；≥5 → ready
+  // 无词或实质行 < 5
   if (!lyrics || lyrics.length === 0 || !areLyricsUsable(lyrics)) {
     lyricFx.items = [];
     lyricFx.inner = null;
@@ -1706,7 +1757,13 @@ function renderLyrics(lyrics, currentIndex) {
     }
     resetLyricFxLayoutCache();
     stopLyricWave();
-    setLyricsUiMode('empty');
+    if (confirmed) {
+      // 确认后才 empty
+      setLyricsUiMode('empty');
+    } else {
+      // 先按有词（loading）
+      if (pageState.lyricsLoadState !== 'loading') setLyricsUiMode('loading');
+    }
     container.innerHTML = buildLyricsEmptyHtml();
     container.classList.remove('karaoke');
     return;
@@ -2473,12 +2530,18 @@ function ensureLyricWordLoop() {
 }
 
 // 为指定曲目加载逐字歌词（切歌时调用）
+// 顺序：先 loading（乐观有词布局）→ getLyrics 确认 → ready 或 empty
 function loadLyricsForTrack(track) {
   if (!track || !track.id) return;
-  // 已成功加载本曲：跳过网络；按有/无词刷新模式与布局
-  if (pageState.lyricsSongId === track.id && pageState.lyrics && pageState.lyrics.length > 0) {
+  // 已成功加载本曲且已确认：只刷新
+  if (pageState.lyricsSongId === track.id && pageState.lyricsLoadState === 'ready' &&
+      pageState.lyrics && pageState.lyrics.length > 0) {
     revalidateLyricsContentMode();
     if (pageState.lyricsLoadState === 'ready') forceLyricsPanelRelayout(true);
+    return;
+  }
+  // 已确认本曲 empty 且 id 匹配：不重复打
+  if (pageState.lyricsSongId === track.id && pageState.lyricsLoadState === 'empty') {
     return;
   }
   // 防御旧版 SDK（前端 bundle 未更新时 getLyrics 不存在）：优雅回退逐行
@@ -2492,7 +2555,7 @@ function loadLyricsForTrack(track) {
   var requestGen = ++pageState.lyricsRequestGen;
   var trackId = track.id;
 
-  // 宿主 status 已带本曲逐行时保留展示，后台升级逐字——禁止清空再等网络（恢复延迟主因）
+  // 宿主 status 已带本曲逐行时保留展示，后台升级逐字
   var hasProvisional = !!(
     pageState.lyrics &&
     pageState.lyrics.length > 0 &&
@@ -2500,17 +2563,25 @@ function loadLyricsForTrack(track) {
     pageState.status.currentTrack &&
     String(pageState.status.currentTrack.id) === String(trackId)
   );
+
+  // ★ 先按有词：loading，绝不先 empty
+  pageState.lyricsSongId = null;
+  setLyricsUiMode('loading');
   if (!hasProvisional) {
-    // 静默清空：不展示加载动画；有结果后再 ready / empty
     pageState.lyrics = [];
     pageState.verbatimLyrics = [];
-    pageState.lyricsSongId = null;
-    setLyricsUiMode('empty');
-    renderLyrics([], -1);
+    renderLyrics([], -1, { confirmed: false });
   } else {
-    // 占位行：有实质内容则 ready，否则无词
+    // 占位先画（即使 <5 行也不 empty，等 getLyrics 确认）
     pageState.verbatimLyrics = [];
-    revalidateLyricsContentMode();
+    var st0 = pageState.status || {};
+    var pos0 = st0.position || (st0.progress ? st0.progress.current : 0) || 0;
+    var idx0 = updateLyricIndex(pos0, pageState.lyrics);
+    if (areLyricsUsable(pageState.lyrics)) {
+      renderLyrics(pageState.lyrics, idx0, { confirmed: false });
+    } else {
+      renderLyrics(pageState.lyrics, idx0, { confirmed: false });
+    }
   }
 
   Tapp.media.getLyrics({ songId: track.id, source: track.source }).then(function(res) {
@@ -2523,10 +2594,12 @@ function loadLyricsForTrack(track) {
     if (currentId != null && String(currentId) !== String(trackId)) return;
 
     if (!res) {
-      // 无效回包：允许后续状态事件重试；有占位行则保留
+      // 确认失败：无有效回包 → empty
+      pageState.lyricsSongId = trackId;
       if (!pageState.lyrics || pageState.lyrics.length === 0) {
-        setLyricsUiMode('empty');
-        renderLyrics([], -1);
+        renderLyrics([], -1, { confirmed: true });
+      } else {
+        applyLyricsVerdict(pageState.lyrics, { confirmed: true });
       }
       return;
     }
@@ -2541,14 +2614,11 @@ function loadLyricsForTrack(track) {
       pageState.verbatimLyrics = [];
       if (res.lines && res.lines.length) pageState.lyrics = res.lines;
       else if (!hasProvisional) pageState.lyrics = [];
-      // 有占位且新包无行：保留占位
     }
 
-    // 成功应用后再标记归属，避免「标记已是新曲、内容仍是旧曲」
+    // 成功应用后再标记归属
     pageState.lyricsSongId = trackId;
 
-    // 翻译可用性（各行 translation 已由桥接层按时间对齐嵌入）
-    // 必须先同步 show-trans，再 render/measure，否则会用「无翻译」行高定位
     pageState.hasTranslation = !!res.hasTranslation;
     pageState.transLang = res.translationLang || '';
     var transUi = syncLyricTransUI();
@@ -2558,8 +2628,8 @@ function loadLyricsForTrack(track) {
     var idx = updateLyricIndex(pos, pageState.lyrics);
     pageState.currentLyricIndex = idx;
     pageState.lastKaraokeLine = -1;
-    // renderLyrics：无词 → empty；有实质行 → ready
-    renderLyrics(pageState.lyrics, idx);
+    // ★ 确认后：≥5 ready，否则 empty
+    renderLyrics(pageState.lyrics, idx, { confirmed: true });
     if (pageState.lyricsLoadState === 'ready' && (transUi.showing || transUi.changed)) {
       scheduleLyricLayoutRemeasure();
     }
@@ -2570,14 +2640,12 @@ function loadLyricsForTrack(track) {
     }
   }).catch(function() {
     if (requestGen !== pageState.lyricsRequestGen) return;
-    // 逐字失败：保持逐行兜底，允许重试
     pageState.verbatimLyrics = [];
     pageState.hasTranslation = false;
     syncLyricTransUI();
-    if (!pageState.lyrics || pageState.lyrics.length === 0) {
-      setLyricsUiMode('empty');
-      renderLyrics([], -1);
-    }
+    pageState.lyricsSongId = trackId;
+    // 确认：有占位则按行数判；无则 empty
+    renderLyrics(pageState.lyrics || [], pageState.currentLyricIndex || -1, { confirmed: true });
   });
 }
 
@@ -3967,7 +4035,7 @@ async function initPage() {
     var nextTrackId = state.currentTrack ? state.currentTrack.id : null;
     var trackChanged = String(prevTrackId || '') !== String(nextTrackId || '');
 
-    // 切歌：立刻作废进行中的歌词请求，并清空上一首展示，避免「标题 B / 歌词 A」
+    // 切歌：作废旧请求；先 loading（乐观有词），确认后再 empty/ready
     if (trackChanged) {
       significantChange = true;
       bindTrackFromStatus(state);
@@ -3975,7 +4043,8 @@ async function initPage() {
       pageState.verbatimLyrics = [];
       pageState.lastKaraokeLine = -1;
       pageState.hasTranslation = false;
-      setLyricsUiMode('empty');
+      // ★ 先有词布局，不先 empty
+      setLyricsUiMode('loading');
       // 预解码邻曲封面，连点切歌时 img 已在浏览器缓存
       prefetchNeighborCovers(nextTrackId);
       // 仅当已展示歌词不属于新曲时清空（自载成功且 id 匹配则保留）
@@ -3993,7 +4062,7 @@ async function initPage() {
           pageState.lyrics = [];
           pageState.currentLyricIndex = -1;
         }
-        renderLyrics(pageState.lyrics, pageState.currentLyricIndex);
+        renderLyrics(pageState.lyrics, pageState.currentLyricIndex, { confirmed: false });
       }
     }
 
@@ -4031,8 +4100,14 @@ async function initPage() {
     }
     if (state.currentTrack) loadBeatGridForTrack(state.currentTrack);
 
-    // 无词 ↔ 有词：翻转时切换布局
-    {
+    // 有词/无词：loading 中不降 empty；够行可提前 ready；确认态再翻转
+    if (pageState.lyricsLoadState === 'loading') {
+      if (areLyricsUsable(pageState.lyrics)) {
+        // 宿主已给够行：提前有词，不必等 getLyrics 才开侧栏
+        applyLyricsVerdict(pageState.lyrics, { confirmed: true });
+      }
+      // 否则保持 loading 乐观有词
+    } else if (pageState.lyricsLoadState === 'ready' || pageState.lyricsLoadState === 'empty') {
       var usableNow = areLyricsUsable(pageState.lyrics);
       var isReady = pageState.lyricsLoadState === 'ready';
       if (usableNow !== isReady) {
@@ -4070,14 +4145,17 @@ async function initPage() {
             (pageState.lyrics[0] && lyrics[0] && pageState.lyrics[0].text !== lyrics[0].text)) {
           pageState.lyrics = lyrics;
           if (!lyricsBelongToCurrent && state.currentTrack) {
-            // 宿主下发的逐行歌词：标记归属，避免被当作「旧曲残留」
-            pageState.lyricsSongId = state.currentTrack.id;
+            // 宿主下发的逐行：未确认前不算最终归属；仅展示
+            // （getLyrics 成功后再写 lyricsSongId）
           }
-          renderLyrics(lyrics, currentLyricIdx);
+          // 宿主推送：若已确认本曲有词则 confirmed；否则乐观展示
+          var hostConfirmed = pageState.lyricsLoadState === 'ready' && lyricsBelongToCurrent;
+          renderLyrics(lyrics, currentLyricIdx, { confirmed: hostConfirmed });
         } else if (currentLyricIdx !== pageState.currentLyricIndex) {
-          // 只更新当前歌词高亮
           pageState.currentLyricIndex = currentLyricIdx;
-          renderLyrics(lyrics, currentLyricIdx);
+          renderLyrics(lyrics, currentLyricIdx, {
+            confirmed: pageState.lyricsLoadState === 'ready'
+          });
         }
       }
     } else if (pageState.lyrics && pageState.lyrics.length > 0 && !lyricsBelongToCurrent) {
@@ -4087,7 +4165,10 @@ async function initPage() {
       } else if (!(state.currentTrack && state.currentTrack.id === pageState.lyricsSongId)) {
         pageState.lyrics = [];
         pageState.currentLyricIndex = -1;
-        renderLyrics([], -1);
+        // 未确认前保持 loading，不 empty
+        if (pageState.lyricsLoadState !== 'loading') {
+          renderLyrics([], -1, { confirmed: false });
+        }
       }
     }
 
@@ -4252,19 +4333,23 @@ function bindControls() {
       }
     }
 
-    // 歌词 Tab：优先有词则开侧栏；确认无词才封面优先
-    var lyricsOk = areLyricsUsable(pageState.lyrics);
+    // 歌词 Tab：先按有词开侧栏；仅「本曲已确认 empty」才不开
+    var curId = pageState.status && pageState.status.currentTrack
+      ? pageState.status.currentTrack.id : null;
+    var confirmedEmpty = pageState.lyricsLoadState === 'empty' &&
+      pageState.lyricsSongId != null && curId != null &&
+      String(pageState.lyricsSongId) === String(curId);
+
     if (playerRight) {
-      if (tab === 'lyrics' && !lyricsOk) {
+      if (tab === 'lyrics' && confirmedEmpty) {
         playerRight.classList.remove('side-open');
       } else {
         playerRight.classList.add('side-open');
       }
     }
 
-    // 移动端：有词/列表出 sheet；确认无词不弹空 sheet
     if (isMobile() && playerRight) {
-      if (tab === 'lyrics' && !lyricsOk) {
+      if (tab === 'lyrics' && confirmedEmpty) {
         cancelPanelClose();
         playerRight.classList.remove('mobile-visible');
         playerRight.classList.remove('mobile-closing');
@@ -4277,8 +4362,11 @@ function bindControls() {
       }
     }
 
-    // 打开歌词：无词 → 无词模式；有词 → 同步侧栏（过渡后再测）
+    // 打开歌词：先乐观有词；有最终结果再判 empty
     if (tab === 'lyrics') {
+      if (!confirmedEmpty && pageState.lyricsLoadState !== 'ready') {
+        setLyricsUiMode('loading');
+      }
       revalidateLyricsContentMode({ fromTabOpen: true });
     } else {
       syncNoLyricsLayout();
