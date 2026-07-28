@@ -686,6 +686,10 @@ function resetLyricFxLayoutCache(opts) {
     clearTimeout(lyricFx.remeasureTimer);
     lyricFx.remeasureTimer = null;
   }
+  if (lyricFx._settleTimer) {
+    clearTimeout(lyricFx._settleTimer);
+    lyricFx._settleTimer = null;
+  }
 }
 
 // 测量行高并建立静态布局（行高与激活态无关——scale 不改布局；
@@ -896,19 +900,23 @@ function getSideLayoutSettleMs() {
 }
 
 /**
- * 打开歌词面板 / 侧栏展开后的布局测量。
- * soft=true（默认）：过渡中不立刻 force 重排，只在 settle 后测一次，避免「莫名重排」。
- * soft=false：立刻测 + settle 再测（首屏无测量 / 0 宽恢复时用）。
+ * 打开歌词面板 / 侧栏展开后的布局测量 + 焦点恢复。
+ * soft=true：先立刻 snap 当前行（体感快），尺寸精修放双 rAF / settle，避免过渡狂重排。
+ * soft=false：立刻 force 测 + settle 再测。
  */
 function forceLyricsPanelRelayout(soft) {
   if (lyricFx.items.length === 0) return;
   var settle = getSideLayoutSettleMs();
+  var gen = lyricFx.layoutGen;
+  var songId = pageState.lyricsSongId;
+
   if (soft === false) {
     relayoutLyricsIfNeeded(true, true);
+    snapFocusCurrentLyricIfPossible();
     scheduleLyricLayoutRemeasure(settle);
     return;
   }
-  // 已有测量：仅在宽高明显不对或未测时才立刻补一刀，否则等过渡结束
+
   var c = $('lyrics-container');
   var needNow = !lyricFx.measured;
   if (c && lyricFx.measured) {
@@ -922,7 +930,22 @@ function forceLyricsPanelRelayout(soft) {
   if (needNow && c && c.clientWidth > 0 && c.clientHeight > 0) {
     relayoutLyricsIfNeeded(true, true);
   }
-  scheduleLyricLayoutRemeasure(settle);
+
+  // 立刻回焦（切换 Tab / 恢复焦点慢的主因是等 settle）
+  if (!snapFocusCurrentLyricIfPossible()) {
+    requestAnimationFrame(function() {
+      if (gen !== lyricFx.layoutGen) return;
+      snapFocusCurrentLyricIfPossible();
+    });
+  }
+
+  // 双 rAF 轻校正 + 过渡结束终态重测（都 instant 回焦）
+  scheduleLyricLayoutRemeasure(0);
+  if (lyricFx._settleTimer) clearTimeout(lyricFx._settleTimer);
+  lyricFx._settleTimer = setTimeout(function() {
+    lyricFx._settleTimer = null;
+    applyLyricLayoutRemeasure(gen, songId);
+  }, settle);
 }
 
 // 监听歌词容器尺寸：防抖，避免侧栏 grid 过渡逐帧触发全量重排
@@ -1166,7 +1189,10 @@ function retargetLyricItemsNow() {
   }
 }
 
-// 用户手动滚动：暂停自动跟随，3 秒后波浪弹回当前行
+// 手动滚动后恢复自动跟焦的等待（原 3s 过长，回焦体感慢）
+var LYRIC_RESUME_MS = 1100;
+
+// 用户手动滚动：暂停自动跟随，稍后立刻 snap 回当前行（不用慢波浪）
 function userLyricScrollBegin() {
   pageState.autoScrollEnabled = false;
   if (lyricResumeTimer) clearTimeout(lyricResumeTimer);
@@ -1174,8 +1200,25 @@ function userLyricScrollBegin() {
     lyricResumeTimer = null;
     pageState.autoScrollEnabled = true;
     lyricFx.focusK = -1; // 强制重新聚焦
-    if (pageState.currentLyricIndex >= 0) focusLyricLine(pageState.currentLyricIndex);
-  }, 3000);
+    if (pageState.currentLyricIndex >= 0) {
+      focusLyricLine(pageState.currentLyricIndex, true);
+    }
+  }, LYRIC_RESUME_MS);
+}
+
+/** 容器已有尺寸时立刻把当前行 snap 到焦点（不重测也能先回位） */
+function snapFocusCurrentLyricIfPossible() {
+  if (lyricFx.items.length === 0 || !lyricFx.inner) return false;
+  var c = $('lyrics-container');
+  if (!c || c.clientWidth <= 0 || c.clientHeight <= 0) return false;
+  if (!lyricFx.measured) {
+    if (!measureLyricLayout()) return false;
+  } else if (!ensureLyricLayoutReady()) {
+    return false;
+  }
+  var idx = pageState.currentLyricIndex >= 0 ? pageState.currentLyricIndex : 0;
+  focusLyricLine(idx, true);
+  return true;
 }
 
 function bindLyricManualScroll(container) {
@@ -1604,9 +1647,11 @@ function revalidateLyricsContentMode(opts) {
       }
     }
     syncNoLyricsLayout();
-    // 仅 Tab 打开：过渡结束后 soft 重测；中途不 snap 全表
+    // Tab 打开：立刻回焦 + soft 精修（不再干等 settle 才跟焦）
     if (fromTabOpen) {
       forceLyricsPanelRelayout(true);
+    } else {
+      snapFocusCurrentLyricIfPossible();
     }
     return;
   }
