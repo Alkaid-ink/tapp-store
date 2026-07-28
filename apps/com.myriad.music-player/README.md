@@ -4,6 +4,10 @@
 
 ## Changelog
 
+### 1.1.31
+
+- 确认无词后粘住 empty：progress/宿主短词不得再 empty→loading 闪回歌词模式
+
 ### 1.1.30
 
 - 全端歌词：修复右栏 overflow 被左列规则盖成 visible 导致高度链断裂

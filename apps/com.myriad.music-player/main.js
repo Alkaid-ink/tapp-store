@@ -1625,10 +1625,22 @@ function shouldApplyNoLyricsMode() {
   return focus !== 'playlist';
 }
 
+/** 本曲已确认 empty（getLyrics 终态）— 禁止 progress/宿主短词再打回 loading */
+function isConfirmedEmptyForCurrentTrack() {
+  if (pageState.lyricsLoadState !== 'empty') return false;
+  if (pageState.lyricsSongId == null) return false;
+  var cur = pageState.status && pageState.status.currentTrack
+    ? pageState.status.currentTrack.id
+    : null;
+  if (cur == null) return false;
+  return String(pageState.lyricsSongId) === String(cur);
+}
+
 /**
  * 应用「确认后的」有词/无词结果。
  * confirmed=true：已拿到最终结果，不足 5 行才进 empty。
  * confirmed=false：仍在加载 → loading（乐观有词布局），绝不先 empty。
+ * 例外：本曲已确认 empty 时，未确认的推送不得再升 loading。
  */
 function applyLyricsVerdict(lyrics, opts) {
   opts = opts || {};
@@ -1636,6 +1648,11 @@ function applyLyricsVerdict(lyrics, opts) {
   var fromTabOpen = !!opts.fromTabOpen;
 
   if (!confirmed) {
+    // 已确认无词：粘住 empty，避免宿主/进度事件闪回歌词模式
+    if (isConfirmedEmptyForCurrentTrack()) {
+      setLyricsUiMode('empty');
+      return;
+    }
     // 加载中：先按有词
     if (pageState.lyricsLoadState !== 'loading' && pageState.lyricsLoadState !== 'ready') {
       setLyricsUiMode('loading');
@@ -1717,6 +1734,13 @@ function applyLyricsVerdict(lyrics, opts) {
 function revalidateLyricsContentMode(opts) {
   opts = opts || {};
   var fromTabOpen = !!opts.fromTabOpen;
+
+  // 本曲已确认无词：保持 empty，不再乐观开侧栏 / 升 loading
+  if (isConfirmedEmptyForCurrentTrack()) {
+    applyLyricsVerdict(pageState.lyrics, { confirmed: true, fromTabOpen: fromTabOpen });
+    return;
+  }
+
   // 仍在等 getLyrics：不降级 empty
   var pending = pageState.lyricsLoadState === 'loading' ||
     (pageState.lyricsSongId == null && pageState.lyricsRequestGen > 0 &&
@@ -1794,12 +1818,22 @@ function renderLyrics(lyrics, currentIndex, opts) {
     if (confirmed) {
       // 确认后才 empty
       setLyricsUiMode('empty');
+    } else if (isConfirmedEmptyForCurrentTrack()) {
+      // 本曲已 empty：宿主 status/progress 又推短词时绝不能退回 loading
+      // （否则：歌词模式 → 无词模式 → 又莫名回到歌词模式）
+      setLyricsUiMode('empty');
     } else {
-      // 先按有词（loading）
+      // 尚未终判：先按有词（loading）
       if (pageState.lyricsLoadState !== 'loading') setLyricsUiMode('loading');
     }
     container.innerHTML = buildLyricsEmptyHtml();
     container.classList.remove('karaoke');
+    return;
+  }
+
+  // 本曲已确认 empty：只有 confirmed 的终态有词才能升级 ready（getLyrics 正式结果）
+  // 防止宿主临时下发「看起来够长」的脏数据把 empty 打回歌词模式
+  if (!confirmed && isConfirmedEmptyForCurrentTrack()) {
     return;
   }
 
@@ -4241,8 +4275,13 @@ async function initPage() {
       String(pageState.lyricsSongId) === String(state.currentTrack.id) &&
       pageState.lyricsLoadState === 'ready'
     );
+    // 本曲已确认无词：progress/status 不得再拿宿主短词重渲（会 empty→loading 闪回）
+    var emptyStick = !trackChanged && isConfirmedEmptyForCurrentTrack();
 
-    if (lyricsBelongToCurrent && pageState.verbatimLyrics.length > 0) {
+    if (emptyStick) {
+      // 粘住 empty 布局；顺带用终态数据覆盖宿主可能写入的脏短词
+      // （不 render，避免无意义 DOM 抖动）
+    } else if (lyricsBelongToCurrent && pageState.verbatimLyrics.length > 0) {
       // 逐字模式：行渲染沿用 pageState.lyrics，仅在行切换时重渲染，字级填充走 rAF
       var vIdx = updateLyricIndex(position, pageState.lyrics);
       if (vIdx !== pageState.currentLyricIndex) {
@@ -4286,8 +4325,8 @@ async function initPage() {
       } else if (!(state.currentTrack && state.currentTrack.id === pageState.lyricsSongId)) {
         pageState.lyrics = [];
         pageState.currentLyricIndex = -1;
-        // 未确认前保持 loading，不 empty
-        if (pageState.lyricsLoadState !== 'loading') {
+        // 未确认前保持 loading，不 empty；已 empty 则不动
+        if (pageState.lyricsLoadState !== 'loading' && pageState.lyricsLoadState !== 'empty') {
           renderLyrics([], -1, { confirmed: false });
         }
       }
