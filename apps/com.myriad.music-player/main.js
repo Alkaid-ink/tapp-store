@@ -1,4 +1,4 @@
-// Music Player Tapp v1.1.0
+// Music Player Tapp v1.1.1
 
 var MP_DEBUG = false;
 function mpDebug() {
@@ -152,12 +152,9 @@ function setLocale(locale) {
   currentLocale = locale;
   currentDict = i18n[locale] || i18n['zh-CN'];
   // 刷新依赖 i18n 的静态控件文案
-  var jumpBtn = $('jump-current-btn');
-  if (jumpBtn) {
-    var jumpTip = t('jumpToCurrent');
-    jumpBtn.setAttribute('aria-label', jumpTip);
-    jumpBtn.setAttribute('title', jumpTip);
-  }
+  Fab.setLabel($('jump-current-btn'), t('jumpToCurrent'));
+  Fab.setLabel($('visual-fx-btn'), t('visualFx'));
+  Fab.setLabel($('lyric-trans-btn'), t('translate'));
   var emptyHint = $('player-empty-hint');
   if (emptyHint && !emptyHint.hidden) emptyHint.textContent = t('emptyHint');
   var searchInput = $('playlist-search');
@@ -167,6 +164,44 @@ function setLocale(locale) {
 function t(key) {
   return currentDict[key] || key;
 }
+
+// ========================================
+// Fab — 通用右下角浮动图标按钮组件
+// 统一：定位当前 / 动效开关 / 翻译开关 等
+// ========================================
+var Fab = {
+  /** 开关态（.active + aria-pressed） */
+  setActive: function(btn, on) {
+    if (!btn) return;
+    var active = !!on;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  },
+  /** 显示/隐藏（hidden 属性，配合 CSS [hidden]） */
+  setHidden: function(btn, hidden) {
+    if (!btn) return;
+    if (hidden) btn.setAttribute('hidden', '');
+    else btn.removeAttribute('hidden');
+  },
+  /** 无障碍文案 + tooltip */
+  setLabel: function(btn, label) {
+    if (!btn || label == null) return;
+    var s = String(label);
+    btn.setAttribute('aria-label', s);
+    btn.setAttribute('title', s);
+  },
+  /** 绑定点击（需传入与移动端兼容的 addClickHandler） */
+  bind: function(btn, handler, addClickHandler) {
+    if (!btn || typeof handler !== 'function') return;
+    if (typeof addClickHandler === 'function') addClickHandler(btn, handler);
+    else btn.addEventListener('click', function(e) {
+      e.preventDefault();
+      handler(e);
+    });
+  }
+};
+
+
 
 // ========================================
 // 主题适配
@@ -842,13 +877,9 @@ function syncLyricTransUI() {
     changed = was !== showing;
   }
   var btn = $('lyric-trans-btn');
-  if (btn) {
-    btn.hidden = !usable;
-    btn.classList.toggle('active', showing);
-    btn.title = t('translate');
-    btn.setAttribute('aria-label', t('translate'));
-    btn.setAttribute('aria-pressed', showing ? 'true' : 'false');
-  }
+  Fab.setHidden(btn, !usable);
+  Fab.setActive(btn, showing);
+  Fab.setLabel(btn, t('translate'));
   // 类翻转立刻作废测量：否则后续 focus 会用旧行高
   if (changed) {
     lyricFx.measured = false;
@@ -882,13 +913,9 @@ function setLyricTransOn(on) {
 
 function syncVisualFxUI() {
   var btn = $('visual-fx-btn');
-  if (btn) {
-    // 按钮态反映用户偏好（桌面可点）；移动端按钮由 CSS 隐藏
-    btn.classList.toggle('active', pageState.visualFxOn);
-    btn.title = t('visualFx');
-    btn.setAttribute('aria-label', t('visualFx'));
-    btn.setAttribute('aria-pressed', pageState.visualFxOn ? 'true' : 'false');
-  }
+  // 按钮态反映用户偏好（桌面可点）；移动端由 .fab-btn--desktop-only 隐藏
+  Fab.setActive(btn, pageState.visualFxOn);
+  Fab.setLabel(btn, t('visualFx'));
   // 移动端始终挂 visual-fx-off；桌面按用户偏好
   var effectiveOn = pageState.visualFxOn && !checkIsMobile();
   document.documentElement.classList.toggle('visual-fx-off', !effectiveOn);
@@ -3915,28 +3942,22 @@ function bindControls() {
     addClickHandler(mobileCloseBtn, handleClosePanel);
   }
 
-  // 歌词翻译开关（按钮仅在当前歌曲有用户语言翻译时可见）
-  var transBtn = document.getElementById('lyric-trans-btn');
-  if (transBtn) {
-    addClickHandler(transBtn, function() {
-      setLyricTransOn(!pageState.transOn);
-      if (Tapp.storage && Tapp.storage.set) {
-        Tapp.storage.set('lyricTransOn', pageState.transOn).catch(function() {});
-      }
-    });
-  }
+  // Fab：翻译开关
+  Fab.bind($('lyric-trans-btn'), function() {
+    setLyricTransOn(!pageState.transOn);
+    if (Tapp.storage && Tapp.storage.set) {
+      Tapp.storage.set('lyricTransOn', pageState.transOn).catch(function() {});
+    }
+  }, addClickHandler);
 
-  // 动态视觉效果开关（桌面可点；移动端 CSS 隐藏且 visualFxEnabled 强制 off）
-  var visualFxBtn = document.getElementById('visual-fx-btn');
-  if (visualFxBtn) {
-    addClickHandler(visualFxBtn, function() {
-      if (checkIsMobile()) return;
-      setVisualFxOn(!pageState.visualFxOn);
-      if (Tapp.storage && Tapp.storage.set) {
-        Tapp.storage.set('visualFxOn', pageState.visualFxOn).catch(function() {});
-      }
-    });
-  }
+  // Fab：动效开关（桌面；移动端按钮隐藏且 visualFxEnabled 强制 off）
+  Fab.bind($('visual-fx-btn'), function() {
+    if (checkIsMobile()) return;
+    setVisualFxOn(!pageState.visualFxOn);
+    if (Tapp.storage && Tapp.storage.set) {
+      Tapp.storage.set('visualFxOn', pageState.visualFxOn).catch(function() {});
+    }
+  }, addClickHandler);
 
   // 窗口大小变化时重置状态 - 使用节流（统一处理所有 resize 逻辑）
   var resizeTimeout = null;
@@ -3993,21 +4014,17 @@ function bindControls() {
     });
   }
 
-  // 定位当前曲（列表）
-  var jumpCurBtn = document.getElementById('jump-current-btn');
-  if (jumpCurBtn) {
-    addClickHandler(jumpCurBtn, function() {
-      // 切到列表并滚到当前
-      var plTab = document.getElementById('tab-playlist');
-      if (plTab) handleTabClick(plTab);
-      requestAnimationFrame(function() {
-        virtualList.pendingScrollToCurrent = true;
-        virtualList.userScrolling = false;
-        if (typeof revealPlaylist === 'function') revealPlaylist();
-        else if (typeof refreshPlaylistView === 'function') refreshPlaylistView();
-      });
+  // Fab：定位当前曲（列表）
+  Fab.bind($('jump-current-btn'), function() {
+    var plTab = document.getElementById('tab-playlist');
+    if (plTab) handleTabClick(plTab);
+    requestAnimationFrame(function() {
+      virtualList.pendingScrollToCurrent = true;
+      virtualList.userScrolling = false;
+      if (typeof revealPlaylist === 'function') revealPlaylist();
+      else if (typeof refreshPlaylistView === 'function') refreshPlaylistView();
     });
-  }
+  }, addClickHandler);
 
   // 键盘快捷键（输入框内不抢）
   document.addEventListener('keydown', function(e) {

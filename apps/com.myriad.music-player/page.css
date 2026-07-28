@@ -826,16 +826,19 @@ html, body {
   opacity: 1;
 }
 
-/* 歌词面板右下角浮钮组：动效 + 翻译（放在渐隐遮罩外层，不被 mask 吃掉） */
-.panel-lyrics {
+/* 面板定位上下文（Fab 绝对定位参照） */
+.panel-lyrics,
+.panel-playlist {
   position: relative;
 }
 
-.lyrics-corner-btns {
+/* ========================================
+   Fab — 通用右下角浮动图标按钮 / 按钮组
+   用于：歌词动效/翻译、列表定位当前 等
+   ======================================== */
+.fab-host {
   position: absolute;
-  right: 28px;
-  bottom: 24px;
-  z-index: 5;
+  z-index: 8;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -843,50 +846,77 @@ html, body {
   pointer-events: none;
 }
 
-.lyric-corner-btn {
+.fab-host--br {
+  right: 16px;
+  bottom: 16px;
+}
+
+/* 面板未激活时整组隐藏 */
+.panel:not(.active) > .fab-host {
+  display: none;
+}
+
+.fab-btn {
   pointer-events: auto;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   padding: 0;
   border: none;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-  color: var(--text-secondary);
   cursor: pointer;
+  color: var(--text-primary, #f5f5f7);
+  background: color-mix(in srgb, var(--music-primary, #8e8e93) 22%, rgba(28, 28, 30, 0.72));
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.2),
+    0 0 0 1px color-mix(in srgb, var(--music-primary, #8e8e93) 28%, transparent);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  transition: transform var(--transition-fast),
-    background var(--transition-fast),
-    color var(--transition-fast);
+  transition: transform var(--transition-fast, 0.15s ease);
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
 
-.lyric-corner-btn svg {
+.fab-btn svg {
   width: 18px;
   height: 18px;
   pointer-events: none;
+  flex-shrink: 0;
 }
 
-.lyric-corner-btn:hover {
-  background: color-mix(in srgb, var(--text-primary) 14%, transparent);
-  color: var(--text-primary);
+.fab-btn:hover,
+.fab-btn:focus-visible {
+  transform: scale(1.06);
+  background: color-mix(in srgb, var(--music-primary, #8e8e93) 38%, rgba(28, 28, 30, 0.78));
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.26),
+    0 0 0 1px color-mix(in srgb, var(--music-primary, #8e8e93) 45%, transparent);
+  outline: none;
 }
 
-.lyric-corner-btn:active {
-  transform: scale(0.92);
+.fab-btn:active {
+  transform: scale(0.94);
 }
 
-.lyric-corner-btn.active {
+/* 开关类 Fab：开启时实心主题渐变 */
+.fab-btn.active {
   background: linear-gradient(135deg, var(--music-primary), var(--music-secondary));
   color: #fff;
+  box-shadow:
+    0 4px 16px color-mix(in srgb, var(--music-primary) 40%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--music-primary) 50%, transparent);
 }
 
-.lyric-corner-btn[hidden] {
-  display: none;
+.fab-btn[hidden] {
+  display: none !important;
+}
+
+/* 歌词区 Fab 略上移，避开渐隐遮罩边缘 */
+#lyrics-fabs.fab-host--br {
+  right: 28px;
+  bottom: 24px;
 }
 
 /* 动效关闭：冻结/隐藏 Aurora 与涟漪；列表 EQ 与静态封面模糊不受影响 */
@@ -1958,10 +1988,7 @@ html, body {
     --lyric-fs: clamp(34px, 5.5vw, 44px);
   }
 
-  /* 仅移动端：隐藏动效开关（桌面保留可点） */
-  #visual-fx-btn {
-    display: none !important;
-  }
+  /* 动效 Fab 由 .fab-btn--desktop-only 统一隐藏 */
 
   #tapp-content {
     grid-template-rows: 1fr auto;
@@ -2071,16 +2098,19 @@ html, body {
     font-weight: 600;
   }
 
-  /* 移动端右下角浮钮组：44px 触控热区 + 避开底部安全区（竖排与桌面一致） */
-  .lyrics-corner-btns {
-    right: 20px;
-    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
-    flex-direction: column;
-    align-items: flex-end;
+  /* 移动端 Fab：更大触控热区 + 避开底部安全区 */
+  .fab-host--br {
+    right: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
     gap: 10px;
   }
 
-  .lyric-corner-btn {
+  #lyrics-fabs.fab-host--br {
+    right: 20px;
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .fab-btn {
     width: 44px;
     height: 44px;
   }
@@ -2405,54 +2435,9 @@ html.mp-empty .artwork-container {
   opacity: 0.88;
 }
 
-/* 列表右下角浮动：定位当前（仅图标） */
-.jump-current-btn {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  z-index: 8;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  cursor: pointer;
-  color: var(--text-primary, #f5f5f7);
-  background: color-mix(in srgb, var(--music-primary, #8e8e93) 28%, rgba(28, 28, 30, 0.72));
-  box-shadow:
-    0 4px 14px rgba(0, 0, 0, 0.22),
-    0 0 0 1px color-mix(in srgb, var(--music-primary, #8e8e93) 35%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  transition: transform 0.15s ease;
-  /* 背景/描边阴影跟 --music-*，不额外 transition 颜色通道 */
-}
-
-.jump-current-btn:hover,
-.jump-current-btn:focus-visible {
-  transform: scale(1.06);
-  background: color-mix(in srgb, var(--music-primary, #8e8e93) 42%, rgba(28, 28, 30, 0.75));
-  box-shadow:
-    0 6px 18px rgba(0, 0, 0, 0.28),
-    0 0 0 1px color-mix(in srgb, var(--music-primary, #8e8e93) 50%, transparent);
-  outline: none;
-}
-
-.jump-current-btn:active {
-  transform: scale(0.96);
-}
-
-/* 仅在列表面板激活时显示 */
-.panel-playlist:not(.active) .jump-current-btn {
-  display: none;
-}
-
 .control-btn:focus-visible,
 .tab-btn:focus-visible,
-.lyric-corner-btn:focus-visible,
+.fab-btn:focus-visible,
 .ph-btn:focus-visible {
   outline: 2px solid var(--music-primary, #8e8e93);
   outline-offset: 2px;
@@ -2463,11 +2448,17 @@ html.mp-empty .artwork-container {
     top: max(8px, env(safe-area-inset-top, 0px));
     font-size: 11px;
   }
-  .jump-current-btn {
-    right: 10px;
-    bottom: 10px;
+  .fab-host--br {
+    right: 12px;
+    bottom: 12px;
+  }
+  .fab-btn {
     width: 38px;
     height: 38px;
+  }
+  /* 动效 Fab：仅桌面 */
+  .fab-btn--desktop-only {
+    display: none !important;
   }
   .player-empty-hint {
     font-size: 12px;
