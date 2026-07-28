@@ -1,4 +1,4 @@
-// Music Player Tapp v1.1.3
+// Music Player Tapp v1.1.4
 
 var MP_DEBUG = false;
 function mpDebug() {
@@ -1358,6 +1358,14 @@ function syncNoLyricsLayout() {
   // 无词 + 未在列表（默认 / 歌词 Tab）→ 封面优先；列表 Tab 除外
   var layoutHero = noLyricsContent && focus !== 'playlist';
   root.classList.toggle('mp-no-lyrics-layout', layoutHero);
+
+  // 列宽变化后必须重测跑马灯，否则仍按旧宽度溢出到歌词区
+  requestAnimationFrame(function() {
+    if (typeof remeasureScrollingText === 'function') {
+      remeasureScrollingText($('song-name'));
+      remeasureScrollingText($('song-artist'));
+    }
+  });
 }
 
 /** 同步无歌词 / 有歌词 / 加载中状态，并刷新布局 */
