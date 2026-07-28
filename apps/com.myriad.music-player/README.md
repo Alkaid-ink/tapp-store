@@ -4,6 +4,11 @@
 
 ## Changelog
 
+### 1.1.20
+
+- 全面性能：progress 不再全量 UI；主题色-only 快路径；切行走 instant 焦点
+- 宿主取色 settle 更快（需 Myriad 前端同步）
+
 ### 1.1.19
 
 - 修复无词→有词后歌词挤在顶部（0 高测量拒绝 + empty→ready 硬重测）

@@ -1564,32 +1564,24 @@ function getCurrentTrackDurationSec() {
 var MIN_USABLE_LYRIC_LINES = 5;
 
 /**
- * 统计可用于展示的歌词行（实质文本；占位文案不计）。
+ * 是否按「有歌词」处理（够 MIN 条即 true，短路扫描）。
+ * - 实质行 ≥ 5 → true
+ * - 少于 5 行 / 无词 / 仅占位 → false
  */
-function countUsableLyricLines(lyrics) {
-  if (!lyrics || lyrics.length === 0) return 0;
+function areLyricsUsable(lyrics) {
+  if (!lyrics || lyrics.length === 0) return false;
   var n = 0;
   for (var i = 0; i < lyrics.length; i++) {
     var ln = lyrics[i] || {};
     var t = Number(ln.time);
-    // 无时间戳也允许：部分逐行兜底只有 text
     if (ln.time != null && ln.time !== '' && (!isFinite(t) || t < 0)) continue;
     var text = String(ln.text || '').replace(/\s+/g, ' ').trim();
     if (!text) continue;
-    // 整行就是「无词占位」时跳过
     if (/^(纯音乐|instrumental|暂无歌词|无歌词|lyrics?\s*not\s*found)$/i.test(text)) continue;
     n++;
+    if (n >= MIN_USABLE_LYRIC_LINES) return true;
   }
-  return n;
-}
-
-/**
- * 是否按「有歌词」处理：
- * - 实质行 ≥ 5 → true（有词 / 侧栏）
- * - 少于 5 行 / 无词 / 仅占位 → false（无歌词模式）
- */
-function areLyricsUsable(lyrics) {
-  return countUsableLyricLines(lyrics) >= MIN_USABLE_LYRIC_LINES;
+  return false;
 }
 
 /**
@@ -1853,8 +1845,8 @@ function renderLyrics(lyrics, currentIndex, opts) {
   if (comingFromEmpty || !lyricFx.measured) {
     forceLyricsPanelRelayout(false);
   } else if (pageState.autoScrollEnabled && currentIndex >= 0) {
-    // 焦点跟随：波浪滚动到当前行
-    focusLyricLine(currentIndex);
+    // focusInstant：progress 切行走瞬移，省波浪主线程（颜色/封面更跟手）
+    focusLyricLine(currentIndex, !!opts.focusInstant);
   }
 }
 
@@ -3929,6 +3921,7 @@ var lastStateSnapshot = {
   // 异步取色完成后必须触发 UI 刷新；旧版忽略 primaryColor 会导致颜色长期滞后
   primaryColor: null,
   secondaryColor: null,
+  accentColor: null,
   generation: null,
   isLoading: null,
   lastError: null
@@ -3945,36 +3938,40 @@ function normalizeMediaState(s) {
   }
 }
 
+/**
+ * 是否需要全量 UI 刷新。
+ * 注意：position / volume 不算 significant——否则 progress 每 0.5s 全量 updatePlayerUI，
+ * 拖慢主题色/封面/歌词主线程。
+ */
 function hasSignificantChange(state) {
   var trackId = state.currentTrack ? state.currentTrack.id : null;
   var coverUrl = getTrackCoverUrl(state.currentTrack);
-  var position = state.position || (state.progress ? state.progress.current : 0) || 0;
   var gen = typeof state.generation === 'number' ? state.generation : null;
   var loading = !!(state.isLoading || state.isAudioLoading);
 
-  // 歌曲切换、封面、播放、模式、主题色、世代、缓冲态
-  if (trackId !== lastStateSnapshot.trackId ||
+  return trackId !== lastStateSnapshot.trackId ||
       coverUrl !== lastStateSnapshot.coverUrl ||
       state.isPlaying !== lastStateSnapshot.isPlaying ||
       state.mode !== lastStateSnapshot.mode ||
       (state.primaryColor || null) !== lastStateSnapshot.primaryColor ||
       (state.secondaryColor || null) !== lastStateSnapshot.secondaryColor ||
+      (state.accentColor || null) !== lastStateSnapshot.accentColor ||
       gen !== lastStateSnapshot.generation ||
       loading !== lastStateSnapshot.isLoading ||
-      (state.lastError || null) !== lastStateSnapshot.lastError) {
-    return true;
-  }
+      (state.lastError || null) !== lastStateSnapshot.lastError;
+}
 
-  if (Math.abs(position - lastStateSnapshot.position) > 0.5) {
-    return true;
-  }
-
-  var volume = state.volume || 0;
-  if (Math.abs(volume - lastStateSnapshot.volume) > 1) {
-    return true;
-  }
-
-  return false;
+/** 仅主题色变化（同曲同封面）→ 只写 CSS 变量，跳过封面/跑马灯/整页 UI */
+function isThemeColorOnlyChange(state) {
+  var trackId = state.currentTrack ? state.currentTrack.id : null;
+  if (trackId !== lastStateSnapshot.trackId) return false;
+  if (getTrackCoverUrl(state.currentTrack) !== lastStateSnapshot.coverUrl) return false;
+  var pc = state.primaryColor || null;
+  var sc = state.secondaryColor || null;
+  var ac = state.accentColor || null;
+  return pc !== lastStateSnapshot.primaryColor ||
+    sc !== lastStateSnapshot.secondaryColor ||
+    ac !== lastStateSnapshot.accentColor;
 }
 
 // 更新状态快照
@@ -3987,6 +3984,7 @@ function updateStateSnapshot(state) {
   lastStateSnapshot.mode = state.mode;
   lastStateSnapshot.primaryColor = state.primaryColor || null;
   lastStateSnapshot.secondaryColor = state.secondaryColor || null;
+  lastStateSnapshot.accentColor = state.accentColor || null;
   lastStateSnapshot.generation =
     typeof state.generation === 'number' ? state.generation : null;
   lastStateSnapshot.isLoading = !!(state.isLoading || state.isAudioLoading);
@@ -4104,18 +4102,18 @@ async function initPage() {
   });
 
   function handleStateChange(state) {
-    // 检查是否有关键变化
-    var significantChange = hasSignificantChange(state);
-
     normalizeMediaState(state);
 
     var prevTrackId = lastStateSnapshot.trackId;
     var nextTrackId = state.currentTrack ? state.currentTrack.id : null;
     var trackChanged = String(prevTrackId || '') !== String(nextTrackId || '');
+    var significantChange = trackChanged || hasSignificantChange(state);
+    var colorOnly = !trackChanged && significantChange && isThemeColorOnlyChange(state);
 
     // 切歌：作废旧请求；先 loading（乐观有词），确认后再 empty/ready
     if (trackChanged) {
       significantChange = true;
+      colorOnly = false;
       bindTrackFromStatus(state);
       pageState.lyricsRequestGen++;
       pageState.lyricsLoadingTrackId = null; // 允许为新曲发起请求
@@ -4156,35 +4154,39 @@ async function initPage() {
 
     pageState.status = state;
 
-    // 只在关键变化时更新完整UI
-    if (significantChange) {
+    // UI：色-only 快路径 / 关键变化全量 / 其余仅进度（progress 不再全量刷）
+    if (colorOnly) {
+      updateStateSnapshot(state);
+      applyThemeColors(state, !state.currentTrack);
+    } else if (significantChange) {
       updateStateSnapshot(state);
       updatePlayerUI(state);
-      relayoutLyricsIfNeeded();
+      // 切歌后布局：仅 track 变时 relayout，避免主题色事件误触歌词重排
+      if (trackChanged) relayoutLyricsIfNeeded();
     } else if (isStatusCurrent(state)) {
-      // 非关键变化只更新进度相关
       updateProgressOnly(state);
+      lastStateSnapshot.position =
+        state.position || (state.progress ? state.progress.current : 0) || 0;
+      lastStateSnapshot.volume = state.volume || 0;
     }
 
     // 位置 + 插值时钟（供逐字高亮平滑推进）
     var position = state.position || (state.progress ? state.progress.current : 0) || 0;
     setLyricClock(position, state.isPlaying);
 
-    // 列表均衡器频谱循环（播放中启动，自动随暂停停止）
+    // EQ 循环：内部幂等，极廉价
     ensureEqLoop();
 
-    // 切歌 / 缺词才拉歌词；progress 热路径禁止反复 load（曾拖慢封面+列表滚动）
-    if (state.currentTrack && (trackChanged || significantChange || needsLyricsLoad(state.currentTrack))) {
+    // 切歌 / 非色-only 关键变化才拉歌词与 beat（progress / 纯取色不上）
+    if (state.currentTrack && (trackChanged || (significantChange && !colorOnly))) {
       if (needsLyricsLoad(state.currentTrack)) {
         loadLyricsForTrack(state.currentTrack);
       }
-    }
-    if (state.currentTrack && (trackChanged || significantChange)) {
-      loadBeatGridForTrack(state.currentTrack);
+      if (trackChanged) loadBeatGridForTrack(state.currentTrack);
     }
 
-    // 有词/无词：仅在关键变化时做 verdict（progress 不上）
-    if (trackChanged || significantChange) {
+    // 有词/无词 verdict：仅切歌
+    if (trackChanged) {
       if (pageState.lyricsLoadState === 'loading') {
         if (areLyricsUsable(pageState.lyrics)) {
           applyLyricsVerdict(pageState.lyrics, { confirmed: true });
@@ -4211,7 +4213,8 @@ async function initPage() {
       var vIdx = updateLyricIndex(position, pageState.lyrics);
       if (vIdx !== pageState.currentLyricIndex) {
         pageState.currentLyricIndex = vIdx;
-        renderLyrics(pageState.lyrics, vIdx);
+        // 切行：增量类名 + instant 焦点（避免波浪抢主线程导致色/封面滞后）
+        renderLyrics(pageState.lyrics, vIdx, { confirmed: true, focusInstant: true });
       }
       updateWordHighlight(getLyricPosition());
       ensureLyricWordLoop();
@@ -4237,7 +4240,8 @@ async function initPage() {
         } else if (currentLyricIdx !== pageState.currentLyricIndex) {
           pageState.currentLyricIndex = currentLyricIdx;
           renderLyrics(lyrics, currentLyricIdx, {
-            confirmed: pageState.lyricsLoadState === 'ready'
+            confirmed: pageState.lyricsLoadState === 'ready',
+            focusInstant: true
           });
         }
       }
