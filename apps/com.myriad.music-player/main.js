@@ -626,6 +626,7 @@ var lyricFx = {
   items: [],          // { type:'line'|'dots', idx, el, y, h, pos, v, scale, scaleV, targetScale, delayUntil, start, end }
   total: 0,
   viewH: 0,
+  viewW: 0,           // 容器宽度：0 宽时 offsetHeight 会按换行炸高，必须一并校验
   measured: false,
   measuredWithTrans: false, // 本次测量时 show-trans 是否开启（行高与翻译显隐绑定）
   targetS: 0,         // 虚拟滚动位置
@@ -642,6 +643,7 @@ var lyricFx = {
   layoutGen: 0,       // 布局代数：重建/作废时递增，丢弃过期 deferred remeasure
   songId: null,       // 当前 lyricFx 对应的歌词歌曲 id
   remeasureRaf: null, // 双 rAF 延迟重测句柄
+  remeasureTimer: null, // 侧栏展开过渡结束后的兜底重测
 };
 var lyricResumeTimer = null;
 
@@ -671,6 +673,7 @@ function resetLyricFxLayoutCache(opts) {
     lyricFx.maxS = 0;
     lyricFx.total = 0;
     lyricFx.viewH = 0;
+    lyricFx.viewW = 0;
   }
   if (opts.bumpGen !== false) {
     lyricFx.layoutGen++;
@@ -679,15 +682,22 @@ function resetLyricFxLayoutCache(opts) {
     cancelAnimationFrame(lyricFx.remeasureRaf);
     lyricFx.remeasureRaf = null;
   }
+  if (lyricFx.remeasureTimer) {
+    clearTimeout(lyricFx.remeasureTimer);
+    lyricFx.remeasureTimer = null;
+  }
 }
 
 // 测量行高并建立静态布局（行高与激活态无关——scale 不改布局；
 // 但翻译副行 display 会改变行高，故 must 与 show-trans 状态一致后测）
+// 关键：侧栏 0fr / 展开过渡中宽度为 0 时，pre-wrap 行会按逐字换行 → offsetHeight 爆炸，
+// 必须同时要求 clientWidth > 0，否则拒绝测量并等面板可见后再测。
 function measureLyricLayout() {
   var container = $('lyrics-container');
   if (!container || !lyricFx.inner || lyricFx.items.length === 0) return false;
   var h = container.clientHeight;
-  if (h === 0) return false; // 面板隐藏，待可见后重测
+  var w = container.clientWidth;
+  if (h === 0 || w === 0) return false; // 面板隐藏或侧栏折叠，待可见后重测
   // 强制样式刷盘：保证 show-trans 的 display:block/none 已生效再读 offsetHeight
   void container.offsetHeight;
   var showingTrans = container.classList.contains('show-trans');
@@ -700,6 +710,7 @@ function measureLyricLayout() {
   }
   lyricFx.total = y;
   lyricFx.viewH = h;
+  lyricFx.viewW = w;
   var first = lyricFx.items[0];
   var last = lyricFx.items[lyricFx.items.length - 1];
   lyricFx.minS = first.y - h * LYRIC_FOCAL + first.h / 2;
@@ -709,27 +720,49 @@ function measureLyricLayout() {
   return true;
 }
 
-// 测量是否与当前 show-trans / 容器高度一致；不一致则重测。
+// 测量是否与当前 show-trans / 容器宽高一致；不一致则重测。
 // 连续切歌时若 show-trans 在「无翻译清空 → 新歌有翻译」之间翻转，旧 y/h 会整体错位。
+// 宽度变化（侧栏 0→展开、resize）同样必须重测，否则沿用 0 宽时的炸高行距。
 function ensureLyricLayoutReady() {
   if (lyricFx.items.length === 0 || !lyricFx.inner) return false;
   var container = $('lyrics-container');
   if (!container) return false;
   var h = container.clientHeight;
-  if (h === 0) return false;
+  var w = container.clientWidth;
+  if (h === 0 || w === 0) return false;
   var showingTrans = container.classList.contains('show-trans');
   if (lyricFx.measured &&
       lyricFx.measuredWithTrans === showingTrans &&
-      Math.abs(h - lyricFx.viewH) <= 4) {
+      Math.abs(h - lyricFx.viewH) <= 4 &&
+      Math.abs(w - lyricFx.viewW) <= 4) {
     return true;
   }
   lyricFx.measured = false;
   return measureLyricLayout();
 }
 
-// 布局稳定后再测一次（字体/换行/show-trans 首帧偶发未就绪）。
+// 应用一次重测结果并回焦（供 rAF / timeout 共用）
+function applyLyricLayoutRemeasure(gen, songId) {
+  if (gen !== lyricFx.layoutGen) return false;
+  if (songId != null && pageState.lyricsSongId !== songId) return false;
+  if (lyricFx.items.length === 0) return false;
+  lyricFx.measured = false;
+  if (!measureLyricLayout()) return false;
+  lyricFx.focusK = -1;
+  if (pageState.autoScrollEnabled) {
+    var idx = pageState.currentLyricIndex >= 0 ? pageState.currentLyricIndex : 0;
+    focusLyricLine(idx, true);
+  } else {
+    lyricFx.targetS = clampLyricS(lyricFx.targetS);
+    snapLyricItems();
+  }
+  return true;
+}
+
+// 布局稳定后再测一次（字体/换行/show-trans 首帧偶发未就绪；侧栏展开过渡中宽度在变）。
 // 用 layoutGen + lyricsSongId 丢弃过期回调，避免快切污染当前布局。
-function scheduleLyricLayoutRemeasure() {
+// afterMs：侧栏 grid 过渡约 0.42s，打开歌词 Tab 时再补一次终态重测。
+function scheduleLyricLayoutRemeasure(afterMs) {
   if (lyricFx.items.length === 0) return;
   var gen = lyricFx.layoutGen;
   var songId = pageState.lyricsSongId;
@@ -740,21 +773,19 @@ function scheduleLyricLayoutRemeasure() {
   lyricFx.remeasureRaf = requestAnimationFrame(function() {
     lyricFx.remeasureRaf = requestAnimationFrame(function() {
       lyricFx.remeasureRaf = null;
-      if (gen !== lyricFx.layoutGen) return;
-      if (songId != null && pageState.lyricsSongId !== songId) return;
-      if (lyricFx.items.length === 0) return;
-      lyricFx.measured = false;
-      if (!measureLyricLayout()) return;
-      lyricFx.focusK = -1;
-      if (pageState.autoScrollEnabled) {
-        var idx = pageState.currentLyricIndex >= 0 ? pageState.currentLyricIndex : 0;
-        focusLyricLine(idx, true);
-      } else {
-        lyricFx.targetS = clampLyricS(lyricFx.targetS);
-        snapLyricItems();
-      }
+      applyLyricLayoutRemeasure(gen, songId);
     });
   });
+  if (afterMs != null && afterMs > 0) {
+    if (lyricFx.remeasureTimer) {
+      clearTimeout(lyricFx.remeasureTimer);
+      lyricFx.remeasureTimer = null;
+    }
+    lyricFx.remeasureTimer = setTimeout(function() {
+      lyricFx.remeasureTimer = null;
+      applyLyricLayoutRemeasure(gen, songId);
+    }, afterMs);
+  }
 }
 
 function clampLyricS(s) {
@@ -827,21 +858,25 @@ function focusLyricLine(lineIdx, instant) {
   if (k >= 0) focusLyricItemK(k, instant);
 }
 
-// 布局自愈：容器高度 / show-trans 与上次测量不一致（入场时机早于布局稳定/iframe
-// 尺寸变化/横竖屏/切歌后翻译类翻转）就重测并回焦。measured 一旦锁定不会自动
-// 失效，没有这层守卫，入场早测的错误布局会一直持续
-// allowUnmeasured=true 时对「从未测量成功」（如面板此前隐藏）也重测——tab 切换路径用
-function relayoutLyricsIfNeeded(allowUnmeasured) {
+// 布局自愈：容器宽高 / show-trans 与上次测量不一致（入场时机早于布局稳定/iframe
+// 尺寸变化/横竖屏/侧栏 0fr→展开/切歌后翻译类翻转）就重测并回焦。
+// measured 一旦锁定不会自动失效，没有这层守卫，入场早测的错误布局会一直持续。
+// allowUnmeasured=true 时对「从未测量成功」（如面板此前隐藏）也重测——tab 切换路径用。
+// force=true：打开歌词 Tab 时无条件重测（侧栏刚展开，宽高可能仍在过渡）。
+function relayoutLyricsIfNeeded(allowUnmeasured, force) {
   if (lyricFx.items.length === 0) return;
-  if (!lyricFx.measured && !allowUnmeasured) return;
+  if (!lyricFx.measured && !allowUnmeasured && !force) return;
   var c = $('lyrics-container');
   if (!c) return;
   var h = c.clientHeight;
-  if (h <= 0) return;
+  var w = c.clientWidth;
+  if (h <= 0 || w <= 0) return;
   var showingTrans = c.classList.contains('show-trans');
   var need =
+    force ||
     !lyricFx.measured ||
     Math.abs(h - lyricFx.viewH) > 4 ||
+    Math.abs(w - lyricFx.viewW) > 4 ||
     lyricFx.measuredWithTrans !== showingTrans;
   if (!need) return;
   lyricFx.measured = false;
@@ -850,6 +885,34 @@ function relayoutLyricsIfNeeded(allowUnmeasured) {
     var idx = pageState.currentLyricIndex >= 0 ? pageState.currentLyricIndex : 0;
     focusLyricLine(idx, true);
   }
+}
+
+// 打开歌词面板 / 侧栏展开：立刻测 + 双 rAF + 列宽过渡结束后再兜底
+// （grid-template-columns 过渡约 0.42s；首帧可能已有非 0 宽可立刻就位）
+function forceLyricsPanelRelayout() {
+  if (lyricFx.items.length === 0) return;
+  relayoutLyricsIfNeeded(true, true);
+  // 列宽过渡约 0.46s，终态再测一次
+  scheduleLyricLayoutRemeasure(480);
+}
+
+// 监听歌词容器尺寸：侧栏展开/resize/面板切换时立即重测，避免 0 宽炸高后锁死
+function bindLyricContainerResizeObserver() {
+  var container = $('lyrics-container');
+  if (!container || typeof ResizeObserver === 'undefined') return;
+  if (container._lyricRoBound) return;
+  container._lyricRoBound = true;
+  var roTimer = null;
+  var ro = new ResizeObserver(function() {
+    if (lyricFx.items.length === 0) return;
+    // 合并同帧多次回调；首帧立刻测（无 debounce）减少打开延迟
+    if (roTimer) return;
+    roTimer = requestAnimationFrame(function() {
+      roTimer = null;
+      relayoutLyricsIfNeeded(true);
+    });
+  });
+  ro.observe(container);
 }
 
 // ========================================
@@ -1558,10 +1621,10 @@ function buildLyricDom(container, lyrics, currentIndex, isKaraoke) {
     if (k < 0) k = 0;
     focusLyricItemK(k, true);
   }
-  // 翻译开启时：布局稳定后再测一次（连续切歌/字体未就绪时首帧 offsetHeight 常偏小）
-  if (container.classList.contains('show-trans')) {
-    scheduleLyricLayoutRemeasure();
-  }
+  // 始终延迟再测：侧栏展开过渡 / 字体换行 / show-trans 首帧 offsetHeight 常偏小；
+  // 0 宽时首测失败也靠这次在可见后补上
+  scheduleLyricLayoutRemeasure(container.clientWidth > 0 ? 0 : 480);
+  bindLyricContainerResizeObserver();
 }
 
 // 获取歌词行的类名 - 优化版：使用字符串拼接替代数组
@@ -2171,9 +2234,10 @@ function ensureLyricWordLoop() {
 // 为指定曲目加载逐字歌词（切歌时调用）
 function loadLyricsForTrack(track) {
   if (!track || !track.id) return;
-  // 已成功加载本曲且仍有内容：跳过
+  // 已成功加载本曲且仍有内容：跳过网络，仅确保布局（侧栏可能刚展开）
   if (pageState.lyricsSongId === track.id && pageState.lyrics && pageState.lyrics.length > 0) {
     setLyricsUiMode('ready');
+    forceLyricsPanelRelayout();
     return;
   }
   // 防御旧版 SDK（前端 bundle 未更新时 getLyrics 不存在）：优雅回退逐行
@@ -2187,12 +2251,26 @@ function loadLyricsForTrack(track) {
   var requestGen = ++pageState.lyricsRequestGen;
   var trackId = track.id;
 
-  // 静默清空：不展示加载动画；有结果后再 ready / empty
-  pageState.lyrics = [];
-  pageState.verbatimLyrics = [];
-  pageState.lyricsSongId = null;
-  setLyricsUiMode('empty');
-  renderLyrics([], -1);
+  // 宿主 status 已带本曲逐行时保留展示，后台升级逐字——禁止清空再等网络（恢复延迟主因）
+  var hasProvisional = !!(
+    pageState.lyrics &&
+    pageState.lyrics.length > 0 &&
+    pageState.status &&
+    pageState.status.currentTrack &&
+    String(pageState.status.currentTrack.id) === String(trackId)
+  );
+  if (!hasProvisional) {
+    // 静默清空：不展示加载动画；有结果后再 ready / empty
+    pageState.lyrics = [];
+    pageState.verbatimLyrics = [];
+    pageState.lyricsSongId = null;
+    setLyricsUiMode('empty');
+    renderLyrics([], -1);
+  } else {
+    // 占位行继续显示，不闪空
+    pageState.verbatimLyrics = [];
+    setLyricsUiMode('ready');
+  }
 
   Tapp.media.getLyrics({ songId: track.id, source: track.source }).then(function(res) {
     try { mpDebug('[music-player] getLyrics', track.id, 'verbatim=', res && res.verbatim ? res.verbatim.length : 0, 'lines=', res && res.lines ? res.lines.length : 0); } catch (e) {}
@@ -2204,9 +2282,11 @@ function loadLyricsForTrack(track) {
     if (currentId != null && String(currentId) !== String(trackId)) return;
 
     if (!res) {
-      // 无效回包：允许后续状态事件重试；先保持 loading 或标 empty
-      setLyricsUiMode('empty');
-      renderLyrics([], -1);
+      // 无效回包：允许后续状态事件重试；有占位行则保留
+      if (!pageState.lyrics || pageState.lyrics.length === 0) {
+        setLyricsUiMode('empty');
+        renderLyrics([], -1);
+      }
       return;
     }
 
@@ -2219,7 +2299,8 @@ function loadLyricsForTrack(track) {
     } else {
       pageState.verbatimLyrics = [];
       if (res.lines && res.lines.length) pageState.lyrics = res.lines;
-      else pageState.lyrics = [];
+      else if (!hasProvisional) pageState.lyrics = [];
+      // 有占位且新包无行：保留占位
     }
 
     // 成功应用后再标记归属，避免「标记已是新曲、内容仍是旧曲」
@@ -2240,8 +2321,8 @@ function loadLyricsForTrack(track) {
     pageState.currentLyricIndex = idx;
     pageState.lastKaraokeLine = -1;
     renderLyrics(pageState.lyrics, idx);
-    // 翻译类刚打开且可能走了增量更新（未 rebuild）：强制按可见行高重测再 focus
-    if (transUi.showing) {
+    // 翻译类翻转 / 行高变化：强制按可见行高重测再 focus
+    if (transUi.showing || transUi.changed) {
       scheduleLyricLayoutRemeasure();
     }
     if (pageState.verbatimLyrics.length > 0) {
@@ -3931,8 +4012,9 @@ function bindControls() {
       requestAnimationFrame(revealPlaylist);
     }
     if (tab === 'lyrics') {
+      // 同步强制重测 + 过渡结束后再测：避免 0 宽炸高 / 打开半秒空白
       requestAnimationFrame(function() {
-        relayoutLyricsIfNeeded(true);
+        forceLyricsPanelRelayout();
       });
     }
 
