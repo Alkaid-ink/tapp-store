@@ -1245,14 +1245,24 @@ function bindLyricManualScroll(container) {
 
   container.addEventListener('touchstart', function(e) {
     if (!e.touches || e.touches.length === 0) return;
+    // 打开 Sheet 后若尚未测到高度，触摸时补测一次
+    if (!lyricFx.measured) {
+      measureLyricLayout();
+    }
     lyricFx.touchY = e.touches[0].clientY;
     lyricFx.touchT = performance.now();
     lyricFx.touchV = 0;
     lyricFx.momentumV = 0;
   }, { passive: true });
 
+  // 必须 non-passive：阻止页面/Sheet 抢滚动，否则移动端歌词「滑不动/乱跳」
   container.addEventListener('touchmove', function(e) {
-    if (lyricFx.touchY === null || !ensureLyricLayoutReady()) return;
+    if (lyricFx.touchY === null) return;
+    if (!ensureLyricLayoutReady()) {
+      // 再试一次测量（Sheet 刚展开）
+      if (!measureLyricLayout()) return;
+    }
+    e.preventDefault();
     var yNow = e.touches[0].clientY;
     var dy = lyricFx.touchY - yNow;
     lyricFx.touchY = yNow;
@@ -1264,7 +1274,7 @@ function bindLyricManualScroll(container) {
     lyricFx.targetS = clampLyricS(lyricFx.targetS + dy);
     retargetLyricItemsNow();
     startLyricWave();
-  }, { passive: true });
+  }, { passive: false });
 
   container.addEventListener('touchend', function() {
     if (lyricFx.touchY === null) return;
@@ -1275,6 +1285,11 @@ function bindLyricManualScroll(container) {
       lyricFx.touchV = 0;
       startLyricWave();
     }
+  }, { passive: true });
+
+  container.addEventListener('touchcancel', function() {
+    lyricFx.touchY = null;
+    lyricFx.touchV = 0;
   }, { passive: true });
 
   // 尺寸变化时重测布局并复位焦点
@@ -4455,6 +4470,14 @@ function bindControls() {
         setLyricsUiMode('loading');
       }
       revalidateLyricsContentMode({ fromTabOpen: true });
+      // 移动端 Sheet 刚 display 出来：下一帧硬重测，否则 clientHeight=0 滚不动
+      if (isMobile()) {
+        requestAnimationFrame(function() {
+          requestAnimationFrame(function() {
+            forceLyricsPanelRelayout(false);
+          });
+        });
+      }
     } else {
       syncNoLyricsLayout();
     }

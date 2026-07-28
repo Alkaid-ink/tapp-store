@@ -725,24 +725,28 @@ html.mp-has-lyrics .track-title {
 
 .lyrics-scroll {
   flex: 1;
+  min-height: 0; /* flex 链关键：否则移动端 Sheet 内高度塌成 0，滚动/测量全坏 */
   /* Apple Music 式逐行波浪引擎：滚动完全由 JS 接管（每行独立弹簧 transform），
      容器不再原生滚动 */
   overflow: hidden;
   padding: 0;
   position: relative;
+  /* 禁止浏览器抢垂直手势，避免与 JS 歌词滚动打架 */
+  touch-action: none;
+  overscroll-behavior: none;
   /* 上下渐隐遮罩 */
   mask-image: linear-gradient(
     to bottom,
     transparent 0%,
-    black 15%,
-    black 85%,
+    black 12%,
+    black 88%,
     transparent 100%
   );
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0%,
-    black 15%,
-    black 85%,
+    black 12%,
+    black 88%,
     transparent 100%
   );
 }
@@ -2288,7 +2292,7 @@ html.mp-has-lyrics .track-title {
     height: 20px;
   }
 
-  /* —— Sheet：更高顶栏 + 拖动手柄 —— */
+  /* —— Sheet：flex 顶栏 + 内容区，保证歌词容器有明确高度 —— */
   .player-right {
     display: none;
     position: fixed;
@@ -2310,6 +2314,8 @@ html.mp-has-lyrics .track-title {
     pointer-events: auto;
     animation: slideUp 0.36s cubic-bezier(0.33, 0.86, 0.2, 1);
     overflow: hidden;
+    /* 不用 grid 叠 panel+标题：flex 列更稳，歌词区高度可测 */
+    flex-direction: column;
   }
 
   /* 顶部拖动手柄 */
@@ -2328,20 +2334,18 @@ html.mp-has-lyrics .track-title {
   }
 
   .player-right.mobile-visible {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
-    padding-top: 28px;
+    display: flex;
+    flex-direction: column;
+    padding-top: 22px;
   }
 
   .mobile-panel-title {
     display: block;
-    grid-column: 1;
-    grid-row: 1;
     position: relative;
     top: auto;
     left: auto;
-    padding: 4px 56px 12px var(--m-pad-x);
+    flex: 0 0 auto;
+    padding: 6px 56px 10px var(--m-pad-x);
     font-size: 17px;
     font-weight: 650;
     letter-spacing: -0.02em;
@@ -2377,25 +2381,43 @@ html.mp-has-lyrics .track-title {
     background: rgba(255, 255, 255, 0.12);
   }
 
+  /* 面板区：叠层占满剩余高度 */
   .player-right.mobile-visible .panel {
-    grid-column: 1;
-    grid-row: 2;
-    display: flex;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 56px; /* 顶栏 + 手柄 */
+    bottom: 0;
+    display: none;
     flex-direction: column;
     border-radius: 0;
     min-height: 0;
-    width: 100%;
-    height: 100%;
-    transform: translateY(6px) scale(0.994);
+    width: auto;
+    height: auto;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: none;
+    transition: opacity 0.22s ease;
   }
 
   .player-right.mobile-visible .panel.active {
-    transform: none;
+    display: flex;
+    z-index: 1;
   }
 
   .panel-lyrics,
   .panel-playlist {
     padding: 0 var(--m-pad-x) 8px;
+    box-sizing: border-box;
+  }
+
+  /* 歌词区必须吃满 panel 剩余高度，否则 clientHeight=0 无法滚 */
+  .player-right.mobile-visible .panel-lyrics .lyrics-scroll,
+  .player-right.mobile-visible .panel-playlist .playlist-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
   }
 
   .skip-vip-btn .ph-btn-label {
@@ -2501,12 +2523,10 @@ html.mp-has-lyrics .track-title {
   }
 }
 
-/* 移动端面板关闭：下滑退场（两段式：先播动画，结束后再 display:none）
-   关闭过程保持 grid，避免叠层面板塌缩闪一下 */
+/* 移动端面板关闭：下滑退场（两段式：先播动画，结束后再 display:none） */
 .player-right.mobile-closing {
-  display: grid !important;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
+  display: flex !important;
+  flex-direction: column;
   animation: slideDownOut 0.28s cubic-bezier(0.4, 0, 1, 1) forwards;
 }
 

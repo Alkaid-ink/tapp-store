@@ -4,6 +4,10 @@
 
 ## Changelog
 
+### 1.1.22
+
+- 修复移动端歌词滚动：Sheet flex 高度链、touch preventDefault、打开后硬重测
+
 ### 1.1.21
 
 - 移动端布局重构：居中 hero、分层底栏、Sheet 手柄与安全区
