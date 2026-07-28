@@ -283,7 +283,8 @@ html, body {
   max-width: 300px; /* 数值可插值；开合态只改这个 */
   min-width: 0;
   box-sizing: border-box;
-  overflow: hidden; /* 跑马灯/长标题硬裁剪边界 */
+  /* 勿 hidden：会把封面圆角/阴影裁成直角（桌面+移动底角尤甚） */
+  overflow: visible;
   margin-inline: 0; /* 居中交给 .player-left align-items，避免 margin:auto 无法过渡 */
   transition:
     max-width 0.48s cubic-bezier(0.33, 0.86, 0.2, 1),
@@ -291,14 +292,23 @@ html, body {
 }
 
 /* 封面与标题同宽、同对齐，随 hero 一起伸缩 */
-.player-hero .artwork-container,
+.player-hero .artwork-container {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0;
+  /* 圆角只由 .artwork-wrapper 裁切；容器直角 overflow 会切掉下左右圆角 */
+  overflow: visible;
+}
+
 .player-hero .track-info {
   width: 100%;
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
   margin: 0;
-  overflow: hidden;
+  overflow: hidden; /* 仅标题跑马灯裁剪 */
 }
 
 .player-hero .artwork-wrapper,
@@ -326,7 +336,8 @@ html, body {
   gap: 0; /* 间距只在 hero 内，避免 left 再拆开封面/标题 */
   min-width: 0;
   max-width: 100%;
-  overflow: hidden; /* 第二道保险：标题绝不画进歌词列 */
+  /* 标题裁剪靠 track-info；这里 visible 以免封面阴影/圆角被列盒切掉 */
+  overflow: visible;
   box-sizing: border-box;
   transition:
     padding 0.48s cubic-bezier(0.33, 0.86, 0.2, 1);
@@ -339,6 +350,7 @@ html, body {
   align-items: center;
   justify-content: flex-start;
   width: 100%;
+  overflow: visible;
 }
 
 /* Aurora 环境光 - 封面后方三团主题色光斑，分别由低/中/高频驱动（频谱可视化）
@@ -487,6 +499,10 @@ html, body {
   aspect-ratio: 1;
   border-radius: var(--radius-lg);
   overflow: hidden;
+  isolation: isolate;
+  /* WebKit：圆角+transform 时强制按圆角遮罩，避免底角被拆成直角 */
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
+  mask-image: radial-gradient(white, black);
   box-shadow:
     0 20px 60px color-mix(in srgb, var(--music-primary) 30%, transparent),
     0 8px 20px rgba(0, 0, 0, 0.2);
@@ -494,12 +510,14 @@ html, body {
   transition: transform 0.55s cubic-bezier(0.34, 1.45, 0.5, 1);
   /* box-shadow 含 --music-primary：勿单独 transition，避免描边/光晕慢于主题色 */
   will-change: transform;
-  /* 🎯 WebKit 兼容性：移除 contain，确保触摸事件可以正常工作 */
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
 }
 
 /* 暂停状态 - 封面深度收缩（Apple Music 式），收缩用平滑 ease-out 不过冲 */
 .artwork-wrapper.paused {
-  transform: scale(0.8);
+  transform: scale(0.8) translateZ(0);
   box-shadow:
     0 10px 30px color-mix(in srgb, var(--music-primary) 16%, transparent),
     0 3px 10px rgba(0, 0, 0, 0.14);
@@ -507,18 +525,20 @@ html, body {
 }
 
 .artwork-wrapper:hover {
-  transform: scale(1.02);
+  transform: scale(1.02) translateZ(0);
 }
 
 /* 暂停时hover也保持缩小 */
 .artwork-wrapper.paused:hover {
-  transform: scale(0.82);
+  transform: scale(0.82) translateZ(0);
 }
 
 .artwork-image {
+  display: block; /* 去掉 img 行内基线空隙，否则底边像被切一刀 */
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: inherit;
   transition: opacity var(--transition-smooth);
 }
 
@@ -540,6 +560,7 @@ html, body {
   justify-content: center;
   background: linear-gradient(145deg, #3a3a3c, #2c2c2e);
   color: var(--text-tertiary);
+  border-radius: inherit;
 }
 
 .artwork-placeholder svg {
@@ -2125,7 +2146,6 @@ html.mp-has-lyrics .track-title {
     max-width: var(--m-stage);
     gap: 12px;
     align-items: stretch;
-    /* 勿 hidden：会裁掉封面下左右圆角与阴影 */
     overflow: visible;
   }
 
@@ -2133,9 +2153,7 @@ html.mp-has-lyrics .track-title {
     width: 100%;
     position: relative;
     z-index: 0;
-    /* 与封面同圆角；overflow 只由 wrapper 裁图，避免容器直角切角 */
     overflow: visible;
-    border-radius: 20px;
   }
 
   .player-hero .artwork-wrapper,
@@ -2147,38 +2165,27 @@ html.mp-has-lyrics .track-title {
   .artwork-wrapper {
     max-width: none;
     width: 100%;
-    border-radius: 20px;
-    overflow: hidden;
-    /* 独立合成层，减少 WebKit 圆角+阴影裁切毛刺 */
-    isolation: isolate;
-    -webkit-mask-image: -webkit-radial-gradient(white, black);
+    border-radius: var(--radius-lg);
     box-shadow:
       0 28px 64px color-mix(in srgb, var(--music-primary) 32%, transparent),
       0 8px 24px rgba(0, 0, 0, 0.22);
   }
 
-  .artwork-wrapper .artwork-image,
-  .artwork-wrapper .artwork-placeholder {
-    border-radius: inherit;
-  }
-
   .artwork-wrapper:hover {
-    transform: none;
+    transform: translateZ(0);
   }
 
   .artwork-wrapper.paused {
-    transform: scale(0.94);
+    transform: scale(0.94) translateZ(0);
   }
 
   .artwork-wrapper.paused:hover {
-    transform: scale(0.94);
+    transform: scale(0.94) translateZ(0);
   }
 
   .artwork-aurora {
     max-width: none;
     width: 100%;
-    /* aurora 在 wrapper 外时不要被直角父级裁 */
-    border-radius: 20px;
     overflow: visible;
   }
 
