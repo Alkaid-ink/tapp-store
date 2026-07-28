@@ -370,6 +370,7 @@ var pageState = {
   // 逐字歌词（yrc）：与 lyrics 行一一对应，含每行 words
   verbatimLyrics: [],
   lyricsSongId: null,      // 已成功加载并展示的歌词所属歌曲 id
+  lyricsLoadingTrackId: null, // 正在请求歌词的曲目（防 progress 热路径重复 load）
   lyricsRequestGen: 0,     // 歌词请求代数：快速切歌时丢弃过期 getLyrics 回包
   lyricsLoadState: 'idle', // idle | loading | ready | empty — 驱动无歌词布局
   // 宿主切歌世代：与 status.generation / track.id 对齐，丢弃过期 UI 补丁
@@ -2529,15 +2530,34 @@ function ensureLyricWordLoop() {
   }
 }
 
+/** 是否需要为该曲拉歌词（已在飞 / 已确认则 false） */
+function needsLyricsLoad(track) {
+  if (!track || !track.id) return false;
+  var id = String(track.id);
+  if (pageState.lyricsLoadingTrackId != null &&
+      String(pageState.lyricsLoadingTrackId) === id) {
+    return false; // 请求进行中
+  }
+  if (pageState.lyricsSongId != null && String(pageState.lyricsSongId) === id) {
+    if (pageState.lyricsLoadState === 'ready' || pageState.lyricsLoadState === 'empty') {
+      return false;
+    }
+  }
+  return true;
+}
+
 // 为指定曲目加载逐字歌词（切歌时调用）
 // 顺序：先 loading（乐观有词布局）→ getLyrics 确认 → ready 或 empty
 function loadLyricsForTrack(track) {
   if (!track || !track.id) return;
-  // 已成功加载本曲且已确认：只刷新
+  // 已在飞：progress 热路径禁止重入（否则反复 abort getLyrics + 卡主线程）
+  if (pageState.lyricsLoadingTrackId != null &&
+      String(pageState.lyricsLoadingTrackId) === String(track.id)) {
+    return;
+  }
+  // 已成功加载本曲且已确认：只刷新（勿在 progress 上 force relayout）
   if (pageState.lyricsSongId === track.id && pageState.lyricsLoadState === 'ready' &&
       pageState.lyrics && pageState.lyrics.length > 0) {
-    revalidateLyricsContentMode();
-    if (pageState.lyricsLoadState === 'ready') forceLyricsPanelRelayout(true);
     return;
   }
   // 已确认本曲 empty 且 id 匹配：不重复打
@@ -2554,6 +2574,7 @@ function loadLyricsForTrack(track) {
   // 否则 handleStateChange 会误以为「本曲歌词已就绪」而不清空上一首的展示。
   var requestGen = ++pageState.lyricsRequestGen;
   var trackId = track.id;
+  pageState.lyricsLoadingTrackId = trackId;
 
   // 宿主 status 已带本曲逐行时保留展示，后台升级逐字
   var hasProvisional = !!(
@@ -2588,6 +2609,9 @@ function loadLyricsForTrack(track) {
     try { mpDebug('[music-player] getLyrics', track.id, 'verbatim=', res && res.verbatim ? res.verbatim.length : 0, 'lines=', res && res.lines ? res.lines.length : 0); } catch (e) {}
     // 过期请求 / 当前曲已不是目标曲：丢弃
     if (requestGen !== pageState.lyricsRequestGen) return;
+    if (String(pageState.lyricsLoadingTrackId) === String(trackId)) {
+      pageState.lyricsLoadingTrackId = null;
+    }
     var currentId = pageState.status && pageState.status.currentTrack
       ? pageState.status.currentTrack.id
       : null;
@@ -2640,6 +2664,9 @@ function loadLyricsForTrack(track) {
     }
   }).catch(function() {
     if (requestGen !== pageState.lyricsRequestGen) return;
+    if (String(pageState.lyricsLoadingTrackId) === String(trackId)) {
+      pageState.lyricsLoadingTrackId = null;
+    }
     pageState.verbatimLyrics = [];
     pageState.hasTranslation = false;
     syncLyricTransUI();
@@ -2660,7 +2687,7 @@ var virtualList = {
   contentWrapper: null,
   itemHeight: 56, // 每项高度（初始估算，首帧后按真实高度校正）
   measured: false, // 是否已按真实 DOM 高度校正 itemHeight
-  bufferSize: 18, // 上下预载缓冲区（加大，滚动更顺、无空白）
+  bufferSize: 8, // 预载行数；过大时上滚回收/创建 DOM 卡顿
   visibleStart: 0,
   visibleEnd: 0,
   data: [],
@@ -2677,7 +2704,8 @@ var virtualList = {
   itemPool: [],
   activeItems: new Map(), // index -> DOM element
   lastTotalHeight: 0,
-  isRendering: false
+  isRendering: false,
+  needsRender: false // 滚动帧合并：上一帧未画完时排队下一帧
 };
 
 // 标记用户在播放列表内滚动；结束后短延迟才允许自动居中
@@ -2764,7 +2792,8 @@ function initVirtualList() {
     virtualList.innerWrapper.style.cssText = 'position:relative;width:100%;';
     
     virtualList.contentWrapper = document.createElement('div');
-    virtualList.contentWrapper.style.cssText = 'position:absolute;left:0;right:0;';
+    // 相对定位容器：子项 absolute + top，滚动不再改 wrapper.top
+    virtualList.contentWrapper.style.cssText = 'position:relative;width:100%;height:100%;';
     
     virtualList.innerWrapper.appendChild(virtualList.contentWrapper);
     virtualList.container.appendChild(virtualList.innerWrapper);
@@ -2778,20 +2807,28 @@ function initVirtualList() {
     virtualList.scrollContainer.removeEventListener('scroll', virtualList.scrollHandler);
   }
   
-  // 添加滚动监听（使用节流）；用户滚动时标记，避免 auto-center 回弹
-  var lastScrollTime = 0;
+  // 滚动：rAF 合并，避免上滚时堆积同步布局
   virtualList.scrollHandler = function() {
-    // 程序化 scrollTop/scrollIntoView 也会触发 scroll，不能标成用户手势
     if (!virtualList.programmaticScroll) {
       markPlaylistUserScroll();
     }
-    var now = Date.now();
-    if (now - lastScrollTime < 16) return; // ~60fps
-    lastScrollTime = now;
-    
-    if (!virtualList.isRendering) {
-      requestAnimationFrame(renderVisibleItems);
+    if (virtualList.isRendering) {
+      virtualList.needsRender = true;
+      return;
     }
+    virtualList.isRendering = true;
+    requestAnimationFrame(function() {
+      virtualList.isRendering = false;
+      renderVisibleItems();
+      if (virtualList.needsRender) {
+        virtualList.needsRender = false;
+        virtualList.isRendering = true;
+        requestAnimationFrame(function() {
+          virtualList.isRendering = false;
+          renderVisibleItems();
+        });
+      }
+    });
   };
   
   virtualList.scrollContainer.addEventListener('scroll', virtualList.scrollHandler, { passive: true });
@@ -2823,11 +2860,9 @@ function fillPlaylistItem(el, song) {
       try {
         cover.decoding = 'async';
         cover.referrerPolicy = 'no-referrer';
-        // 当前曲 eager，其余 lazy
-        var isCur = pageState.boundTrackId != null &&
-          String(song.id) === String(pageState.boundTrackId);
-        cover.loading = isCur ? 'eager' : 'lazy';
-        if (isCur) cover.fetchPriority = 'high';
+        // 列表滚动：一律 lazy，避免上滚创建节点时抢带宽/解码
+        cover.loading = 'lazy';
+        cover.fetchPriority = 'low';
       } catch (_e) { /* ignore */ }
       if (cover.getAttribute('data-src') !== song.cover) {
         cover.setAttribute('data-src', song.cover);
@@ -2870,33 +2905,36 @@ function getPooledItem() {
 
   var el = document.createElement('div');
   el.className = 'playlist-item';
+  // 绝对定位：滚动只改 top，避免 contentWrapper 整体平移带来的上滚重排卡顿
+  el.style.cssText = 'position:absolute;left:0;right:0;box-sizing:border-box;';
   el.innerHTML = PLAYLIST_ITEM_HTML;
   return el;
 }
 
 // 更新DOM元素内容
-function updateItemContent(el, song, isActive) {
-  // 只在内容变化时更新
-  if (el.getAttribute('data-id') !== song.id) {
+function updateItemContent(el, song, isActive, index) {
+  var topPx = (index * virtualList.itemHeight) + 'px';
+  if (el.style.top !== topPx) el.style.top = topPx;
+
+  // 只在内容变化时更新（滚动热路径避免重复填封面）
+  if (el.getAttribute('data-id') !== String(song.id)) {
     el.setAttribute('data-id', song.id);
     el.setAttribute('data-index', song.originalIndex);
     fillPlaylistItem(el, song);
   }
 
-  // 更新激活状态
-  el.classList.toggle('active', !!isActive);
+  var wantActive = !!isActive;
+  if (el.classList.contains('active') !== wantActive) {
+    el.classList.toggle('active', wantActive);
+  }
 }
 
 // 渲染可见项
 function renderVisibleItems() {
-  virtualList.isRendering = true;
-  
   if (!virtualList.contentWrapper || !virtualList.scrollContainer) {
-    virtualList.isRendering = false;
     return;
   }
   if (virtualList.data.length === 0) {
-    virtualList.isRendering = false;
     return;
   }
   
@@ -2913,17 +2951,15 @@ function renderVisibleItems() {
   
   // 如果范围没变，只检查激活状态
   if (startIndex === virtualList.visibleStart && endIndex === virtualList.visibleEnd) {
-    // 快速更新激活状态
     virtualList.activeItems.forEach(function(el, idx) {
       var song = virtualList.data[idx];
       if (song) {
-        var isActive = virtualList.currentTrackId && song.id === virtualList.currentTrackId;
-        if (isActive !== el.classList.contains('active')) {
+        var isActive = !!(virtualList.currentTrackId && song.id === virtualList.currentTrackId);
+        if (el.classList.contains('active') !== isActive) {
           el.classList.toggle('active', isActive);
         }
       }
     });
-    virtualList.isRendering = false;
     return;
   }
   
@@ -2939,15 +2975,16 @@ function renderVisibleItems() {
     virtualList.lastTotalHeight = totalHeight;
   }
   
-  // 更新内容偏移
-  virtualList.contentWrapper.style.top = (startIndex * itemHeight) + 'px';
-  
-  // 回收不再可见的元素
+  // 回收不再可见的元素（批量 detach）
+  var detachFrag = null;
   virtualList.activeItems.forEach(function(el, idx) {
     if (idx < startIndex || idx >= endIndex) {
       virtualList.itemPool.push(el);
       virtualList.activeItems.delete(idx);
-      if (el.parentNode) el.parentNode.removeChild(el);
+      if (el.parentNode) {
+        if (!detachFrag) detachFrag = document.createDocumentFragment();
+        detachFrag.appendChild(el); // 移出文档，减少多次 reflow
+      }
     }
   });
   
@@ -2957,6 +2994,7 @@ function renderVisibleItems() {
   
   for (var i = startIndex; i < endIndex; i++) {
     var song = virtualList.data[i];
+    if (!song) continue;
     var isActive = virtualList.currentTrackId && song.id === virtualList.currentTrackId;
     
     var el = virtualList.activeItems.get(i);
@@ -2969,7 +3007,7 @@ function renderVisibleItems() {
       needsAppend = true;
     }
     
-    updateItemContent(el, song, isActive);
+    updateItemContent(el, song, isActive, i);
   }
   
   if (needsAppend && fragment) {
@@ -2988,7 +3026,6 @@ function renderVisibleItems() {
         virtualList.lastTotalHeight = 0; // 强制更新总高
         virtualList.visibleStart = -1;   // 强制用正确高度重算
         virtualList.visibleEnd = -1;
-        virtualList.isRendering = false;
         renderVisibleItems();
         return;
       }
@@ -3016,7 +3053,6 @@ function renderVisibleItems() {
           });
           virtualList.visibleStart = -1; // 新位置需重渲，避免空白
           virtualList.visibleEnd = -1;
-          virtualList.isRendering = false;
           renderVisibleItems();
           return;
         }
@@ -3025,8 +3061,6 @@ function renderVisibleItems() {
       }
     }
   }
-
-  virtualList.isRendering = false;
 }
 
 // 重算虚拟列表可见项（修正真实高度与范围），不改动滚动位置 —— 用于 resize
@@ -3660,13 +3694,12 @@ function updatePlayerUI(status) {
       if (coverEl.getAttribute('data-src') !== coverUrl) {
         coverEl.setAttribute('data-src', coverUrl);
         try {
-          coverEl.decoding = 'async';
+          // sync 解码：缓存命中立刻上屏；async 会拖慢「封面同步」体感
+          coverEl.decoding = 'sync';
           coverEl.fetchPriority = 'high';
           coverEl.loading = 'eager';
           coverEl.referrerPolicy = 'no-referrer';
         } catch (_e) { /* ignore */ }
-        // 淡出 → 换源 → onload 淡入
-        coverEl.classList.add('cover-fading');
         coverEl.onload = function() {
           if (coverEl.getAttribute('data-track-id') !== coverTrackKey) return;
           coverEl.classList.remove('cover-fading');
@@ -3674,9 +3707,13 @@ function updatePlayerUI(status) {
           if (coverPlaceholder) coverPlaceholder.style.display = 'none';
         };
         coverEl.src = coverUrl;
-        // 缓存命中可能同步 complete
+        // 缓存命中：同步 complete，跳过淡出，封面即时切换
         if (coverEl.complete && coverEl.naturalWidth > 0) {
           coverEl.classList.remove('cover-fading');
+          coverEl.style.display = 'block';
+          if (coverPlaceholder) coverPlaceholder.style.display = 'none';
+        } else {
+          coverEl.classList.add('cover-fading');
         }
       } else {
         coverEl.style.display = 'block';
@@ -4040,6 +4077,7 @@ async function initPage() {
       significantChange = true;
       bindTrackFromStatus(state);
       pageState.lyricsRequestGen++;
+      pageState.lyricsLoadingTrackId = null; // 允许为新曲发起请求
       pageState.verbatimLyrics = [];
       pageState.lastKaraokeLine = -1;
       pageState.hasTranslation = false;
@@ -4094,24 +4132,28 @@ async function initPage() {
     // 列表均衡器频谱循环（播放中启动，自动随暂停停止）
     ensureEqLoop();
 
-    // 切歌 / 缺词：加载新曲的逐字歌词 + 节拍网格
-    if (state.currentTrack && state.currentTrack.id !== pageState.lyricsSongId) {
-      loadLyricsForTrack(state.currentTrack);
-    }
-    if (state.currentTrack) loadBeatGridForTrack(state.currentTrack);
-
-    // 有词/无词：loading 中不降 empty；够行可提前 ready；确认态再翻转
-    if (pageState.lyricsLoadState === 'loading') {
-      if (areLyricsUsable(pageState.lyrics)) {
-        // 宿主已给够行：提前有词，不必等 getLyrics 才开侧栏
-        applyLyricsVerdict(pageState.lyrics, { confirmed: true });
+    // 切歌 / 缺词才拉歌词；progress 热路径禁止反复 load（曾拖慢封面+列表滚动）
+    if (state.currentTrack && (trackChanged || significantChange || needsLyricsLoad(state.currentTrack))) {
+      if (needsLyricsLoad(state.currentTrack)) {
+        loadLyricsForTrack(state.currentTrack);
       }
-      // 否则保持 loading 乐观有词
-    } else if (pageState.lyricsLoadState === 'ready' || pageState.lyricsLoadState === 'empty') {
-      var usableNow = areLyricsUsable(pageState.lyrics);
-      var isReady = pageState.lyricsLoadState === 'ready';
-      if (usableNow !== isReady) {
-        revalidateLyricsContentMode();
+    }
+    if (state.currentTrack && (trackChanged || significantChange)) {
+      loadBeatGridForTrack(state.currentTrack);
+    }
+
+    // 有词/无词：仅在关键变化时做 verdict（progress 不上）
+    if (trackChanged || significantChange) {
+      if (pageState.lyricsLoadState === 'loading') {
+        if (areLyricsUsable(pageState.lyrics)) {
+          applyLyricsVerdict(pageState.lyrics, { confirmed: true });
+        }
+      } else if (pageState.lyricsLoadState === 'ready' || pageState.lyricsLoadState === 'empty') {
+        var usableNow = areLyricsUsable(pageState.lyrics);
+        var isReady = pageState.lyricsLoadState === 'ready';
+        if (usableNow !== isReady) {
+          revalidateLyricsContentMode();
+        }
       }
     }
 
