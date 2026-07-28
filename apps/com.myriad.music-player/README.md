@@ -4,6 +4,12 @@
 
 ## Changelog
 
+### 1.1.35
+
+- 真因：侧栏 grid 过渡时宽≈8px 仍被测量，pre-wrap 炸高行距锁死滚动
+- 拒测宽 <120 / 单行过高；RO + settle 在展开后再测
+- Chrome headless 验证桌面 1280 / 移动 390 / 平板 820 测量与滚轮/位移
+
 ### 1.1.34
 
 - 歌词滚动逻辑收敛：删除多层重试/清 transform/多 settle timer
