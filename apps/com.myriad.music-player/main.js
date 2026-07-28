@@ -668,6 +668,7 @@ function resetLyricFxLayoutCache(opts) {
   lyricFx.measuredWithTrans = false;
   lyricFx.focusK = -1;
   lyricFx.momentumV = 0;
+  lyricFx._retryCount = 0;
   if (opts.clearScroll !== false) {
     lyricFx.targetS = 0;
     lyricFx.minS = 0;
@@ -690,6 +691,10 @@ function resetLyricFxLayoutCache(opts) {
   if (lyricFx._settleTimer) {
     clearTimeout(lyricFx._settleTimer);
     lyricFx._settleTimer = null;
+  }
+  if (lyricFx._retryTimer) {
+    clearTimeout(lyricFx._retryTimer);
+    lyricFx._retryTimer = null;
   }
 }
 
@@ -725,9 +730,13 @@ function measureLyricLayout() {
     lyricFx.measured = false;
     return false;
   }
-  // 窄宽炸高后的守卫：总高度异常时拒绝锁定，避免挤顶/间距离谱一直持续
-  var avgH = y / lyricFx.items.length;
-  if (avgH > h * 0.9 && lyricFx.items.length > 3) {
+  // 窄宽炸高守卫：只拦「单行高度离谱」（逐字换行可上千 px）。
+  // 勿用 avgH > viewH*0.9——大字号+矮 Sheet 时正常多行换行也会误杀，导致永远测不到、滚不动。
+  var maxH = 0;
+  for (var mh = 0; mh < lyricFx.items.length; mh++) {
+    if (lyricFx.items[mh].h > maxH) maxH = lyricFx.items[mh].h;
+  }
+  if (maxH > Math.max(h * 2.5, 320) && w < 80) {
     lyricFx.measured = false;
     return false;
   }
@@ -767,10 +776,23 @@ function ensureLyricLayoutReady() {
 // 应用一次重测结果并回焦（供 rAF / timeout 共用）
 function applyLyricLayoutRemeasure(gen, songId) {
   if (gen !== lyricFx.layoutGen) return false;
-  if (songId != null && pageState.lyricsSongId !== songId) return false;
+  if (songId != null && String(pageState.lyricsSongId) !== String(songId)) return false;
   if (lyricFx.items.length === 0) return false;
   lyricFx.measured = false;
-  if (!measureLyricLayout()) return false;
+  if (!measureLyricLayout()) {
+    // 侧栏/Sheet 仍在过渡：短延迟再试一次（限次，避免死循环）
+    if (!lyricFx._retryCount) lyricFx._retryCount = 0;
+    if (lyricFx._retryCount < 6) {
+      lyricFx._retryCount++;
+      if (lyricFx._retryTimer) clearTimeout(lyricFx._retryTimer);
+      lyricFx._retryTimer = setTimeout(function() {
+        lyricFx._retryTimer = null;
+        applyLyricLayoutRemeasure(gen, songId);
+      }, 80);
+    }
+    return false;
+  }
+  lyricFx._retryCount = 0;
   lyricFx.focusK = -1;
   if (pageState.autoScrollEnabled) {
     var idx = pageState.currentLyricIndex >= 0 ? pageState.currentLyricIndex : 0;
@@ -1277,7 +1299,12 @@ function bindLyricManualScroll(container) {
     if (lyricFx.touchY === null) return;
     if (!ensureLyricLayoutReady()) {
       // 再试一次测量（Sheet 刚展开）
-      if (!measureLyricLayout()) return;
+      if (!measureLyricLayout()) {
+        // 仍未测到：先占住手势，避免页面跟着拖；下一帧继续补测
+        e.preventDefault();
+        scheduleLyricLayoutRemeasure(0);
+        return;
+      }
     }
     e.preventDefault();
     var yNow = e.touches[0].clientY;
@@ -2649,18 +2676,22 @@ function needsLyricsLoad(track) {
 // 顺序：先 loading（乐观有词布局）→ getLyrics 确认 → ready 或 empty
 function loadLyricsForTrack(track) {
   if (!track || !track.id) return;
+  var trackIdStr = String(track.id);
   // 已在飞：progress 热路径禁止重入（否则反复 abort getLyrics + 卡主线程）
   if (pageState.lyricsLoadingTrackId != null &&
-      String(pageState.lyricsLoadingTrackId) === String(track.id)) {
+      String(pageState.lyricsLoadingTrackId) === trackIdStr) {
     return;
   }
   // 已成功加载本曲且已确认：只刷新（勿在 progress 上 force relayout）
-  if (pageState.lyricsSongId === track.id && pageState.lyricsLoadState === 'ready' &&
+  // 必须 String 比较：宿主 id 偶发 number/string 混用会导致「必定加载两次」
+  if (pageState.lyricsSongId != null && String(pageState.lyricsSongId) === trackIdStr &&
+      pageState.lyricsLoadState === 'ready' &&
       pageState.lyrics && pageState.lyrics.length > 0) {
     return;
   }
   // 已确认本曲 empty 且 id 匹配：不重复打
-  if (pageState.lyricsSongId === track.id && pageState.lyricsLoadState === 'empty') {
+  if (pageState.lyricsSongId != null && String(pageState.lyricsSongId) === trackIdStr &&
+      pageState.lyricsLoadState === 'empty') {
     return;
   }
   // 防御旧版 SDK（前端 bundle 未更新时 getLyrics 不存在）：优雅回退逐行
@@ -2674,6 +2705,7 @@ function loadLyricsForTrack(track) {
   var requestGen = ++pageState.lyricsRequestGen;
   var trackId = track.id;
   pageState.lyricsLoadingTrackId = trackId;
+  // 记录本请求目标，供 trackChanged 判断「同曲已在飞」避免 gen++ 作废首包
 
   // 宿主 status 已带本曲逐行时保留展示，后台升级逐字
   var hasProvisional = !!(
@@ -4010,12 +4042,13 @@ function normalizeMediaState(s) {
  * 拖慢主题色/封面/歌词主线程。
  */
 function hasSignificantChange(state) {
-  var trackId = state.currentTrack ? state.currentTrack.id : null;
+  var trackId = state.currentTrack ? String(state.currentTrack.id) : null;
+  var prevId = lastStateSnapshot.trackId != null ? String(lastStateSnapshot.trackId) : null;
   var coverUrl = getTrackCoverUrl(state.currentTrack);
   var gen = typeof state.generation === 'number' ? state.generation : null;
   var loading = !!(state.isLoading || state.isAudioLoading);
 
-  return trackId !== lastStateSnapshot.trackId ||
+  return trackId !== prevId ||
       coverUrl !== lastStateSnapshot.coverUrl ||
       state.isPlaying !== lastStateSnapshot.isPlaying ||
       state.mode !== lastStateSnapshot.mode ||
@@ -4029,8 +4062,9 @@ function hasSignificantChange(state) {
 
 /** 仅主题色变化（同曲同封面）→ 只写 CSS 变量，跳过封面/跑马灯/整页 UI */
 function isThemeColorOnlyChange(state) {
-  var trackId = state.currentTrack ? state.currentTrack.id : null;
-  if (trackId !== lastStateSnapshot.trackId) return false;
+  var trackId = state.currentTrack ? String(state.currentTrack.id) : null;
+  var prevId = lastStateSnapshot.trackId != null ? String(lastStateSnapshot.trackId) : null;
+  if (trackId !== prevId) return false;
   if (getTrackCoverUrl(state.currentTrack) !== lastStateSnapshot.coverUrl) return false;
   var pc = state.primaryColor || null;
   var sc = state.secondaryColor || null;
@@ -4081,18 +4115,24 @@ async function initPage() {
     pageState.status = status;
     bindTrackFromStatus(status);
     updatePlayerUI(status);
+    // 必须先写入 snapshot：否则订阅后首帧 state 会把 null→id 当成切歌，
+    // gen++ 作废 init 已发出的 getLyrics，表现为「每首歌必加载两次」
+    updateStateSnapshot(status);
 
     // 获取歌词（逐行兜底先渲染，逐字异步加载后覆盖）。
     // 本曲歌词已自载（lyricsSongId 匹配）则绝不覆盖：initPage 会因 locale 事件
     // 等重跑，此时用 status 的网易逐行去踩自载的酷狗 verbatim 派生行，
     // 两个行集错位 → 呼吸点乱插/高亮失效（且 loadLyricsForTrack 因去重不自愈）
     if (status.lyrics && status.lyrics.length > 0 &&
-        !(status.currentTrack && status.currentTrack.id === pageState.lyricsSongId)) {
+        !(status.currentTrack &&
+          pageState.lyricsSongId != null &&
+          String(status.currentTrack.id) === String(pageState.lyricsSongId))) {
       // 注意不能用 `|| -1`：索引 0（第一句）是合法值会被吞掉
       var initIdx = typeof status.currentLyricIndex === 'number' ? status.currentLyricIndex : -1;
       pageState.lyrics = status.lyrics;
       pageState.currentLyricIndex = initIdx;
-      renderLyrics(status.lyrics, initIdx);
+      // 宿主兜底词未确认：勿 confirmed 默认 true（短词会先 empty 再被 load 打回）
+      renderLyrics(status.lyrics, initIdx, { confirmed: false });
     }
     // 加载逐字歌词（卡拉OK）+ 节拍网格（精确跟拍）
     if (status.currentTrack) {
@@ -4183,31 +4223,41 @@ async function initPage() {
       significantChange = true;
       colorOnly = false;
       bindTrackFromStatus(state);
-      pageState.lyricsRequestGen++;
-      pageState.lyricsLoadingTrackId = null; // 允许为新曲发起请求
-      pageState.verbatimLyrics = [];
-      pageState.lastKaraokeLine = -1;
-      pageState.hasTranslation = false;
-      // ★ 先有词布局，不先 empty
-      setLyricsUiMode('loading');
-      // 预解码邻曲封面，连点切歌时 img 已在浏览器缓存
-      prefetchNeighborCovers(nextTrackId);
-      // 仅当已展示歌词不属于新曲时清空（自载成功且 id 匹配则保留）
-      if (pageState.lyricsSongId == null ||
-          String(pageState.lyricsSongId) !== String(nextTrackId || '')) {
-        pageState.lyricsSongId = null;
-        // 先关掉 show-trans 再渲染：避免沿用上一首「翻译开」时测得的行高
-        syncLyricTransUI();
-        // 宿主若已带来新曲歌词则用它，否则清空等待 getLyrics
-        if (state.lyrics && state.lyrics.length > 0) {
-          pageState.lyrics = state.lyrics;
-          pageState.currentLyricIndex =
-            typeof state.currentLyricIndex === 'number' ? state.currentLyricIndex : -1;
-        } else {
-          pageState.lyrics = [];
-          pageState.currentLyricIndex = -1;
+      // 同曲已在飞（常见：init 已 load，首帧 state 仍报 trackChanged）→ 绝不能 gen++ 作废
+      var alreadyLoadingSame = nextTrackId != null &&
+        pageState.lyricsLoadingTrackId != null &&
+        String(pageState.lyricsLoadingTrackId) === String(nextTrackId);
+      var alreadyReadySame = nextTrackId != null &&
+        pageState.lyricsSongId != null &&
+        String(pageState.lyricsSongId) === String(nextTrackId) &&
+        (pageState.lyricsLoadState === 'ready' || pageState.lyricsLoadState === 'empty');
+      if (!alreadyLoadingSame && !alreadyReadySame) {
+        pageState.lyricsRequestGen++;
+        pageState.lyricsLoadingTrackId = null; // 允许为新曲发起请求
+        pageState.verbatimLyrics = [];
+        pageState.lastKaraokeLine = -1;
+        pageState.hasTranslation = false;
+        // ★ 先有词布局，不先 empty
+        setLyricsUiMode('loading');
+        // 预解码邻曲封面，连点切歌时 img 已在浏览器缓存
+        prefetchNeighborCovers(nextTrackId);
+        // 仅当已展示歌词不属于新曲时清空（自载成功且 id 匹配则保留）
+        if (pageState.lyricsSongId == null ||
+            String(pageState.lyricsSongId) !== String(nextTrackId || '')) {
+          pageState.lyricsSongId = null;
+          // 先关掉 show-trans 再渲染：避免沿用上一首「翻译开」时测得的行高
+          syncLyricTransUI();
+          // 宿主若已带来新曲歌词则用它，否则清空等待 getLyrics
+          if (state.lyrics && state.lyrics.length > 0) {
+            pageState.lyrics = state.lyrics;
+            pageState.currentLyricIndex =
+              typeof state.currentLyricIndex === 'number' ? state.currentLyricIndex : -1;
+          } else {
+            pageState.lyrics = [];
+            pageState.currentLyricIndex = -1;
+          }
+          renderLyrics(pageState.lyrics, pageState.currentLyricIndex, { confirmed: false });
         }
-        renderLyrics(pageState.lyrics, pageState.currentLyricIndex, { confirmed: false });
       }
     }
 
