@@ -4,6 +4,13 @@
 
 ## Changelog
 
+### 1.1.36
+
+- 取消 content-area 列宽 CSS 过渡（根治打开瞬间 ~8px 窄宽炸高）
+- 移动端 Tab：吞掉 touchend 后的幽灵 click，避免打开立刻关掉
+- 滚轮/触摸交互时若未测到布局会再硬测一次
+- Chrome headless：桌面/移动/平板 PASS；打开瞬间宽度即正常
+
 ### 1.1.35
 
 - 真因：侧栏 grid 过渡时宽≈8px 仍被测量，pre-wrap 炸高行距锁死滚动

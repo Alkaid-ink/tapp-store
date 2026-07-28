@@ -255,10 +255,8 @@ html, body {
   column-gap: 16px;
   min-height: 0;
   min-width: 0;
-  /* 列宽切换：封面↔侧栏同节奏（略柔、避免弹） */
-  transition:
-    grid-template-columns 0.46s cubic-bezier(0.33, 0.86, 0.2, 1),
-    column-gap 0.46s cubic-bezier(0.33, 0.86, 0.2, 1);
+  /* 禁止过渡 grid 列宽：过渡中会出现 ~8px 极窄宽，pre-wrap 歌词会炸高并把滚动锁死。
+     侧栏显隐用 .player-right 的 opacity/transform 过渡即可。 */
 }
 
 /* 左右列分流：左列可见以保留封面圆角/阴影；右列必须 hidden+min-height:0

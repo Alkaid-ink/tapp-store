@@ -687,15 +687,13 @@ function resetLyricFxLayoutCache(opts) {
   }
 }
 
-// 侧栏 grid 从 0fr 展开时会经历极窄宽（实测可到 8px）。
-// white-space:pre-wrap 在窄宽下逐字换行 → 单行上千 px → total 数万，滚动彻底乱。
-// 必须拒测，等 ResizeObserver / settle 在足够宽时再测。
-var LYRIC_MIN_VIEW_W = 120;
+// 面板不可见时 w/h 为 0。列宽已取消 CSS 过渡，打开后应立刻有真实宽度。
+// 仍保留下限，防止 0fr 折叠态误测。
+var LYRIC_MIN_VIEW_W = 80;
 var LYRIC_MIN_VIEW_H = 40;
 
 /**
  * 测行高并建立 y 布局。
- * 唯一硬条件：容器足够大（不只是 >0）。
  */
 function measureLyricLayout() {
   var container = $('lyrics-container');
@@ -704,26 +702,18 @@ function measureLyricLayout() {
   var w = container.clientWidth;
   if (h < LYRIC_MIN_VIEW_H || w < LYRIC_MIN_VIEW_W) return false;
 
-  // show-trans 显隐会影响行高
   void container.offsetHeight;
   var showingTrans = container.classList.contains('show-trans');
   var y = 0;
   var anyH = false;
-  var maxH = 0;
   for (var k = 0; k < lyricFx.items.length; k++) {
     var it = lyricFx.items[k];
     it.h = it.el.offsetHeight || 0;
     if (it.h > 0) anyH = true;
-    if (it.h > maxH) maxH = it.h;
     it.y = y;
     y += it.h;
   }
   if (!anyH) {
-    lyricFx.measured = false;
-    return false;
-  }
-  // 双保险：仍出现离谱单行高度说明测早了
-  if (maxH > Math.max(h * 2, 280)) {
     lyricFx.measured = false;
     return false;
   }
@@ -902,23 +892,26 @@ function relayoutLyricsIfNeeded(allowUnmeasured, force) {
 }
 
 function getSideLayoutSettleMs() {
+  // 列宽已无过渡；Sheet 入场约 0.36s，opacity 侧栏约 0.32s
   try {
-    if (typeof checkIsMobile === 'function' && checkIsMobile()) return 420;
+    if (typeof checkIsMobile === 'function' && checkIsMobile()) return 380;
   } catch (e) { /* ignore */ }
-  // 与 page.css grid-template-columns 0.46s 对齐，略留余量
-  return 520;
+  return 80;
 }
 
 /**
- * 打开歌词面板：能测才立刻测；过渡结束后再测。
- * ResizeObserver 会在宽度越过 LYRIC_MIN_VIEW_W 时补测。
+ * 打开歌词面板后测量。
+ * 立刻刷盘测一次；双 rAF + 短 settle 再测；ResizeObserver 处理后续尺寸变化。
  */
 function forceLyricsPanelRelayout(/* soft */) {
   if (lyricFx.items.length === 0) return;
+  // 强制样式刷盘：class 刚挂上时读到的可能仍是旧几何
+  var pr = $('player-right');
   var c = $('lyrics-container');
-  if (c && c.clientWidth >= LYRIC_MIN_VIEW_W && c.clientHeight >= LYRIC_MIN_VIEW_H) {
-    relayoutLyricsIfNeeded(true, true);
-  }
+  if (pr) void pr.offsetWidth;
+  if (c) void c.offsetWidth;
+  relayoutLyricsIfNeeded(true, true);
+  // 内部：双 rAF 立刻 + afterMs 兜底（不要连调两次，会互相 cancel）
   scheduleLyricLayoutRemeasure(getSideLayoutSettleMs());
 }
 
@@ -1191,9 +1184,22 @@ function bindLyricManualScroll(container) {
   if (lyricFx.manualBound) return;
   lyricFx.manualBound = true;
 
+  function tryReady() {
+    if (ensureLyricLayoutReady()) return true;
+    // 交互时再硬试一次（面板刚打开）
+    lyricFx.measured = false;
+    if (measureLyricLayout()) {
+      if (pageState.currentLyricIndex >= 0) focusLyricLine(pageState.currentLyricIndex, true);
+      else snapLyricItems();
+      return true;
+    }
+    scheduleLyricLayoutRemeasure(0);
+    return false;
+  }
+
   container.addEventListener('wheel', function(e) {
-    if (!ensureLyricLayoutReady()) return;
     e.preventDefault();
+    if (!tryReady()) return;
     userLyricScrollBegin();
     lyricFx.momentumV = 0;
     var dy = e.deltaY;
@@ -1206,7 +1212,7 @@ function bindLyricManualScroll(container) {
 
   container.addEventListener('touchstart', function(e) {
     if (!e.touches || e.touches.length === 0) return;
-    if (!lyricFx.measured) ensureLyricLayoutReady();
+    tryReady();
     lyricFx.touchY = e.touches[0].clientY;
     lyricFx.touchT = performance.now();
     lyricFx.touchV = 0;
@@ -1216,8 +1222,8 @@ function bindLyricManualScroll(container) {
   // non-passive：移动端必须 preventDefault，否则页面/Sheet 抢走滑动
   container.addEventListener('touchmove', function(e) {
     if (lyricFx.touchY === null) return;
-    if (!ensureLyricLayoutReady()) return;
     e.preventDefault();
+    if (!tryReady()) return;
     var yNow = e.touches[0].clientY;
     var dy = lyricFx.touchY - yNow;
     lyricFx.touchY = yNow;
@@ -4479,43 +4485,41 @@ function bindControls() {
   }
   
   // 为按钮添加通用的点击绑定（兼容移动端和桌面端）
+  // 关键：touchend 后浏览器会再合成 click → handler 跑两次。
+  // 歌词 Tab 表现为「打开又立刻关闭」，Sheet 根本来不及滚。
   function addClickHandler(element, handler) {
     if (!element) return;
-    
+
     var startX = 0;
     var startY = 0;
     var moved = false;
-    
-    // touchstart 记录起始位置
+    var lastTouchEndAt = 0;
+
     element.addEventListener('touchstart', function(e) {
       var touch = e.touches[0];
       startX = touch.clientX;
       startY = touch.clientY;
       moved = false;
     }, { passive: true });
-    
-    // touchmove 检测是否移动（防止滑动时误触发）
+
     element.addEventListener('touchmove', function(e) {
       var touch = e.touches[0];
       var dx = Math.abs(touch.clientX - startX);
       var dy = Math.abs(touch.clientY - startY);
-      if (dx > 10 || dy > 10) {
-        moved = true;
-      }
+      if (dx > 10 || dy > 10) moved = true;
     }, { passive: true });
-    
-    // touchend 触发点击（移动端主要事件）
+
     element.addEventListener('touchend', function(e) {
-      if (!moved) {
-        e.preventDefault();
-        handler();
-      }
-    }, { passive: false });
-    
-    // click 事件作为桌面端和备用
-    element.addEventListener('click', function(e) {
-      // 移动端已由 touchend 处理，这里主要是桌面端
+      if (moved) return;
       e.preventDefault();
+      lastTouchEndAt = Date.now();
+      handler();
+    }, { passive: false });
+
+    element.addEventListener('click', function(e) {
+      e.preventDefault();
+      // 吞掉 touchend 后的幽灵 click（约 300ms 内）
+      if (Date.now() - lastTouchEndAt < 500) return;
       handler();
     });
   }
