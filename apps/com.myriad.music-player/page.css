@@ -2500,34 +2500,31 @@ html.mp-has-error .status-banner.visible {
 
 /* 桌面：无歌词时扩大封面列，弱化右侧空歌词区 */
 @media (min-width: 769px) {
-  html.mp-no-lyrics .content-area,
-  html.mp-lyrics-loading .content-area {
+  html.mp-no-lyrics-layout .content-area {
     grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
     transition: grid-template-columns 0.45s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  html.mp-no-lyrics .player-left,
-  html.mp-lyrics-loading .player-left {
+  html.mp-no-lyrics-layout .player-left {
     align-items: center;
     padding-left: 10%;
     padding-right: 10%;
   }
 
-  html.mp-no-lyrics .artwork-wrapper,
-  html.mp-no-lyrics .artwork-aurora {
+  html.mp-no-lyrics-layout .artwork-wrapper,
+  html.mp-no-lyrics-layout .artwork-aurora {
     max-width: min(360px, 100%);
     width: 100%;
   }
 
-  html.mp-no-lyrics .track-info,
-  html.mp-lyrics-loading .track-info {
+  html.mp-no-lyrics-layout .player-hero,
+  html.mp-no-lyrics-layout .track-info {
     align-items: center;
     text-align: center;
     width: 100%;
   }
 
-  html.mp-no-lyrics .track-title-row,
-  html.mp-lyrics-loading .track-title-row {
+  html.mp-no-lyrics-layout .track-title-row {
     justify-content: center;
   }
 
@@ -2555,13 +2552,8 @@ html.mp-has-lyrics .player-left {
   text-align: center;
   opacity: 1;
   color: var(--text-secondary);
-  animation: lyricsEmptyIn 0.45s cubic-bezier(0.33, 1, 0.68, 1) both;
 }
 
-@keyframes lyricsEmptyIn {
-  from { opacity: 0; transform: translateY(8px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
 
 .lyrics-empty-visual {
   width: 72px;
@@ -2588,14 +2580,6 @@ html.mp-has-lyrics .player-left {
   opacity: 0.92;
 }
 
-.lyrics-empty-spinner {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  border: 2.5px solid color-mix(in srgb, var(--music-primary) 25%, transparent);
-  border-top-color: var(--music-primary);
-  animation: spin 0.8s linear infinite;
-}
 
 .lyrics-empty-title {
   font-size: 16px;
@@ -2612,9 +2596,6 @@ html.mp-has-lyrics .player-left {
   opacity: 0.9;
 }
 
-html.mp-lyrics-loading .lyrics-empty-title {
-  color: var(--text-secondary);
-}
 
 /* 无歌词时隐藏歌词角按钮中的翻译（无意义）——动效钮桌面仍可点 */
 html.mp-no-lyrics #lyric-trans-btn {
@@ -2623,8 +2604,8 @@ html.mp-no-lyrics #lyric-trans-btn {
 
 /* 移动端：无歌词时封面略放大，空态更居中 */
 @media (max-width: 768px) {
-  html.mp-no-lyrics .artwork-wrapper,
-  html.mp-no-lyrics .artwork-aurora {
+  html.mp-no-lyrics-layout .artwork-wrapper,
+  html.mp-no-lyrics-layout .artwork-aurora {
     max-width: 220px;
     width: 56%;
   }
@@ -2648,11 +2629,4 @@ html.mp-no-lyrics #lyric-trans-btn {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lyrics-empty.lyrics-empty-rich {
-    animation: none;
-  }
-  .lyrics-empty-spinner {
-    animation: none;
-    border-top-color: transparent;
-  }
 }

@@ -29,36 +29,37 @@
   <!-- 内容区 - 左2/5封面信息 + 右3/5歌词列表 -->
   <div class="content-area">
     
-    <!-- 左侧：封面 + 歌曲信息 -->
+    <!-- 左侧：封面 + 标题作为同一整体 (player-hero) -->
     <div class="player-left">
 
       <p id="player-empty-hint" class="player-empty-hint" hidden></p>
-      
-      <!-- 封面 -->
-      <div class="artwork-container">
-        <!-- Aurora 环境光：三团主题色光斑，分别由低/中/高频驱动 -->
-        <div class="artwork-aurora" id="artwork-aurora" aria-hidden="true">
-          <span class="aurora-blob aurora-bass"></span>
-          <span class="aurora-blob aurora-mid"></span>
-          <span class="aurora-blob aurora-high"></span>
-        </div>
-        <div class="artwork-wrapper" id="artwork-wrapper">
-          <img id="album-cover" class="artwork-image" src="" alt="" />
-          <div id="cover-placeholder" class="artwork-placeholder">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-            </svg>
+
+      <div class="player-hero" id="player-hero">
+        <!-- 封面 -->
+        <div class="artwork-container">
+          <div class="artwork-aurora" id="artwork-aurora" aria-hidden="true">
+            <span class="aurora-blob aurora-bass"></span>
+            <span class="aurora-blob aurora-mid"></span>
+            <span class="aurora-blob aurora-high"></span>
+          </div>
+          <div class="artwork-wrapper" id="artwork-wrapper">
+            <img id="album-cover" class="artwork-image" src="" alt="" />
+            <div id="cover-placeholder" class="artwork-placeholder">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+              </svg>
+            </div>
           </div>
         </div>
-      </div>
-      
-      <!-- 歌曲信息 -->
-      <div class="track-info">
-        <div class="track-title-row">
-          <h1 id="song-name" class="track-title"><span class="marquee-inner">未在播放</span></h1>
-          <span id="vip-badge" class="badge-vip" style="display:none;">VIP</span>
+
+        <!-- 歌曲信息（与封面绑定为同一列宽/对齐） -->
+        <div class="track-info">
+          <div class="track-title-row">
+            <h1 id="song-name" class="track-title"><span class="marquee-inner">未在播放</span></h1>
+            <span id="vip-badge" class="badge-vip" style="display:none;">VIP</span>
+          </div>
+          <p id="song-artist" class="track-artist"><span class="marquee-inner">-</span></p>
         </div>
-        <p id="song-artist" class="track-artist"><span class="marquee-inner">-</span></p>
       </div>
       
     </div>

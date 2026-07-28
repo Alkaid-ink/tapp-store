@@ -1,4 +1,4 @@
-// Music Player Tapp v1.1.1
+// Music Player Tapp v1.1.2
 
 var MP_DEBUG = false;
 function mpDebug() {
@@ -1320,34 +1320,64 @@ function updateInterludeDots() {
 }
 
 
-/** 同步无歌词 / 有歌词 / 加载中布局（html.mp-no-lyrics 等） */
+/** 当前侧栏焦点：none | lyrics | playlist（移动端未打开面板 = none） */
+function getSidePanelFocus() {
+  var pr = $('player-right');
+  var mobile = typeof checkIsMobile === 'function' ? checkIsMobile() : false;
+  if (mobile && pr && !pr.classList.contains('mobile-visible')) {
+    return 'none';
+  }
+  var pl = $('panel-playlist');
+  if (pl && pl.classList.contains('active')) return 'playlist';
+  var ly = $('panel-lyrics');
+  if (ly && ly.classList.contains('active')) return 'lyrics';
+  return 'none';
+}
+
+/**
+ * 无歌词布局策略：
+ * - 默认（未选歌词/列表，或移动端面板关闭）且无词/加载中 → 封面优先布局
+ * - 无词且选中「歌词」Tab → 封面优先 + 右侧空态
+ * - 选中「列表」→ 始终双栏/侧栏列表，不强制封面独占
+ */
+function syncNoLyricsLayout() {
+  var root = document.documentElement;
+  var state = pageState.lyricsLoadState || 'idle';
+  var ready = state === 'ready';
+  // loading 与 empty 同等：静默无词布局，无加载动画
+  var noLyricsContent = !ready;
+  var focus = getSidePanelFocus();
+
+  root.classList.remove('mp-lyrics-loading'); // 废弃加载动画类
+  root.classList.toggle('mp-no-lyrics', noLyricsContent);
+  root.classList.toggle('mp-has-lyrics', ready);
+  root.classList.toggle('mp-side-playlist', focus === 'playlist');
+  root.classList.toggle('mp-side-lyrics', focus === 'lyrics');
+  root.classList.toggle('mp-side-none', focus === 'none');
+
+  // 无词 + 未在列表（默认 / 歌词 Tab）→ 封面优先；列表 Tab 除外
+  var layoutHero = noLyricsContent && focus !== 'playlist';
+  root.classList.toggle('mp-no-lyrics-layout', layoutHero);
+}
+
+/** 同步无歌词 / 有歌词 / 加载中状态，并刷新布局 */
 function setLyricsUiMode(state) {
   // state: 'idle' | 'loading' | 'ready' | 'empty'
   pageState.lyricsLoadState = state || 'idle';
-  var root = document.documentElement;
-  var loading = state === 'loading';
-  var empty = state === 'empty';
-  var ready = state === 'ready';
-  root.classList.toggle('mp-lyrics-loading', loading);
-  root.classList.toggle('mp-no-lyrics', empty);
-  root.classList.toggle('mp-has-lyrics', ready);
+  syncNoLyricsLayout();
 }
 
-function buildLyricsEmptyHtml(kind) {
-  // kind: 'empty' | 'loading'
-  var title = kind === 'loading' ? t('lyricsLoading') : t('noLyrics');
-  var hint = kind === 'loading' ? '' : t('noLyricsHint');
-  var icon = kind === 'loading'
-    ? '<span class="lyrics-empty-spinner" aria-hidden="true"></span>'
-    : ('<svg class="lyrics-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
-      + '<path d="M9 18V5l12-2v13"/>'
-      + '<circle cx="6" cy="18" r="3"/>'
-      + '<circle cx="18" cy="16" r="3"/>'
-      + '</svg>');
-  return '<div class="lyrics-empty lyrics-empty-rich' + (kind === 'loading' ? ' is-loading' : '') + '">'
+function buildLyricsEmptyHtml() {
+  // 仅静态空态，无 spinner / 加载动画
+  var icon = '<svg class="lyrics-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    + '<path d="M9 18V5l12-2v13"/>'
+    + '<circle cx="6" cy="18" r="3"/>'
+    + '<circle cx="18" cy="16" r="3"/>'
+    + '</svg>';
+  return '<div class="lyrics-empty lyrics-empty-rich">'
     + '<div class="lyrics-empty-visual">' + icon + '</div>'
-    + '<div class="lyrics-empty-title">' + title + '</div>'
-    + (hint ? '<div class="lyrics-empty-hint">' + hint + '</div>' : '')
+    + '<div class="lyrics-empty-title">' + t('noLyrics') + '</div>'
+    + '<div class="lyrics-empty-hint">' + t('noLyricsHint') + '</div>'
     + '</div>';
 }
 
@@ -1363,11 +1393,9 @@ function renderLyrics(lyrics, currentIndex) {
     lyricFx.songId = null;
     resetLyricFxLayoutCache();
     stopLyricWave();
-    // 加载中 vs 确认无歌词：切歌瞬间用 loading，加载结束仍空则 empty
-    var emptyKind = (pageState.lyricsLoadState === 'loading') ? 'loading' : 'empty';
-    if (pageState.lyricsLoadState !== 'loading') setLyricsUiMode('empty');
-    else setLyricsUiMode('loading');
-    container.innerHTML = buildLyricsEmptyHtml(emptyKind);
+    // 无词：静态空态，不区分 loading 动画
+    if (pageState.lyricsLoadState !== 'ready') setLyricsUiMode('empty');
+    container.innerHTML = buildLyricsEmptyHtml();
     container.classList.remove('karaoke');
     return;
   }
@@ -2151,11 +2179,11 @@ function loadLyricsForTrack(track) {
   var requestGen = ++pageState.lyricsRequestGen;
   var trackId = track.id;
 
-  // 进入加载态：桌面展开封面优先布局前先显示 loading 空态
+  // 静默清空：不展示加载动画；有结果后再 ready / empty
   pageState.lyrics = [];
   pageState.verbatimLyrics = [];
   pageState.lyricsSongId = null;
-  setLyricsUiMode('loading');
+  setLyricsUiMode('empty');
   renderLyrics([], -1);
 
   Tapp.media.getLyrics({ songId: track.id, source: track.source }).then(function(res) {
@@ -3620,7 +3648,7 @@ async function initPage() {
       pageState.verbatimLyrics = [];
       pageState.lastKaraokeLine = -1;
       pageState.hasTranslation = false;
-      setLyricsUiMode('loading');
+      setLyricsUiMode('empty');
       // 预解码邻曲封面，连点切歌时 img 已在浏览器缓存
       prefetchNeighborCovers(nextTrackId);
       // 仅当已展示歌词不属于新曲时清空（自载成功且 id 匹配则保留）
@@ -3850,6 +3878,9 @@ function bindControls() {
       }
     }
 
+    // Tab/面板变化 → 刷新无歌词封面优先布局
+    syncNoLyricsLayout();
+
     // 切到播放列表：面板此刻才有真实高度，填满可见项并滚到当前歌曲
     if (tab === 'playlist') {
       requestAnimationFrame(revealPlaylist);
@@ -3886,6 +3917,7 @@ function bindControls() {
     closeMobilePanel();
     // 取消所有tab按钮的active状态
     tabBtns.forEach(function(b) { b.classList.remove('active'); });
+    syncNoLyricsLayout();
   }
   
   // 为按钮添加通用的点击绑定（兼容移动端和桌面端）
