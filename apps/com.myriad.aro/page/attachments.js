@@ -19,6 +19,7 @@ function toggleAttachMenu() {
     || !!(state.activeKind === 'channel' && state.channelDetail && state.channelDetail.status === 'closed');
   if (!state.activeId || locked || state.sending) return;
   try { if (typeof closeStickerPanel === 'function') closeStickerPanel(); } catch (eSt) { /* ignore */ }
+  try { if (typeof closeMentionPicker === 'function') closeMentionPicker(); } catch (eMen) { /* ignore */ }
   wrap.style.position = 'relative';
   if (btn) btn.classList.add('attach-btn-active');
 
@@ -270,11 +271,6 @@ function handleTransferWsEvent(data) {
   } catch (e) { /* ignore toast errors */ }
 }
 
-/** @deprecated use sendChunkedFileTransfer */
-async function sendChannelFileTransfer(attach, text, replyTo) {
-  return sendChunkedFileTransfer(attach, text, replyTo);
-}
-
 function pickFedContent(type) {
   var icons = { tapp: SVG_ICONS.tapp, brew: SVG_ICONS.brew, library: SVG_ICONS.library, report: SVG_ICONS.report };
   var titles = { tapp: lang.selectTapp, brew: lang.selectBrew, library: lang.selectLibrary, report: lang.selectReport };
@@ -336,7 +332,20 @@ function showPickerEmpty(body) {
 function bindPickerSearch(overlay, getItems, renderFn, filterFn) {
   var searchInput = overlay.querySelector('.picker-search input');
   if (!searchInput) return;
+  var runFilter = typeof aroDebounce === 'function'
+    ? aroDebounce(function () {
+        var allItems = typeof getItems === 'function' ? getItems() : getItems;
+        if (!allItems) allItems = [];
+        var q = (searchInput.value || '').trim().toLowerCase();
+        if (!q) { renderFn(allItems); return; }
+        renderFn(allItems.filter(function (item) { return filterFn(item, q); }));
+      }, 100)
+    : null;
   searchInput.addEventListener('input', function () {
+    if (runFilter) {
+      runFilter();
+      return;
+    }
     var allItems = typeof getItems === 'function' ? getItems() : getItems;
     if (!allItems) allItems = [];
     var q = this.value.trim().toLowerCase();
@@ -1122,7 +1131,8 @@ var EMOJI_RECENT_KEY = 'aro.emoji_recent';
 var EMOJI_RECENT_MAX = 32;
 /** Backend ROOM_STICKER_MAX_DATA_LEN = 120_000 */
 var STICKER_DATA_MAX = 115000;
-var STICKER_ROOM_MAX = 24;
+/** Backend ROOM_STICKER_MAX_COUNT = 50; owner/admin edit only */
+var STICKER_ROOM_MAX = 50;
 var _stickerPanelOpen = false;
 var _stickerTab = 'emoji'; // 'emoji' | 'room' | 'mine'
 var _emojiCat = 'smileys';
@@ -1351,16 +1361,23 @@ function compressStickerDataUrl(dataUrl) {
   });
 }
 
-function canManageRoomSticker(sticker) {
-  if (!sticker) return false;
+/** Group sticker pack: only room owner/admin may add or remove. */
+function canEditRoomStickerPack() {
   var myRole = (state.roomDetail && state.roomDetail.my_role) || '';
   if (myRole === 'owner' || myRole === 'admin') return true;
+  // Fallback: match room owner_actor when my_role is missing/stale
   var me = state.localActorUrl
     || (typeof getIdentityActorUrl === 'function' ? getIdentityActorUrl() : '');
-  if (!me) return false;
+  var owner = state.roomDetail && state.roomDetail.owner_actor;
+  if (!me || !owner) return false;
   return typeof sameActorUrl === 'function'
-    ? sameActorUrl(sticker.actor, me)
-    : String(sticker.actor || '') === String(me);
+    ? sameActorUrl(owner, me)
+    : String(owner) === String(me);
+}
+
+function canManageRoomSticker(sticker) {
+  // Pack is owner/admin-managed; individual publisher can no longer remove.
+  return canEditRoomStickerPack();
 }
 
 function closeStickerCtxMenu() {
@@ -1391,11 +1408,14 @@ function openStickerCtxMenu(x, y, sticker, pack) {
       + esc(lang.stickerRemove || 'Remove') + '</button>'
     );
   }
-  if (pack === 'mine' && state.activeKind === 'room' && !isRoomComposerLocked()) {
-    items.push(
-      '<button type="button" class="sticker-ctx-item" data-act="share-room" role="menuitem">'
-      + esc(lang.stickerShareToRoom || 'Share to group pack') + '</button>'
-    );
+  if (pack === 'mine' && state.activeKind === 'room' && canEditRoomStickerPack()) {
+    var roomLocked = typeof isRoomComposerLocked === 'function' && isRoomComposerLocked();
+    if (!roomLocked) {
+      items.push(
+        '<button type="button" class="sticker-ctx-item" data-act="share-room" role="menuitem">'
+        + esc(lang.stickerShareToRoom || 'Share to group pack') + '</button>'
+      );
+    }
   }
   menu.innerHTML = items.join('');
   menu.style.left = Math.max(8, Math.min(x, window.innerWidth - 160)) + 'px';
@@ -1432,6 +1452,7 @@ function openStickerPanel() {
   if (typeof isChannelComposerLocked === 'function' && isChannelComposerLocked()) return;
   if (typeof isRoomComposerLocked === 'function' && isRoomComposerLocked()) return;
   try { if (typeof closeAttachMenu === 'function') closeAttachMenu(); } catch (e0) { /* ignore */ }
+  try { if (typeof closeMentionPicker === 'function') closeMentionPicker(); } catch (eMen) { /* ignore */ }
   closeStickerCtxMenu();
 
   var panel = $('sticker-panel');
@@ -1602,7 +1623,17 @@ async function renderStickerPanel() {
   if (emojiCats) emojiCats.style.display = isEmoji ? 'flex' : 'none';
   if (emojiGrid) emojiGrid.style.display = isEmoji ? 'grid' : 'none';
   if (stickerGrid) stickerGrid.style.display = isEmoji ? 'none' : 'grid';
-  if (addBtn) addBtn.style.display = isEmoji ? 'none' : 'inline-flex';
+  // Group pack: only owner/admin see Add; personal pack: always.
+  var canEditRoom = canEditRoomStickerPack();
+  if (addBtn) {
+    if (isEmoji) {
+      addBtn.style.display = 'none';
+    } else if (_stickerTab === 'room') {
+      addBtn.style.display = canEditRoom ? 'inline-flex' : 'none';
+    } else {
+      addBtn.style.display = 'inline-flex';
+    }
+  }
 
   if (isEmoji) {
     if (empty) empty.style.display = 'none';
@@ -1655,7 +1686,9 @@ async function renderStickerPanel() {
         ? (lang.stickerRoomEmptyTitle || lang.stickerTabRoom || 'Group stickers')
         : (lang.stickerMineEmptyTitle || lang.stickerTabMine || 'My stickers');
       var emptyBody = _stickerTab === 'room'
-        ? (lang.stickerRoomEmpty || 'No group stickers yet. Tap Add to share with everyone.')
+        ? (canEditRoom
+          ? (lang.stickerRoomEmpty || 'No group stickers yet. Tap Add to upload for the room.')
+          : (lang.stickerRoomEmptyMember || 'No group stickers yet. Only the owner or admins can add stickers.'))
         : (lang.stickerMineEmpty || 'No personal stickers yet. Tap Add to save on this device.');
       empty.innerHTML =
         '<div class="sticker-empty-icon" aria-hidden="true">'
@@ -1822,6 +1855,12 @@ async function removeStickerItem(sticker, pack) {
 
 async function sharePersonalToRoom(sticker) {
   if (!sticker || !sticker.data || state.activeKind !== 'room' || !state.activeId) return;
+  if (!canEditRoomStickerPack()) {
+    if (typeof notifyError === 'function') {
+      notifyError(lang.stickerRoomAdminOnly || 'Only the room owner or admins can edit the group sticker pack');
+    }
+    return;
+  }
   if (typeof Tapp.federation.addRoomSticker !== 'function') {
     if (typeof notifyError === 'function') {
       notifyError(lang.stickerApiMissing || 'Sticker API unavailable (update Myriad host)');
@@ -1863,6 +1902,12 @@ async function sharePersonalToRoom(sticker) {
 
 function pickStickerImage() {
   if (_stickerBusy) return;
+  if (_stickerTab === 'room' && !canEditRoomStickerPack()) {
+    if (typeof notifyError === 'function') {
+      notifyError(lang.stickerRoomAdminOnly || 'Only the room owner or admins can edit the group sticker pack');
+    }
+    return;
+  }
   if (_stickerTab === 'room' && getRoomStickersList().length >= STICKER_ROOM_MAX) {
     if (typeof notifyError === 'function') {
       notifyError(lang.stickerRoomFull || 'Group pack is full');
@@ -1882,19 +1927,23 @@ function pickStickerImage() {
  * @returns {Promise<'mine'|'room'|null>}
  */
 async function resolveStickerAddTarget(target) {
-  if (target === 'mine' || target === 'room') return target;
-  // auto: follow open sticker tab, else room if in group, else mine
+  if (target === 'mine') return 'mine';
+  if (target === 'room') {
+    return canEditRoomStickerPack() ? 'room' : 'mine';
+  }
+  // auto: follow open sticker tab, else room if admin in group, else mine
   if (target === 'auto' || !target) {
-    if (_stickerPanelOpen && _stickerTab === 'room' && state.activeKind === 'room') return 'room';
+    if (_stickerPanelOpen && _stickerTab === 'room' && state.activeKind === 'room' && canEditRoomStickerPack()) {
+      return 'room';
+    }
     if (_stickerPanelOpen && _stickerTab === 'mine') return 'mine';
-    if (state.activeKind === 'room') {
-      // Prefer ask when both packs make sense
+    if (state.activeKind === 'room' && canEditRoomStickerPack()) {
       return pickStickerAddTargetInteractive();
     }
     return 'mine';
   }
   if (target === 'ask') {
-    if (state.activeKind !== 'room') return 'mine';
+    if (state.activeKind !== 'room' || !canEditRoomStickerPack()) return 'mine';
     return pickStickerAddTargetInteractive();
   }
   return 'mine';
@@ -1903,6 +1952,11 @@ async function resolveStickerAddTarget(target) {
 /** Small chooser: mine vs group pack. Returns null if cancelled. */
 function pickStickerAddTargetInteractive() {
   return new Promise(function (resolve) {
+    var canRoom = canEditRoomStickerPack() && state.activeKind === 'room';
+    if (!canRoom) {
+      resolve('mine');
+      return;
+    }
     var overlay = document.createElement('div');
     overlay.className = 'sticker-target-overlay';
     overlay.dataset.aroDismissable = '1';
@@ -1966,6 +2020,12 @@ async function addImageDataAsSticker(dataUrl, opts) {
     if (state.activeKind !== 'room' || !state.activeId) {
       if (typeof notifyError === 'function') {
         notifyError(lang.stickerNeedRoom || 'Open a group chat to add group stickers');
+      }
+      return false;
+    }
+    if (!canEditRoomStickerPack()) {
+      if (typeof notifyError === 'function') {
+        notifyError(lang.stickerRoomAdminOnly || 'Only the room owner or admins can edit the group sticker pack');
       }
       return false;
     }
@@ -2071,20 +2131,6 @@ function getMessageImageDataUrl(msg) {
   if (!data || typeof data !== 'string') return '';
   if (String(data).indexOf('data:image/') !== 0) return '';
   return data;
-}
-
-function messageLooksLikeImage(msg) {
-  if (!msg) return false;
-  if (getMessageImageDataUrl(msg)) return true;
-  var payload = msg.payload;
-  if (typeof payload === 'string') {
-    try { payload = JSON.parse(payload); } catch (e) { payload = null; }
-  }
-  if (!payload || typeof payload !== 'object') return false;
-  var mt = msg.message_type || '';
-  if (mt === 'image') return true;
-  if (payload.mime_type && String(payload.mime_type).indexOf('image/') === 0) return true;
-  return false;
 }
 
 /**

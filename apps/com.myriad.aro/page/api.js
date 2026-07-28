@@ -32,10 +32,18 @@ async function loadConversations() {
       console.error('[Aro] getRooms failed:', results[1].reason);
       errors.push(String(results[1].reason));
     }
-    renderConvList();
+    // Paint list on next frame so openConversation shell can paint first under load bursts
+    if (typeof aroScheduleFrame === 'function') {
+      aroScheduleFrame('convList', function () {
+        if (typeof renderConvList === 'function') renderConvList();
+      });
+    } else if (typeof renderConvList === 'function') {
+      renderConvList();
+    }
     if (errors.length > 0 && state.channels.length === 0 && state.rooms.length === 0) {
       var list = $('conv-list');
       if (list) {
+        state._convListFp = '';
         list.innerHTML = '<div class="conv-empty conv-empty-fill" style="color:#b91c1c;font-size:12px;line-height:1.5;max-width:220px;text-align:center">'
           + '<div style="font-weight:600;margin-bottom:4px">' + esc(lang.loadFail || 'Load failed') + '</div>'
           + '<div style="opacity:.85;white-space:pre-wrap">' + esc(errors.join('\n')) + '</div></div>';
@@ -126,10 +134,15 @@ async function openConversation(kind, id) {
   state.roomDetail = null;
   state.chatLoadError = null;
   state.chatOpening = true;
+  // Fresh window — unknown whether older pages exist until first page size is known
+  if (typeof ensureHistoryState === 'function') {
+    try { ensureHistoryState().hasMoreMain = null; } catch (eHm) { /* ignore */ }
+  }
   // Drop previous composer lock immediately; re-lock channels until detail proves writable.
   if (typeof clearPendingAttach === 'function') clearPendingAttach();
   if (typeof clearQuote === 'function') clearQuote();
   if (typeof closeAttachMenu === 'function') closeAttachMenu();
+  if (typeof closeMentionPicker === 'function') closeMentionPicker();
   if (typeof updateSendState === 'function') updateSendState();
 
   // Optimistic header from list so A→B does not flash a blank name.
@@ -197,7 +210,7 @@ async function openConversation(kind, id) {
     if (kind === 'channel') {
       var results = await Promise.all([
         Tapp.federation.getChannel(id),
-        Tapp.federation.getMessages(id, undefined, 200),
+        Tapp.federation.getMessages(id, undefined, MSG_WINDOW_LIMIT),
       ]);
       if (!isConversationCurrent(kind, id, gen)) return;
       if (results[0]) {
@@ -217,13 +230,17 @@ async function openConversation(kind, id) {
       if (results[1]) {
         state.messages = results[1].messages || [];
         state.messagesFp = messagesFingerprint(state.messages);
+        if (typeof ensureHistoryState === 'function') {
+          ensureHistoryState().hasMoreMain =
+            state.messages.length >= (MSG_WINDOW_LIMIT || 50);
+        }
       }
     } else {
       // Pending invites cannot load messages (403) — use allSettled so detail/members still open
       var roomParts = await Promise.allSettled([
         Tapp.federation.getRoom(id),
         Tapp.federation.getRoomMembers(id),
-        Tapp.federation.getRoomMessages(id, undefined, 200),
+        Tapp.federation.getRoomMessages(id, undefined, MSG_WINDOW_LIMIT),
       ]);
       if (!isConversationCurrent(kind, id, gen)) return;
       if (roomParts[0].status === 'fulfilled' && roomParts[0].value) {
@@ -251,12 +268,17 @@ async function openConversation(kind, id) {
       if (roomParts[2].status === 'fulfilled' && roomParts[2].value) {
         state.messages = roomParts[2].value.messages || [];
         state.messagesFp = messagesFingerprint(state.messages);
+        if (typeof ensureHistoryState === 'function') {
+          ensureHistoryState().hasMoreMain =
+            state.messages.length >= (MSG_WINDOW_LIMIT || 50);
+        }
         // getRoomMessages marks last_read_at server-side; clear badge immediately.
         clearRoomUnreadLocal(id);
       } else {
         // pending membership: empty transcript is expected
         state.messages = [];
         state.messagesFp = '';
+        if (typeof ensureHistoryState === 'function') ensureHistoryState().hasMoreMain = false;
       }
     }
   } catch (e) {
@@ -305,257 +327,7 @@ async function openConversation(kind, id) {
  * E2E readiness for active conversation.
  * @returns {{ status: 'none'|'waiting'|'established', label: string, peerCount?: number }}
  */
-function getE2eStatusForActive() {
-  try {
-    if (state.activeKind === 'channel' && state.channelDetail) {
-      var props = state.channelDetail.properties || {};
-      var e2e = props.e2e || props.E2E || null;
-      if (!e2e) return { status: 'none', label: '' };
-      var hasLocal = !!(e2e.local_public_key);
-      var hasRemote = !!(e2e.remote_public_key);
-      var established = e2e.established === true || e2e.established === 'true' || (hasLocal && hasRemote);
-      if (established && hasLocal && hasRemote) {
-        return {
-          status: 'established',
-          label: lang.e2eEstablished || 'End-to-end encryption active',
-        };
-      }
-      if (hasLocal && !hasRemote) {
-        return {
-          status: 'waiting',
-          label: lang.e2eLocalOnly || lang.e2eWaitingPeer || 'Waiting for peer encryption key',
-        };
-      }
-      if (!hasLocal && hasRemote) {
-        return {
-          status: 'waiting',
-          label: lang.e2eWaitingPeer || 'Waiting for peer encryption key',
-        };
-      }
-      return { status: 'none', label: '' };
-    }
-    if (state.activeKind === 'room') {
-      // Room multi-recipient: encrypt only when ≥2 public keys are published
-      // (self + at least one peer). Keys come from getRoom.shared_data_config.
-      var rd = state.roomDetail || {};
-      var shared = rd.shared_data_config || rd.sharedDataConfig || {};
-      var re2e = (shared.e2e || {});
-      var keys = re2e.published_keys || re2e.publishedKeys || {};
-      var n = 0;
-      var hasLocalKey = false;
-      if (keys && typeof keys === 'object') {
-        for (var k in keys) {
-          if (Object.prototype.hasOwnProperty.call(keys, k) && keys[k]) {
-            n++;
-            if (state.localActorUrl && typeof sameActorUrl === 'function'
-              ? sameActorUrl(k, state.localActorUrl)
-              : (state.localActorUrl && k === state.localActorUrl)) {
-              hasLocalKey = true;
-            }
-            if (k === '__local__') hasLocalKey = true;
-          }
-        }
-      }
-      // Established: ≥2 published keys, and (if we know local actor) our key is among them.
-      // Solo room stays waiting until a peer publishes.
-      if (n >= 2 && (hasLocalKey || !state.localActorUrl)) {
-        return {
-          status: 'established',
-          label: lang.e2eEstablished || 'End-to-end encryption active',
-          peerCount: n,
-        };
-      }
-      if (n >= 1) {
-        return {
-          status: 'waiting',
-          label: hasLocalKey
-            ? (lang.e2eLocalOnly || lang.e2eWaitingPeer || 'Waiting for peer encryption key')
-            : (lang.e2eWaitingPeer || 'Waiting for peer encryption key'),
-          peerCount: n,
-        };
-      }
-      return { status: 'none', label: '', peerCount: 0 };
-    }
-  } catch (e0) { /* ignore */ }
-  return { status: 'none', label: '' };
-}
-
-/**
- * Whether active channel/room can encrypt (both sides have keys / room has peers).
- * Used so we do not force encrypt=true into a half-open session.
- */
-function isE2eReadyForActive() {
-  return getE2eStatusForActive().status === 'established';
-}
-
-var E2E_LOCK_SVG = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>';
-
-/** Header meta badge HTML for current E2E status (empty when none). */
-function e2eStatusBadgeHtml() {
-  var st = getE2eStatusForActive();
-  if (st.status === 'established') {
-    return '<span class="meta-badge badge-e2e-on" title="' + esc(st.label) + '">'
-      + E2E_LOCK_SVG + esc(st.label) + '</span>';
-  }
-  if (st.status === 'waiting') {
-    return '<span class="meta-badge badge-e2e-wait" title="' + esc(st.label) + '">'
-      + E2E_LOCK_SVG + esc(st.label) + '</span>';
-  }
-  return '';
-}
-
-/** Banner under chat header when encryption is live. */
-function renderE2eReadyBanner() {
-  var el = $('e2e-ready-banner');
-  if (!el) return;
-  var st = getE2eStatusForActive();
-  if (st.status === 'established') {
-    var text = lang.e2eEstablishedBanner || st.label
-      || 'Messages in this chat are end-to-end encrypted';
-    el.innerHTML = E2E_LOCK_SVG + '<span>' + esc(text) + '</span>';
-    el.hidden = false;
-    el.setAttribute('aria-label', text);
-  } else {
-    el.innerHTML = '';
-    el.hidden = true;
-  }
-}
-
-/**
- * After key publish / open: if session just became established, toast once per conversation.
- */
-function maybeAnnounceE2eEstablished() {
-  var st = getE2eStatusForActive();
-  if (st.status !== 'established') return;
-  if (!state._e2eAnnounced) state._e2eAnnounced = {};
-  var key = (state.activeKind || '') + ':' + (state.activeId || '');
-  if (state._e2eAnnounced[key]) return;
-  state._e2eAnnounced[key] = true;
-  try {
-    Tapp.ui.showNotification({
-      title: lang.e2eEstablished || 'End-to-end encryption active',
-      message: lang.e2eEstablishedBanner || '',
-      type: 'success',
-    });
-  } catch (e0) { /* ignore */ }
-}
-
-/** Auto-publish E2E keys when opening an active channel/room (if API present). */
-async function maybePublishE2eKeys() {
-  if (typeof Tapp === 'undefined' || !Tapp.federation) return;
-  var s = state.aroSettings || (typeof loadAroSettings === 'function' ? loadAroSettings() : null);
-  if (s && s.autoE2eOnOpen === false) return;
-  // Dedupe per open: opening chat used to mint a NEW keypair every time, which
-  // broke decrypt and left a trail of outbound KeyExchange JSON in the transcript.
-  if (!state._e2ePublishOnce) state._e2ePublishOnce = {};
-  var onceKey = (state.activeKind || '') + ':' + (state.activeId || '');
-  if (state._e2ePublishOnce[onceKey]) return;
-
-  if (state.activeKind === 'channel' && state.activeId
-    && typeof Tapp.federation.initiateChannelE2e === 'function') {
-    var st = state.channelDetail && state.channelDetail.status;
-    if (st === 'active' || st === 'accepted') {
-      // Already have local key → backend will reuse; skip noisy re-publish if established
-      var chE2e = state.channelDetail && state.channelDetail.properties
-        && state.channelDetail.properties.e2e;
-      if (chE2e && chE2e.local_public_key && chE2e.remote_public_key) {
-        state._e2ePublishOnce[onceKey] = true;
-        return;
-      }
-      try {
-        await Tapp.federation.initiateChannelE2e(state.activeId);
-        state._e2ePublishOnce[onceKey] = true;
-        // Refresh channel detail so e2e.established / keys appear in header
-        if (typeof Tapp.federation.getChannel === 'function') {
-          try {
-            var chFresh = await Tapp.federation.getChannel(state.activeId);
-            if (chFresh) state.channelDetail = chFresh.data || chFresh;
-          } catch (eRef) { /* ignore */ }
-        }
-        if (typeof renderChatHeader === 'function') renderChatHeader();
-        if (typeof maybeAnnounceE2eEstablished === 'function') maybeAnnounceE2eEstablished();
-      } catch (e) {
-        console.debug('[Aro] channel E2E exchange skipped', e);
-      }
-    }
-  } else if (state.activeKind === 'room' && state.activeId
-    && typeof Tapp.federation.initiateRoomE2e === 'function') {
-    try {
-      await Tapp.federation.initiateRoomE2e(state.activeId);
-      state._e2ePublishOnce[onceKey] = true;
-      if (typeof Tapp.federation.getRoom === 'function') {
-        try {
-          var rmFresh = await Tapp.federation.getRoom(state.activeId);
-          if (rmFresh) state.roomDetail = rmFresh.data || rmFresh;
-        } catch (eRef2) { /* ignore */ }
-      }
-      if (typeof renderChatHeader === 'function') renderChatHeader();
-      if (typeof maybeAnnounceE2eEstablished === 'function') maybeAnnounceE2eEstablished();
-    } catch (e) {
-      console.debug('[Aro] room E2E publish skipped', e);
-    }
-  }
-}
-
-async function doRoomE2eExchange() {
-  if (!state.activeId || state.activeKind !== 'room') return;
-  if (typeof Tapp.federation.initiateRoomE2e !== 'function') return;
-  try {
-    var res = await Tapp.federation.initiateRoomE2e(state.activeId);
-    var n = (res && (res.published_key_count != null ? res.published_key_count : res.data && res.data.published_key_count)) || '';
-    if (typeof Tapp.federation.getRoom === 'function') {
-      try {
-        var rm2 = await Tapp.federation.getRoom(state.activeId);
-        if (rm2) state.roomDetail = rm2.data || rm2;
-      } catch (eR) { /* ignore */ }
-    }
-    // Optimistic patch if getRoom still omits shared_data_config (older hosts).
-    // Prefer getRoom's published_keys when present; only seed self-key when map empty.
-    if (state.roomDetail && res && (res.public_key || (res.data && res.data.public_key))) {
-      var pk = res.public_key || res.data.public_key;
-      var sdc = state.roomDetail.shared_data_config || {};
-      var e2eObj = sdc.e2e || {};
-      var pkeys = e2eObj.published_keys || e2eObj.publishedKeys || {};
-      var keyCount = 0;
-      if (pkeys && typeof pkeys === 'object') {
-        for (var pkK in pkeys) {
-          if (Object.prototype.hasOwnProperty.call(pkeys, pkK) && pkeys[pkK]) keyCount++;
-        }
-      }
-      if (keyCount === 0 && pk) {
-        // Use a stable placeholder only when we have no actor URL yet — never
-        // invent a second key entry that could false-trigger "established".
-        var selfKey = state.localActorUrl || '__local__';
-        pkeys[selfKey] = pk;
-      }
-      e2eObj.published_keys = pkeys;
-      sdc.e2e = e2eObj;
-      state.roomDetail.shared_data_config = sdc;
-    }
-    if (typeof renderChatHeader === 'function') renderChatHeader();
-    var est = getE2eStatusForActive();
-    try {
-      if (est.status === 'established') {
-        Tapp.ui.showNotification({
-          title: lang.e2eEstablished || 'End-to-end encryption active',
-          message: lang.e2eEstablishedBanner || '',
-          type: 'success',
-        });
-        if (typeof maybeAnnounceE2eEstablished === 'function') maybeAnnounceE2eEstablished();
-      } else {
-        Tapp.ui.showNotification({
-          title: lang.e2ePublished || 'Encryption key shared with this chat',
-          message: est.label
-            || lang.e2ePublishDesc
-            || (n ? String(n) : undefined),
-          type: 'success',
-        });
-      }
-    } catch (e0) { /* ignore */ }
-  } catch (e) {
-    notifyError(lang.e2eFail || lang.sendFail || 'E2E failed', e);
-  }
-}
+// E2E UI → page/e2eUi.js
 
 async function doTransferOwnership() {
   if (!state.activeId || state.activeKind !== 'room') return;
@@ -667,6 +439,7 @@ async function doSend() {
   updateSendState();
   closeAttachMenu();
   if (typeof closeStickerPanel === 'function') closeStickerPanel();
+  if (typeof closeMentionPicker === 'function') closeMentionPicker();
   closeMsgMenu();
 
   var sendReq = null;
@@ -812,6 +585,44 @@ async function doSend() {
       clearQuote();
     }
 
+    // Attach structured @mentions (picker + free-typed @Name against roster)
+    if (ctx.text && typeof extractMentionsFromText === 'function'
+      && typeof getMentionCandidates === 'function') {
+      var mentionList = extractMentionsFromText(ctx.text, getMentionCandidates());
+      // Also resolve against full room roster (incl. self) so "@me" style works
+      if (ctx.kind === 'room' && state.members && state.members.length) {
+        var rosterCands = [];
+        state.members.forEach(function (m) {
+          var st = m.membership_status || m.status || 'active';
+          if (st !== 'active') return;
+          var nm = (m.display_name || m.username || (m.actor_url || '').split('/').pop() || '').trim();
+          if (!nm) return;
+          rosterCands.push({
+            actor_url: m.actor_url || '',
+            name: nm,
+            username: (m.username || '').trim(),
+          });
+        });
+        var fromRoster = extractMentionsFromText(ctx.text, rosterCands);
+        // Merge unique by actor_url
+        var seenA = {};
+        mentionList.forEach(function (m) {
+          var k = m.actor_url || m.name;
+          if (k) seenA[k] = true;
+        });
+        fromRoster.forEach(function (m) {
+          var k = m.actor_url || m.name;
+          if (k && !seenA[k]) {
+            seenA[k] = true;
+            mentionList.push(m);
+          }
+        });
+      }
+      if (mentionList.length > 0) {
+        msgPayload.mentions = mentionList;
+      }
+    }
+
     sendReq = { payload: msgPayload, message_type: msgType };
     if (replyTo) sendReq.reply_to = replyTo;
     // Prefer E2E only when session looks established. ARO-02: never auto-downgrade to plaintext
@@ -822,6 +633,26 @@ async function doSend() {
     if (!forcePlain && state.e2ePreferEncrypt !== false && isE2eReadyForActive()) {
       sendReq.encrypt = true;
     }
+
+    // Optimistic bubble for text + light inline image/file (skip chunked / huge / packages)
+    var optId = null;
+    var dataLen = (msgPayload && msgPayload.data) ? String(msgPayload.data).length : 0;
+    var lightMedia = (msgType === 'image' || msgType === 'file') && dataLen > 0 && dataLen <= 350000;
+    var canOptimistic = !forcePlain
+      && !(msgPayload && msgPayload.install_package)
+      && !(msgPayload && msgPayload.transfer_id)
+      && (msgType === 'text' || lightMedia);
+    if (canOptimistic && typeof pushOptimisticMessage === 'function'
+      && state.activeKind === ctx.kind && state.activeId === ctx.id) {
+      var optPayload = msgPayload;
+      try { optPayload = JSON.parse(JSON.stringify(msgPayload)); } catch (eCp) { optPayload = msgPayload; }
+      optId = pushOptimisticMessage(msgType, optPayload, {
+        replyTo: replyTo,
+        encrypt: !!sendReq.encrypt,
+      });
+      ctx.optId = optId;
+    }
+
     var sendRes;
     if (ctx.kind === 'channel') {
       sendRes = await Tapp.federation.sendMessage(ctx.id, sendReq);
@@ -831,8 +662,20 @@ async function doSend() {
     if (typeof noteDeliveryEnqueue === 'function') noteDeliveryEnqueue(sendRes);
     if (state.activeKind === ctx.kind && state.activeId === ctx.id) {
       await pollMessages(true);
+      // Ensure optimistic row is gone even if server id differs before prune matched
+      if (optId && typeof pruneOptimisticMessages === 'function') {
+        pruneOptimisticMessages({ id: optId });
+        if (typeof scheduleRenderMessages === 'function') {
+          scheduleRenderMessages({ stickBottom: true, forceFull: true });
+        }
+      }
     }
   } catch (e) {
+    // Remove failed optimistic bubble
+    if (ctx.optId && typeof pruneOptimisticMessages === 'function') {
+      pruneOptimisticMessages({ id: ctx.optId });
+      if (typeof renderMessages === 'function') renderMessages({ forceFull: true, stickBottom: true });
+    }
     // Restore draft fully on failure (text; attachment already cleared only after successful read)
     if (ctx.text) input.value = ctx.text;
     if (ctx.attach && !state.pendingAttach) {
@@ -974,141 +817,7 @@ async function refreshDeliveryHealth() {
   }
 }
 
-/** Fingerprint message list so pin/content changes refresh even when count stays the same. */
-function messagesFingerprint(msgs) {
-  if (!msgs || !msgs.length) return '0';
-  var last = msgs[msgs.length - 1] || {};
-  var pins = 0;
-  var ids = [];
-  for (var i = 0; i < msgs.length; i++) {
-    if (msgs[i].is_pinned) pins++;
-    if (i === 0 || i === msgs.length - 1 || msgs[i].is_pinned) {
-      ids.push((msgs[i].message_id || '') + (msgs[i].is_pinned ? '*' : ''));
-    }
-  }
-  // Include a slice of last payload so ciphertext→plaintext decrypt refreshes UI
-  // even when message_id/count stay the same (WS envelope vs GET decrypt race).
-  var lastBody = '';
-  try {
-    var lp = last.payload;
-    if (typeof lp === 'string') lastBody = lp.slice(0, 48);
-    else if (lp && typeof lp === 'object') {
-      lastBody = (lp.text || lp.ciphertext || lp.title || lp.filename || JSON.stringify(lp)).toString().slice(0, 48);
-    }
-  } catch (eFp) { /* ignore */ }
-  return msgs.length + '|' + (last.message_id || '') + '|' + (last.created_at || '') + '|' + pins + '|' + ids.join(',') + '|' + lastBody;
-}
-
-/**
- * Prefer decrypted/plain payloads over WS ciphertext envelopes.
- * Host WS often echoes storage form {algorithm,ciphertext,...} while GET history
- * returns decrypted JSON — a late WS event must not clobber good plaintext.
- * Also: poll must not replace a good plain bubble with a failed-decrypt ciphertext.
- */
-function preferDisplayPayload(existingMsg, incomingMsg) {
-  var out = Object.assign({}, existingMsg || {}, incomingMsg || {});
-  var oldP = existingMsg && existingMsg.payload;
-  var newP = incomingMsg && incomingMsg.payload;
-  var oldEnc = typeof isE2eCiphertextEnvelope === 'function' && isE2eCiphertextEnvelope(oldP);
-  var newEnc = typeof isE2eCiphertextEnvelope === 'function' && isE2eCiphertextEnvelope(newP);
-  if (newEnc && oldP && !oldEnc) {
-    out.payload = oldP;
-    // Keep display flags consistent with retained plaintext
-    if (existingMsg && existingMsg.is_encrypted === false) out.is_encrypted = false;
-  } else if (oldEnc && newP && !newEnc) {
-    out.payload = newP;
-    out.is_encrypted = false;
-  } else if (!newEnc && newP) {
-    // Incoming is plain — clear stale encrypted flag from storage shape
-    if (out.is_encrypted && !isE2eCiphertextEnvelope(out.payload)) {
-      out.is_encrypted = false;
-    }
-  }
-  return out;
-}
-
-/** Merge server/WS lists without letting ciphertext stomp known-good plaintext. */
-function mergeMessageLists(prev, next) {
-  prev = Array.isArray(prev) ? prev : [];
-  next = Array.isArray(next) ? next : [];
-  if (!prev.length) return next.slice();
-  var byId = {};
-  for (var i = 0; i < prev.length; i++) {
-    var p = prev[i];
-    if (p && p.message_id) byId[p.message_id] = p;
-  }
-  var out = [];
-  for (var j = 0; j < next.length; j++) {
-    var n = next[j];
-    if (!n) continue;
-    var old = n.message_id ? byId[n.message_id] : null;
-    out.push(old ? preferDisplayPayload(old, n) : n);
-  }
-  return out;
-}
-
-var _decryptRefreshTimers = [];
-var _decryptRefreshAttempts = 0;
-function scheduleDecryptRefresh() {
-  // Burst retries: keys may land a moment after the first ciphertext WS event.
-  if (_decryptRefreshAttempts > 6) return;
-  _decryptRefreshAttempts += 1;
-  var delays = [100, 400, 1000, 2200];
-  delays.forEach(function (ms) {
-    var t = setTimeout(function () {
-      if (typeof pollMessages === 'function') {
-        pollMessages(true).catch(function () {});
-      }
-      // Reset attempt budget once we have no ciphertext left
-      if (typeof state !== 'undefined' && Array.isArray(state.messages)) {
-        var still = false;
-        for (var i = 0; i < state.messages.length; i++) {
-          if (typeof isE2eCiphertextEnvelope === 'function'
-            && isE2eCiphertextEnvelope(state.messages[i].payload)) {
-            still = true;
-            break;
-          }
-        }
-        if (!still) _decryptRefreshAttempts = 0;
-      }
-    }, ms);
-    _decryptRefreshTimers.push(t);
-  });
-  // Cap timer list
-  if (_decryptRefreshTimers.length > 16) {
-    _decryptRefreshTimers.splice(0, _decryptRefreshTimers.length - 16).forEach(function (id) {
-      try { clearTimeout(id); } catch (e) { /* ignore */ }
-    });
-  }
-}
-
-function mergeIncomingMessage(msg) {
-  if (!msg || !msg.message_id) return false;
-  // Realtime can race a conversation switch; never mutate without an active chat.
-  if (!state.activeId || !state.activeKind) return false;
-  var needsDecryptRefresh = typeof isE2eCiphertextEnvelope === 'function'
-    && isE2eCiphertextEnvelope(msg.payload);
-  for (var i = 0; i < state.messages.length; i++) {
-    if (state.messages[i].message_id === msg.message_id) {
-      var merged = preferDisplayPayload(state.messages[i], msg);
-      // If we still only have ciphertext, keep UI placeholder until poll decrypts
-      if (typeof isE2eCiphertextEnvelope === 'function'
-        && isE2eCiphertextEnvelope(merged.payload)) {
-        needsDecryptRefresh = true;
-      }
-      state.messages[i] = merged;
-      state.messagesFp = messagesFingerprint(state.messages);
-      renderMessages();
-      if (needsDecryptRefresh) scheduleDecryptRefresh();
-      return true;
-    }
-  }
-  state.messages.push(msg);
-  state.messagesFp = messagesFingerprint(state.messages);
-  renderMessages({ animateNew: true, newCount: 1 });
-  if (needsDecryptRefresh) scheduleDecryptRefresh();
-  return true;
-}
+// message fingerprint/merge/optimistic → page/msgSync.js
 
 function clearRosterConfirmTimers() {
   var timers = state.rosterConfirmTimers || [];
@@ -1332,42 +1041,48 @@ async function pollMessages(force) {
   try {
     var res;
     if (kind === 'channel') {
-      res = await Tapp.federation.getMessages(id, undefined, 200);
+      res = await Tapp.federation.getMessages(id, undefined, MSG_WINDOW_LIMIT);
     } else {
-      // Rooms: poll messages + roster together so joins/leaves converge even if
-      // the membership WS event was missed (common after reconnect / lag).
-      // Seq taken BEFORE await so a concurrent confirm-burst can win apply rights.
-      var pollSeq = (state.rosterFetchSeq = (state.rosterFetchSeq || 0) + 1);
-      var roomPoll = await Promise.allSettled([
-        Tapp.federation.getRoomMessages(id, undefined, 200),
-        Tapp.federation.getRoomMembers(id),
-      ]);
-      if (!isConversationCurrent(kind, id, gen)) return;
-      if (roomPoll[0].status === 'fulfilled') {
-        res = roomPoll[0].value;
-      }
-      if (
-        roomPoll[1].status === 'fulfilled'
-        && roomPoll[1].value
-        && pollSeq === state.rosterFetchSeq
-      ) {
-        var nextMembers = unwrapRoomMembers(roomPoll[1].value);
-        var prevMfp = typeof membersFingerprint === 'function'
-          ? membersFingerprint(state.members)
-          : '';
-        var nextMfp = typeof membersFingerprint === 'function'
-          ? membersFingerprint(nextMembers)
-          : String(nextMembers.length);
-        if (force || nextMfp !== prevMfp) {
-          state.members = nextMembers;
-          var ac = typeof activeMemberCountFromList === 'function'
-            ? activeMemberCountFromList(nextMembers)
-            : nextMembers.length;
-          if (typeof applyRoomMemberCount === 'function') applyRoomMemberCount(id, ac);
-          if (typeof renderMembers === 'function') renderMembers();
-          if (typeof renderChatHeader === 'function') renderChatHeader();
-          if (typeof renderConvList === 'function') renderConvList();
+      // Rooms: always poll messages. Roster only on force, boost window, or every 4th tick
+      // (membership WS + confirm bursts cover the common path; full dual-fetch was heavy).
+      state._roomMemberPollTick = (state._roomMemberPollTick || 0) + 1;
+      var boostActive = !!(state.rosterBoostUntil && Date.now() < state.rosterBoostUntil);
+      var shouldFetchMembers = !!force || boostActive || (state._roomMemberPollTick % 4 === 0);
+      if (shouldFetchMembers) {
+        var pollSeq = (state.rosterFetchSeq = (state.rosterFetchSeq || 0) + 1);
+        var roomPoll = await Promise.allSettled([
+          Tapp.federation.getRoomMessages(id, undefined, MSG_WINDOW_LIMIT),
+          Tapp.federation.getRoomMembers(id),
+        ]);
+        if (!isConversationCurrent(kind, id, gen)) return;
+        if (roomPoll[0].status === 'fulfilled') {
+          res = roomPoll[0].value;
         }
+        if (
+          roomPoll[1].status === 'fulfilled'
+          && roomPoll[1].value
+          && pollSeq === state.rosterFetchSeq
+        ) {
+          var nextMembers = unwrapRoomMembers(roomPoll[1].value);
+          var prevMfp = typeof membersFingerprint === 'function'
+            ? membersFingerprint(state.members)
+            : '';
+          var nextMfp = typeof membersFingerprint === 'function'
+            ? membersFingerprint(nextMembers)
+            : String(nextMembers.length);
+          if (force || nextMfp !== prevMfp) {
+            state.members = nextMembers;
+            var ac = typeof activeMemberCountFromList === 'function'
+              ? activeMemberCountFromList(nextMembers)
+              : nextMembers.length;
+            if (typeof applyRoomMemberCount === 'function') applyRoomMemberCount(id, ac);
+            if (typeof renderMembers === 'function') renderMembers();
+            if (typeof renderChatHeader === 'function') renderChatHeader();
+            if (typeof renderConvList === 'function') renderConvList();
+          }
+        }
+      } else {
+        res = await Tapp.federation.getRoomMessages(id, undefined, MSG_WINDOW_LIMIT);
       }
     }
     if (!isConversationCurrent(kind, id, gen)) return;
@@ -1385,7 +1100,33 @@ async function pollMessages(force) {
           ? mergeMessageLists(state.messages, msgs)
           : msgs;
         state.messages = mergedMsgs;
+        // Drop optimistic rows that now have real local copies in the tail.
+        if (typeof pruneOptimisticMessages === 'function') pruneOptimisticMessages({});
+        // Memory cap when living on the tail (history still reachable via load-older)
+        var MSG_STATE_MAX = 450;
+        if (state.messages.length > MSG_STATE_MAX) {
+          var nearBot = typeof isMessagesNearBottom === 'function'
+            ? isMessagesNearBottom($('messages'))
+            : true;
+          if (nearBot || force) {
+            var trimmed = state.messages.length - 350;
+            if (trimmed > 0) {
+              state.messages = state.messages.slice(trimmed);
+              if (typeof ensureHistoryState === 'function') {
+                ensureHistoryState().hasMoreMain = true;
+              }
+            }
+          }
+        }
+        mergedMsgs = state.messages;
         state.messagesFp = messagesFingerprint(mergedMsgs);
+        // Track whether more history likely exists above the live window
+        if (typeof ensureHistoryState === 'function') {
+          var hs = ensureHistoryState();
+          if (hs.hasMoreMain == null || force) {
+            hs.hasMoreMain = (msgs.length >= (MSG_WINDOW_LIMIT || 50));
+          }
+        }
         var stillCipher = false;
         for (var ci = 0; ci < mergedMsgs.length; ci++) {
           if (typeof isE2eCiphertextEnvelope === 'function'
@@ -1399,10 +1140,19 @@ async function pollMessages(force) {
         var grew = mergedMsgs.length > prevLen;
         var tailChanged = mergedMsgs.length
           && (mergedMsgs[mergedMsgs.length - 1].message_id || '') !== prevLast;
+        var paint = typeof scheduleRenderMessages === 'function'
+          ? scheduleRenderMessages
+          : renderMessages;
+        // force=true is open/send/decrypt — stick to bottom. Background poll preserves scroll.
+        var stick = !!force;
         if (grew && tailChanged && !state.skipMsgAppear && !hadError) {
-          renderMessages({ animateNew: true, newCount: Math.min(mergedMsgs.length - prevLen, 3) });
+          paint({
+            animateNew: true,
+            newCount: Math.min(mergedMsgs.length - prevLen, 3),
+            stickBottom: stick,
+          });
         } else {
-          renderMessages();
+          paint({ forceFull: true, stickBottom: stick });
         }
       }
     }
@@ -1629,6 +1379,20 @@ function handleRealtimeMessage(ev) {
       || data.event === 'member_removed'
       || data.event === 'member_kicked'
     ) ? data.actor : null;
+    // Owner promoted/demoted an admin — refresh roster (and header role badge).
+    if (data.event === 'member_role_changed' && data.actor && data.role) {
+      (state.members || []).forEach(function (m) {
+        if (m.actor_url === data.actor
+          || (typeof sameActorUrl === 'function' && sameActorUrl(m.actor_url, data.actor))) {
+          m.role = data.role;
+        }
+      });
+      if (typeof isLocalActor === 'function' && isLocalActor(data.actor) && state.roomDetail) {
+        state.roomDetail.my_role = data.role;
+      }
+      if (typeof renderMembers === 'function') renderMembers();
+      if (typeof renderChatHeader === 'function') renderChatHeader();
+    }
     confirmRoomMembers(roomIdForMembers, genForMembers, {
       optimisticActor: joinActor || undefined,
       optimisticRole: data.role || 'member',
@@ -1866,473 +1630,46 @@ async function doInviteMember(actorUrl) {
   }
 }
 
-// ==================== Invite Popover ====================
-// Create popover dynamically on document.body to escape all overflow clipping
-var _invitePopover = null;
-function ensureInvitePopover() {
-  if (_invitePopover) return _invitePopover;
-  var div = document.createElement('div');
-  div.id = 'invite-popover';
-  div.className = 'invite-popover';
-  div.style.display = 'none';
-  div.style.pointerEvents = 'none';
-  var contactSearchPh = lang.searchContacts || lang.pickerSearchPlaceholder || 'Search…';
-  div.innerHTML = '<div class="invite-pop-section">'
-    + '<div class="invite-pop-label" id="invite-pop-contacts-label">' + esc(lang.inviteFromContacts) + '</div>'
-    + '<div class="aro-search-bar aro-search-bar-compact" style="padding:0 0 6px;border:none">'
-    + '<input id="invite-contact-search" class="aro-search-input" type="search" autocomplete="off" enterkeyhint="search" placeholder="' + esc(contactSearchPh) + '" aria-label="' + esc(contactSearchPh) + '" />'
-    + '</div>'
-    + '<div id="invite-pop-list" class="invite-pop-list"></div>'
-    + '<div id="invite-pop-empty" class="invite-pop-empty" style="display:none">' + esc(lang.noContacts) + '</div>'
-    + '</div>'
-    + '<div class="invite-pop-divider"></div>'
-    + '<div class="invite-pop-section">'
-    + '<div class="invite-pop-label" id="invite-pop-manual-label">' + esc(lang.inviteManual) + '</div>'
-    + '<div class="invite-pop-manual">'
-    + '<input id="invite-input" class="invite-input" type="text" placeholder="' + esc(lang.invitePlaceholder) + '" />'
-    + '<button id="invite-btn" class="invite-pop-send">'
-    + '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>'
-    + '</button>'
-    + '</div>'
-    + '</div>';
-  document.body.appendChild(div);
-  // Wire events on the popover elements
-  var inviteBtn = div.querySelector('#invite-btn');
-  if (inviteBtn) inviteBtn.addEventListener('click', function () { doInviteMember(); });
-  var inviteInput = div.querySelector('#invite-input');
-  if (inviteInput) inviteInput.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') { e.preventDefault(); doInviteMember(); }
-  });
-  var contactSearch = div.querySelector('#invite-contact-search');
-  if (contactSearch) {
-    contactSearch.addEventListener('input', function () {
-      if (!state.search) state.search = {};
-      state.search.invite = contactSearch.value || '';
-      renderInvitePopoverContacts();
-    });
-  }
-  _invitePopover = div;
-  return div;
-}
+// → roomUi.js
 
-function toggleInvitePopover(e) {
-  e && e.stopPropagation();
-  var pop = ensureInvitePopover();
-  var toggle = $('invite-toggle');
-  if (!toggle) return;
-  var isOpen = pop.style.display !== 'none';
-  if (isOpen) {
-    closeInvitePopover();
-  } else {
-    var rect = toggle.getBoundingClientRect();
-    pop.style.top = (rect.bottom + 6) + 'px';
-    pop.style.left = Math.max(4, rect.right - 240) + 'px';
-    pop.classList.remove('aro-leaving');
-    pop.hidden = false;
-    try { pop.removeAttribute('hidden'); } catch (eH) { /* ignore */ }
-    pop.style.pointerEvents = 'auto';
-    pop.style.display = 'block';
-    aroPlayEnter(pop, 'aro-menu-enter');
-    renderInvitePopoverContacts();
-    var invInput = pop.querySelector('#invite-input');
-    if (invInput) {
-      try { invInput.focus(); } catch (e2) { /* ignore */ }
-    }
-  }
-}
-function closeInvitePopover() {
-  if (!_invitePopover) return;
-  // Always seal PE + display none (even if already half-closed).
-  try { _invitePopover.style.pointerEvents = 'none'; } catch (ePe) { /* ignore */ }
-  if (_invitePopover.style.display === 'none') {
-    try { _invitePopover.style.display = 'none'; } catch (eD) { /* ignore */ }
+// ==================== Member roles (owner) ====================
+async function doSetMemberRole(actorUrl, role) {
+  if (!state.activeId || state.activeKind !== 'room') return;
+  if (!actorUrl || (role !== 'admin' && role !== 'member')) return;
+  if (typeof Tapp.federation.setMemberRole !== 'function') {
+    notifyError(lang.setRoleUnsupported || lang.adminRequired || 'Not available');
     return;
   }
-  aroDismiss(_invitePopover, { ms: 120 });
-}
-function _invitePopoverOutsideClick(e) {
-  if (!_invitePopover || _invitePopover.style.display === 'none') return;
-  var wrap = $('invite-wrap');
-  if ((wrap && wrap.contains(e.target)) || _invitePopover.contains(e.target)) return;
-  closeInvitePopover();
-}
-/** Call from bindEvents after page bag is live (ARO-14). */
-function registerInvitePopoverOutsideGuard() {
-  pageListen(document, 'click', _invitePopoverOutsideClick);
-}
-
-function renderInvitePopoverContacts() {
-  var listEl = $('invite-pop-list');
-  var emptyEl = $('invite-pop-empty');
-  if (!listEl || !emptyEl) return;
-
-  // Get actor URLs of current room members for filtering (normalized)
-  var memberActors = {};
-  state.members.forEach(function (m) {
-    if (!m.actor_url) return;
-    memberActors[m.actor_url] = true;
-    var normalized = normalizeFederationUrl(m.actor_url);
-    if (normalized) memberActors[normalized] = true;
-  });
-
-  // Build contacts from existing channels (chat partners)
-  var contacts = [];
-  state.channels.forEach(function (ch) {
-    if (!ch.remote_actor_url || ch.status === 'closed') return;
-    var remoteNorm = normalizeFederationUrl(ch.remote_actor_url) || ch.remote_actor_url;
-    var alreadyMember = !!(memberActors[ch.remote_actor_url] || memberActors[remoteNorm]);
-    contacts.push({
-      name: ch.remote_actor_name || (ch.remote_actor_url || '').split('/').pop() || '?',
-      avatar: ch.remote_actor_avatar || '',
-      actorUrl: ch.remote_actor_url,
-      alreadyMember: alreadyMember,
-    });
-  });
-
-  if (contacts.length === 0) {
-    listEl.innerHTML = '';
-    emptyEl.style.display = '';
-    emptyEl.textContent = lang.noContacts;
-    return;
-  }
-
-  var inviteQ = normalizeSearchQuery((state.search && state.search.invite) || '');
-  if (inviteQ) {
-    contacts = contacts.filter(function (c) {
-      return matchesSearch(inviteQ, [c.name, c.actorUrl]);
-    });
-  }
-
-  if (contacts.length === 0) {
-    listEl.innerHTML = '';
-    emptyEl.style.display = '';
-    emptyEl.textContent = lang.searchNoResults || lang.noContacts;
-    return;
-  }
-
-  emptyEl.style.display = 'none';
-  var html = '';
-  contacts.forEach(function (c) {
-    var initial = (c.name[0] || '?').toUpperCase();
-    var shortUrl = (c.actorUrl || '').replace(/^https?:\/\//, '').split('/').slice(0, 2).join('/');
-    html += '<button class="invite-pop-contact' + (c.alreadyMember ? ' invite-pop-contact-disabled' : '') + '"'
-      + ' data-actor="' + esc(c.actorUrl) + '"' + (c.alreadyMember ? ' disabled' : '') + '>'
-      + '<div class="invite-pop-contact-avatar">'
-      + avatarContentHtml(c.avatar || '', c.name || initial)
-      + '</div>'
-      + '<div class="invite-pop-contact-info">'
-      + '<div class="invite-pop-contact-name">' + esc(c.name) + '</div>'
-      + '<div class="invite-pop-contact-url">' + esc(shortUrl) + '</div>'
-      + '</div>'
-      + (c.alreadyMember ? '<span class="invite-pop-contact-added">' + esc(lang.invited || lang.members) + '</span>' : '')
-      + '</button>';
-  });
-  listEl.innerHTML = html;
-
-  // Wire contact click handlers
-  listEl.querySelectorAll('.invite-pop-contact:not([disabled])').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      var actor = btn.getAttribute('data-actor');
-      if (actor) doInviteMember(actor);
-    });
-  });
-}
-
-// ==================== Room avatar (create / edit) ====================
-// Backend accepts data:image/* (≤ ~600KB) or https URL on create/updateRoom.
-var ROOM_AVATAR_DATA_MAX = 520000;
-var _editRoomAvatar = { dirty: false, dataUrl: '' };
-var _createRoomAvatar = { dirty: false, dataUrl: '' };
-
-function compressRoomAvatarDataUrl(dataUrl) {
-  return new Promise(function (resolve, reject) {
-    if (!dataUrl || typeof dataUrl !== 'string') {
-      reject(new Error('invalid image'));
-      return;
-    }
-    if (dataUrl.length <= ROOM_AVATAR_DATA_MAX && /^data:image\//i.test(dataUrl)) {
-      resolve(dataUrl);
-      return;
-    }
-    var img = new Image();
-    img.onload = function () {
-      try {
-        var maxSide = 512;
-        var w = img.naturalWidth || img.width || 1;
-        var h = img.naturalHeight || img.height || 1;
-        var scale = Math.min(1, maxSide / Math.max(w, h));
-        var cw = Math.max(1, Math.round(w * scale));
-        var ch = Math.max(1, Math.round(h * scale));
-        var canvas = document.createElement('canvas');
-        canvas.width = cw;
-        canvas.height = ch;
-        var ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error('canvas'));
-          return;
-        }
-        ctx.drawImage(img, 0, 0, cw, ch);
-        var out = '';
-        var qualities = [0.88, 0.75, 0.62, 0.5, 0.38, 0.28];
-        for (var i = 0; i < qualities.length; i++) {
-          out = canvas.toDataURL('image/jpeg', qualities[i]);
-          if (out.length <= ROOM_AVATAR_DATA_MAX) break;
-        }
-        var side = maxSide;
-        while (out.length > ROOM_AVATAR_DATA_MAX && side > 96) {
-          side = Math.floor(side * 0.75);
-          scale = Math.min(1, side / Math.max(w, h));
-          cw = Math.max(1, Math.round(w * scale));
-          ch = Math.max(1, Math.round(h * scale));
-          canvas.width = cw;
-          canvas.height = ch;
-          ctx.drawImage(img, 0, 0, cw, ch);
-          out = canvas.toDataURL('image/jpeg', 0.55);
-        }
-        if (out.length > ROOM_AVATAR_DATA_MAX) {
-          reject(new Error(lang.roomAvatarTooLarge || lang.stickerTooLarge || 'Image too large'));
-          return;
-        }
-        resolve(out);
-      } catch (e) {
-        reject(e);
-      }
-    };
-    img.onerror = function () { reject(new Error('image load failed')); };
-    img.src = dataUrl;
-  });
-}
-
-function paintRoomAvatarPreview(previewEl, url, name) {
-  if (!previewEl) return;
-  var safe = '';
-  if (url) {
-    if (typeof safeMessageImageUrl === 'function') safe = safeMessageImageUrl(url);
-    else if (typeof safeIconUrl === 'function') safe = safeIconUrl(url);
-    if (!safe && String(url).indexOf('data:image/') === 0 && url.length < ROOM_AVATAR_DATA_MAX + 20000) {
-      safe = url;
-    }
-    if (!safe && /^https?:\/\//i.test(String(url))) safe = String(url);
-  }
-  if (safe) {
-    previewEl.innerHTML = '<img src="' + esc(safe) + '" alt="" />';
-    previewEl.classList.add('has-image');
-  } else {
-    var initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
-    previewEl.textContent = initial;
-    previewEl.classList.remove('has-image');
-  }
-}
-
-async function handleRoomAvatarFile(file, which) {
-  if (!file || !file.type || file.type.indexOf('image/') !== 0) {
-    if (typeof notifyError === 'function') {
-      notifyError(lang.roomAvatarNeedImage || lang.stickerNeedImage || 'Please choose an image');
-    }
-    return;
-  }
-  if (file.size > 8 * 1024 * 1024) {
-    if (typeof notifyError === 'function') {
-      notifyError(lang.roomAvatarTooLarge || 'Image too large');
-    }
-    return;
-  }
+  var name = (actorUrl || '').split('/').pop() || actorUrl;
+  var confirmMsg = role === 'admin'
+    ? (lang.promoteAdminConfirm || 'Make {name} a group admin?').replace('{name}', name)
+    : (lang.demoteAdminConfirm || 'Remove admin from {name}?').replace('{name}', name);
+  if (!(await aroConfirm(confirmMsg, true))) return;
   try {
-    var dataUrl = typeof readFileAsDataURL === 'function'
-      ? await readFileAsDataURL(file)
-      : await new Promise(function (resolve, reject) {
-          var r = new FileReader();
-          r.onload = function () { resolve(r.result); };
-          r.onerror = function () { reject(r.error); };
-          r.readAsDataURL(file);
-        });
-    dataUrl = await compressRoomAvatarDataUrl(dataUrl);
-    if (which === 'create') {
-      _createRoomAvatar = { dirty: true, dataUrl: dataUrl };
-      paintRoomAvatarPreview($('create-room-avatar-preview'), dataUrl, ($('create-room-input') || {}).value);
+    await Tapp.federation.setMemberRole(state.activeId, actorUrl, role);
+    if (typeof loadRoomMembers === 'function') {
+      await loadRoomMembers(state.activeId);
+    } else if (typeof refreshRoomMembers === 'function') {
+      await refreshRoomMembers();
     } else {
-      _editRoomAvatar = { dirty: true, dataUrl: dataUrl };
-      paintRoomAvatarPreview(
-        $('edit-room-avatar-preview'),
-        dataUrl,
-        ($('edit-room-name') || {}).value || (state.roomDetail && state.roomDetail.name)
-      );
-    }
-  } catch (e) {
-    if (typeof notifyError === 'function') {
-      notifyError(lang.roomAvatarFail || lang.sendFail || 'Avatar failed', e);
-    }
-  }
-}
-
-function bindRoomAvatarUi() {
-  if (bindRoomAvatarUi._bound) return;
-  bindRoomAvatarUi._bound = true;
-  var editBtn = $('edit-room-avatar-btn');
-  var editInp = $('edit-room-avatar-input');
-  if (editBtn && editInp) {
-    editBtn.addEventListener('click', function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      editInp.value = '';
-      editInp.click();
-    });
-    editInp.addEventListener('change', function () {
-      if (this.files && this.files[0]) handleRoomAvatarFile(this.files[0], 'edit');
-    });
-  }
-  var createBtn = $('create-room-avatar-btn');
-  var createInp = $('create-room-avatar-input');
-  if (createBtn && createInp) {
-    createBtn.addEventListener('click', function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      createInp.value = '';
-      createInp.click();
-    });
-    createInp.addEventListener('change', function () {
-      if (this.files && this.files[0]) handleRoomAvatarFile(this.files[0], 'create');
-    });
-  }
-}
-
-// ==================== Edit Room ====================
-function showEditRoomDialog() {
-  if (!state.roomDetail) return;
-  var overlay = $('edit-room-dialog');
-  if (!overlay) return;
-  bindRoomAvatarUi();
-  _editRoomAvatar = { dirty: false, dataUrl: '' };
-  $('edit-room-name').value = state.roomDetail.name || '';
-  $('edit-room-desc').value = state.roomDetail.description || '';
-  var policySel = $('edit-room-invite-policy');
-  if (policySel) {
-    var pol = state.roomDetail.invite_policy || 'member-invite';
-    if (['admin-only', 'member-invite', 'open'].indexOf(pol) < 0) pol = 'member-invite';
-    policySel.value = pol;
-  }
-  paintRoomAvatarPreview(
-    $('edit-room-avatar-preview'),
-    state.roomDetail.avatar_url || '',
-    state.roomDetail.name || ''
-  );
-  var pubCb = $('edit-room-public');
-  var pubHint = $('edit-room-public-hint');
-  var idBox = $('edit-room-id-box');
-  var idVal = $('edit-room-id-value');
-  var alreadyPublic = !!state.roomDetail.is_public;
-  if (pubCb) {
-    pubCb.checked = alreadyPublic;
-    pubCb.disabled = alreadyPublic; // one-way: cannot uncheck once public
-    pubCb.setAttribute('aria-disabled', alreadyPublic ? 'true' : 'false');
-  }
-  if (pubHint) {
-    pubHint.style.display = '';
-    pubHint.textContent = alreadyPublic
-      ? (lang.makePublicLocked || 'Public rooms cannot be made private again.')
-      : (lang.makePublicHint || 'Public groups show a shareable room id. This cannot be undone.');
-  }
-  if (idBox && idVal) {
-    if (alreadyPublic && state.roomDetail.room_id) {
-      idBox.style.display = '';
-      idVal.textContent = typeof shareableRoomId === 'function'
-        ? shareableRoomId(state.roomDetail)
-        : state.roomDetail.room_id;
-    } else {
-      idBox.style.display = 'none';
-      idVal.textContent = '';
-    }
-  }
-  showAroOverlay(overlay);
-}
-
-function hideEditRoomDialog() {
-  var overlay = $('edit-room-dialog');
-  if (!overlay || overlay.style.display === 'none') return;
-  overlay.style.pointerEvents = 'none';
-  aroDismiss(overlay, {
-    ms: 170,
-    onDone: function () {
       try {
-        overlay.hidden = true;
-        overlay.style.pointerEvents = 'none';
-      } catch (e) { /* ignore */ }
-    },
-  });
-}
-
-async function doSaveRoom() {
-  if (!state.activeId || !state.roomDetail) return;
-  var nameVal = ($('edit-room-name').value || '').trim();
-  var descVal = ($('edit-room-desc').value || '').trim();
-  if (!nameVal) return;
-  var pubCb = $('edit-room-public');
-  var wantPublic = !!(pubCb && pubCb.checked);
-  var alreadyPublic = !!state.roomDetail.is_public;
-  var policySel = $('edit-room-invite-policy');
-  var invitePolicy = policySel ? (policySel.value || '').trim() : '';
-  var btn = $('edit-room-save');
-  btn && (btn.disabled = true, btn.textContent = lang.saving);
-  try {
-    var payload = { name: nameVal, description: descVal };
-    // Only send is_public when turning private→public (never send false once public).
-    if (!alreadyPublic && wantPublic) {
-      payload.is_public = true;
+        var list = await Tapp.federation.getRoomMembers(state.activeId);
+        var raw = (list && list.members) || list || [];
+        state.members = Array.isArray(raw) ? raw : state.members;
+      } catch (eL) { /* ignore */ }
     }
-    if (invitePolicy && ['admin-only', 'member-invite', 'open'].indexOf(invitePolicy) >= 0) {
-      payload.invite_policy = invitePolicy;
-    }
-    if (_editRoomAvatar.dirty && _editRoomAvatar.dataUrl) {
-      payload.avatar_url = _editRoomAvatar.dataUrl;
-    }
-    var updated = await Tapp.federation.updateRoom(state.activeId, payload);
-    var detail = updated && (updated.data || updated);
-    if (detail && (detail.room_id || detail.name || detail.avatar_url !== undefined)) {
-      state.roomDetail = detail;
-    } else {
-      state.roomDetail.name = nameVal;
-      state.roomDetail.description = descVal;
-      if (!alreadyPublic && wantPublic) state.roomDetail.is_public = true;
-      if (invitePolicy) state.roomDetail.invite_policy = invitePolicy;
-      if (_editRoomAvatar.dirty && _editRoomAvatar.dataUrl) {
-        state.roomDetail.avatar_url = _editRoomAvatar.dataUrl;
-      }
-    }
-    // Sync to room list
-    for (var i = 0; i < state.rooms.length; i++) {
-      if (state.rooms[i].room_id === state.activeId) {
-        state.rooms[i].name = state.roomDetail.name || nameVal;
-        state.rooms[i].description = state.roomDetail.description != null
-          ? state.roomDetail.description
-          : descVal;
-        if (state.roomDetail.avatar_url !== undefined) {
-          state.rooms[i].avatar_url = state.roomDetail.avatar_url;
-        }
-        if (!alreadyPublic && wantPublic) state.rooms[i].is_public = true;
-        if (state.roomDetail.is_public != null) state.rooms[i].is_public = !!state.roomDetail.is_public;
-        break;
-      }
-    }
-    _editRoomAvatar = { dirty: false, dataUrl: '' };
-    hideEditRoomDialog();
-    renderChatHeader();
-    renderConvList();
-    if (!alreadyPublic && wantPublic) {
-      try {
-        var shareIdAfter = typeof shareableRoomId === 'function'
-          ? shareableRoomId(state.roomDetail)
-          : state.activeId;
-        Tapp.ui.showNotification({
-          title: lang.publicGroup || 'Public',
-          message: (lang.roomId || 'Room ID') + ': ' + shareIdAfter,
-          type: 'success',
-        });
-      } catch (eN) { /* ignore */ }
-    }
+    if (typeof renderMembers === 'function') renderMembers();
+    if (typeof renderChatHeader === 'function') renderChatHeader();
+    try {
+      Tapp.ui.showNotification({
+        title: role === 'admin'
+          ? (lang.promoteAdminOk || 'Admin granted')
+          : (lang.demoteAdminOk || 'Admin removed'),
+        type: 'success',
+      });
+    } catch (eN) { /* ignore */ }
   } catch (e) {
-    notifyError(lang.saveFail, e);
-  } finally {
-    btn && (btn.disabled = false, btn.textContent = lang.save);
+    notifyError(lang.setRoleFail || lang.sendFail || 'Failed', e);
   }
 }
 
@@ -2386,6 +1723,7 @@ function exitActiveConversationUi(toastTitle, asError) {
   if (typeof clearPendingAttach === 'function') clearPendingAttach();
   if (typeof clearQuote === 'function') clearQuote();
   if (typeof closeAttachMenu === 'function') closeAttachMenu();
+  if (typeof closeMentionPicker === 'function') closeMentionPicker();
   if (typeof closeInvitePopover === 'function') closeInvitePopover();
   if (typeof resetHistoryOnConversationChange === 'function') resetHistoryOnConversationChange();
   if (typeof resetRoomFilesOnConversationChange === 'function') resetRoomFilesOnConversationChange();
@@ -2588,228 +1926,7 @@ async function doLeaveRoom() {
   }
 }
 
-// ==================== Create Dialog ====================
-function showCreateDialog() {
-  bindRoomAvatarUi();
-  _createRoomAvatar = { dirty: false, dataUrl: '' };
-  paintRoomAvatarPreview($('create-room-avatar-preview'), '', '');
-  var descCreate = $('create-room-desc');
-  if (descCreate) descCreate.value = '';
-  var overlay = $('create-dialog');
-  if (overlay) {
-    showAroOverlay(overlay);
-  }
-  switchCreateTab('channel');
-}
-
-function hideCreateDialog() {
-  var overlay = $('create-dialog');
-  var clearInputs = function () {
-    var channelInput = $('create-channel-input');
-    var roomInput = $('create-room-input');
-    var roomDesc = $('create-room-desc');
-    if (channelInput) channelInput.value = '';
-    if (roomInput) roomInput.value = '';
-    if (roomDesc) roomDesc.value = '';
-    _createRoomAvatar = { dirty: false, dataUrl: '' };
-    paintRoomAvatarPreview($('create-room-avatar-preview'), '', '');
-  };
-  if (!overlay || overlay.style.display === 'none' || overlay.hidden) {
-    if (overlay) {
-      try {
-        overlay.style.display = 'none';
-        overlay.style.pointerEvents = 'none';
-        overlay.hidden = true;
-      } catch (eSeal) { /* ignore */ }
-    }
-    clearInputs();
-    return;
-  }
-  overlay.style.pointerEvents = 'none';
-  aroDismiss(overlay, {
-    ms: 170,
-    onDone: function () {
-      try {
-        overlay.hidden = true;
-        overlay.style.pointerEvents = 'none';
-      } catch (eH) { /* ignore */ }
-      clearInputs();
-    },
-  });
-}
-
-function switchCreateTab(tab) {
-  var channelTab = $('create-tab-channel');
-  var roomTab = $('create-tab-room');
-  var channelForm = $('create-form-channel');
-  var roomForm = $('create-form-room');
-  if (!channelTab) return;
-  if (tab === 'channel') {
-    channelTab.classList.add('create-tab-active');
-    roomTab.classList.remove('create-tab-active');
-    channelForm.style.display = '';
-    roomForm.style.display = 'none';
-  } else {
-    roomTab.classList.add('create-tab-active');
-    channelTab.classList.remove('create-tab-active');
-    roomForm.style.display = '';
-    channelForm.style.display = 'none';
-  }
-}
-
-function flashCreateInput(input) {
-  if (!input) return;
-  input.classList.add('create-input-invalid');
-  try { input.focus(); } catch (e) { /* ignore */ }
-  setTimeout(function () { input.classList.remove('create-input-invalid'); }, 900);
-}
-
-async function doCreateChannel() {
-  var input = $('create-channel-input');
-  if (!input) return;
-  var remoteActor = input.value.trim();
-  if (!remoteActor) {
-    flashCreateInput(input);
-    try { Tapp.ui.showNotification({ title: lang.channelPlaceholder || lang.createFail, type: 'error' }); } catch (e0) {}
-    return;
-  }
-  var btn = $('create-channel-btn');
-  if (typeof setActionBusy === 'function') setActionBusy(btn, true, lang.creating || '…');
-  else if (btn) { btn.disabled = true; btn.textContent = lang.creating; }
-  try {
-    var result = await Tapp.federation.createChannel({ remote_actor: remoteActor });
-    hideCreateDialog();
-    await loadConversations();
-    if (result && result.channel_id) {
-      openConversation('channel', result.channel_id);
-    }
-  } catch (e) {
-    console.error('[Aro] createChannel error:', e);
-    notifyError(lang.createFail, e);
-  } finally {
-    if (typeof setActionBusy === 'function') setActionBusy(btn, false);
-    else if (btn) { btn.disabled = false; btn.textContent = lang.createChannel; }
-  }
-}
-
-async function doCreateRoom() {
-  var input = $('create-room-input');
-  if (!input) return;
-  var name = input.value.trim();
-  if (!name) {
-    flashCreateInput(input);
-    try { Tapp.ui.showNotification({ title: lang.roomPlaceholder || lang.createFail, type: 'error' }); } catch (e0) {}
-    return;
-  }
-  var descInp = $('create-room-desc');
-  var desc = descInp ? (descInp.value || '').trim() : '';
-  var pubCb = $('create-room-public');
-  var isPublic = !!(pubCb && pubCb.checked);
-  var btn = $('create-room-btn');
-  if (typeof setActionBusy === 'function') setActionBusy(btn, true, lang.creating || '…');
-  else if (btn) { btn.disabled = true; btn.textContent = lang.creating; }
-  try {
-    var createReq = {
-      name: name,
-      is_public: isPublic,
-      // Public rooms are joinable by id even if invite_policy stays default.
-      invite_policy: isPublic ? 'open' : undefined,
-    };
-    if (desc) createReq.description = desc;
-    if (_createRoomAvatar.dirty && _createRoomAvatar.dataUrl) {
-      createReq.avatar_url = _createRoomAvatar.dataUrl;
-    }
-    var result = await Tapp.federation.createRoom(createReq);
-    if (result && result.data) result = result.data;
-    hideCreateDialog();
-    if (pubCb) pubCb.checked = false;
-    if (descInp) descInp.value = '';
-    _createRoomAvatar = { dirty: false, dataUrl: '' };
-    paintRoomAvatarPreview($('create-room-avatar-preview'), '', '');
-    await loadConversations();
-    if (result && result.room_id) {
-      openConversation('room', result.room_id);
-      if (isPublic) {
-        try {
-          var createdShare = typeof shareableRoomId === 'function'
-            ? shareableRoomId(result)
-            : result.room_id;
-          Tapp.ui.showNotification({
-            title: lang.publicGroup || 'Public',
-            message: (lang.roomId || 'Room ID') + ': ' + createdShare,
-            type: 'success',
-          });
-        } catch (eN) { /* ignore */ }
-      }
-    }
-  } catch (e) {
-    console.error('[Aro] createRoom error:', e);
-    notifyError(lang.createFail, e);
-  } finally {
-    if (typeof setActionBusy === 'function') setActionBusy(btn, false);
-    else if (btn) { btn.disabled = false; btn.textContent = lang.createRoom; }
-  }
-}
-
-/** Join a public (or open) room by room id (bare or shareable `rm_…@home`). */
-async function doJoinRoomById() {
-  var input = $('join-room-id-input');
-  if (!input) return;
-  var parsed = typeof parseJoinRoomInput === 'function'
-    ? parseJoinRoomInput(input.value)
-    : { roomId: (input.value || '').trim(), homeServer: '' };
-  var roomId = parsed.roomId;
-  if (!roomId) {
-    flashCreateInput(input);
-    try {
-      Tapp.ui.showNotification({
-        title: lang.joinRoomIdMissing || lang.joinRoomFail || 'Enter room id',
-        type: 'error',
-      });
-    } catch (e0) {}
-    return;
-  }
-  if (!Tapp.federation || typeof Tapp.federation.joinRoom !== 'function') {
-    notifyError(lang.joinRoomFail || 'Join not available');
-    return;
-  }
-  var btn = $('join-room-id-btn');
-  if (typeof setActionBusy === 'function') {
-    setActionBusy(btn, true, lang.joining || lang.creating || '…');
-  } else if (btn) {
-    btn.disabled = true;
-    btn.textContent = lang.joining || lang.creating || '…';
-  }
-  try {
-    var joinArg = parsed.homeServer
-      ? { home_server: parsed.homeServer }
-      : undefined;
-    // Pass shareable form in path so backend can parse home even if body is ignored.
-    var joinRef = parsed.homeServer ? (roomId + '@' + parsed.homeServer) : roomId;
-    await Tapp.federation.joinRoom(joinRef, joinArg);
-    hideCreateDialog();
-    input.value = '';
-    await loadConversations();
-    await openConversation('room', roomId);
-    // openConversation already schedules a confirm burst; boost again for post-join.
-    confirmRoomMembers(roomId, state.openGen, {
-      delays: [0, 300, 900, 2000, 4500],
-      boostMs: 20000,
-      refreshList: true,
-    });
-    try {
-      Tapp.ui.showNotification({
-        title: lang.joinRoomOk || 'Joined',
-        type: 'success',
-      });
-    } catch (eN) { /* ignore */ }
-  } catch (e) {
-    notifyError(lang.joinRoomFail || 'Join failed', e);
-  } finally {
-    if (typeof setActionBusy === 'function') setActionBusy(btn, false);
-    else if (btn) { btn.disabled = false; btn.textContent = lang.joinRoom || 'Join'; }
-  }
-}
+// → createUi.js
 
 // ==================== View Switching ====================
 function switchView(view) {

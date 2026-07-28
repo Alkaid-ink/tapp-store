@@ -5,8 +5,8 @@
 var ARO_ARCHIVE_FORMAT = 'myriad.aro.chat-archive';
 var ARO_ARCHIVE_VERSION = 1;
 var ARO_IMPORTED_ARCHIVES_KEY = 'aro.importedArchives.v1';
-var HISTORY_PAGE_LIMIT = 100;
-var HISTORY_MAX_EXPORT_PAGES = 40; // 40 * 100 = 4000 msgs/conversation safety cap
+var HISTORY_PAGE_LIMIT = 50;
+var HISTORY_MAX_EXPORT_PAGES = 80; // 80 * 50 = 4000 msgs/conversation safety cap
 
 function ensureHistoryState() {
   if (!state.history) {
@@ -20,10 +20,12 @@ function ensureHistoryState() {
       loading: false,
       loadingMore: false,
       hasMore: false,
-      error: null,
+      /** Main chat window may have older pages (null = unknown). */
+      hasMoreMain: null,
       mainLoadingOlder: false,
     };
   }
+  if (state.history.hasMoreMain === undefined) state.history.hasMoreMain = null;
   return state.history;
 }
 
@@ -41,20 +43,10 @@ function unwrapMessagesResponse(res) {
 /** Normalize message_type for filters (text | image | file | share | system). */
 function classifyHistoryMessage(msg) {
   if (!msg) return 'text';
-  if (msg.is_pinned) { /* pin is orthogonal */ }
   var payload = (typeof msg.payload === 'object' && msg.payload) ? msg.payload : {};
-  var mt = msg.message_type || 'text';
-  if (mt === 'text' || !mt) {
-    var knownShare = { tapp: 1, brew: 1, library: 1, report: 1, image: 1, file: 1, 'file-meta': 1 };
-    if (payload.content_type && knownShare[payload.content_type]) mt = payload.content_type;
-    else if (payload.tapp_id) mt = 'tapp';
-    else if (payload.brew_id || payload.brew_link) mt = 'brew';
-    else if (payload.report_id) mt = 'report';
-    else if (payload.platform_id && (payload.item_id || payload.title)) mt = 'library';
-    else if (payload.data && payload.mime_type && String(payload.mime_type).indexOf('image/') === 0) mt = 'image';
-    else if (payload.transfer_id && payload.filename) mt = 'file-meta';
-    else if (payload.data && payload.filename) mt = 'file';
-  }
+  var mt = typeof resolveMessageType === 'function'
+    ? resolveMessageType(msg, payload)
+    : (msg.message_type || 'text');
   if (isE2eKeyExchangeMessage(msg, mt, payload)) return 'system';
   if (mt === 'image') return 'image';
   if (mt === 'file' || mt === 'file-meta') return 'file';
@@ -223,7 +215,9 @@ function openChatHistory() {
   h.error = null;
   // Seed from live window
   h.messages = mergeMessageListsAsc([], state.messages || []);
-  h.hasMore = (state.messages || []).length >= 150; // likely more if near page size
+  var win = (typeof MSG_WINDOW_LIMIT === 'number' ? MSG_WINDOW_LIMIT : HISTORY_PAGE_LIMIT);
+  h.hasMore = (state.messages || []).length >= win
+    || state.history.hasMoreMain === true;
   h.loading = false;
   h.loadingMore = false;
 
@@ -563,30 +557,86 @@ async function loadOlderMessagesIntoChat(opts) {
   if (!state.activeKind || !state.activeId || h.mainLoadingOlder) {
     return { loaded: 0, hasMore: false };
   }
+  if (h.hasMoreMain === false) return { loaded: 0, hasMore: false };
   if (!(state.messages || []).length) return { loaded: 0, hasMore: false };
+  // Skip pure optimistic-only head
+  var firstReal = null;
+  for (var fi = 0; fi < state.messages.length; fi++) {
+    if (state.messages[fi] && !state.messages[fi]._optimistic && state.messages[fi].message_id
+      && String(state.messages[fi].message_id).indexOf('opt_') !== 0) {
+      firstReal = state.messages[fi];
+      break;
+    }
+  }
+  if (!firstReal) return { loaded: 0, hasMore: false };
+
   h.mainLoadingOlder = true;
   var container = $('messages');
   var prevHeight = container ? container.scrollHeight : 0;
   var prevTop = container ? container.scrollTop : 0;
+  // Anchor on first visible row id when possible
+  var anchorId = '';
+  var anchorOffset = 0;
+  if (container) {
+    var firstRow = container.querySelector('.msg-row[data-msg-id]');
+    if (firstRow) {
+      anchorId = firstRow.getAttribute('data-msg-id') || '';
+      try { anchorOffset = firstRow.getBoundingClientRect().top - container.getBoundingClientRect().top; } catch (eA) { anchorOffset = 0; }
+    }
+  }
   try {
-    var before = state.messages[0].message_id;
-    var batch = await fetchMessagesPage(state.activeKind, state.activeId, before, HISTORY_PAGE_LIMIT);
-    if (!batch.length) return { loaded: 0, hasMore: false };
+    var before = firstReal.message_id;
+    var kindSnap = state.activeKind;
+    var idSnap = state.activeId;
+    var batch = await fetchMessagesPage(kindSnap, idSnap, before, HISTORY_PAGE_LIMIT);
+    // Stale: user left or switched mid-fetch
+    if (state.activeKind !== kindSnap || state.activeId !== idSnap) {
+      return { loaded: 0, hasMore: false };
+    }
+    if (!batch.length) {
+      h.hasMoreMain = false;
+      return { loaded: 0, hasMore: false };
+    }
     var prevLen = state.messages.length;
-    state.messages = mergeMessageListsAsc(state.messages, batch);
+    // Prefer ASC merge that keeps both sides (history helper)
+    state.messages = typeof mergeMessageListsAsc === 'function'
+      ? mergeMessageListsAsc(state.messages, batch)
+      : (typeof mergeMessageLists === 'function'
+        ? mergeMessageLists(state.messages, batch)
+        : batch.concat(state.messages));
     var loaded = state.messages.length - prevLen;
+    h.hasMoreMain = batch.length >= HISTORY_PAGE_LIMIT;
     if (loaded > 0) {
       state.messagesFp = typeof messagesFingerprint === 'function'
         ? messagesFingerprint(state.messages)
         : state.messagesFp;
       state.skipMsgAppear = true;
-      if (typeof renderMessages === 'function') renderMessages();
-      if (container) {
-        var newHeight = container.scrollHeight;
-        container.scrollTop = prevTop + (newHeight - prevHeight);
+      if (typeof renderMessages === 'function') {
+        renderMessages({ forceFull: true, forceFullHistory: true, stickBottom: false });
       }
+      if (container) {
+        // Prefer re-find anchor row; fallback height delta
+        if (anchorId) {
+          var anchorEl = container.querySelector('[data-msg-id="' + String(anchorId).replace(/"/g, '') + '"]');
+          if (anchorEl) {
+            try {
+              var top = anchorEl.getBoundingClientRect().top - container.getBoundingClientRect().top;
+              container.scrollTop = container.scrollTop + (top - anchorOffset);
+            } catch (eScrA) {
+              container.scrollTop = prevTop + (container.scrollHeight - prevHeight);
+            }
+          } else {
+            container.scrollTop = prevTop + (container.scrollHeight - prevHeight);
+          }
+        } else {
+          container.scrollTop = prevTop + (container.scrollHeight - prevHeight);
+        }
+      }
+    } else {
+      // Batch fully overlapped — stop auto-load spam
+      h.hasMoreMain = batch.length >= HISTORY_PAGE_LIMIT ? h.hasMoreMain : false;
     }
-    return { loaded: loaded, hasMore: batch.length >= HISTORY_PAGE_LIMIT };
+    return { loaded: loaded, hasMore: !!h.hasMoreMain };
   } catch (e) {
     if (!opts.silent) console.error('[Aro] loadOlderMessagesIntoChat', e);
     return { loaded: 0, hasMore: false };
@@ -599,13 +649,20 @@ function bindMessagesScrollLoadOlder() {
   var container = $('messages');
   if (!container || container.dataset.historyScrollBound === '1') return;
   container.dataset.historyScrollBound = '1';
+  var scrollTimer = null;
   container.addEventListener('scroll', function () {
-    if (container.scrollTop > 48) return;
+    if (container.scrollTop > 80) return;
     if (!state.activeId || !state.messages || !state.messages.length) return;
     var h = ensureHistoryState();
-    if (h.mainLoadingOlder) return;
-    loadOlderMessagesIntoChat({ silent: true });
-  });
+    if (h.mainLoadingOlder || h.hasMoreMain === false) return;
+    // Debounce: rapid scroll events should not stack loads
+    if (scrollTimer) return;
+    scrollTimer = setTimeout(function () {
+      scrollTimer = null;
+      if (container.scrollTop > 80) return;
+      loadOlderMessagesIntoChat({ silent: true });
+    }, 120);
+  }, { passive: true });
 }
 
 function bindChatHistoryUi() {
@@ -623,10 +680,14 @@ function bindChatHistoryUi() {
   }
 
   var search = $('history-search');
-  if (search) {
+  if (search && search.dataset.historySearchBound !== '1') {
+    search.dataset.historySearchBound = '1';
+    var histSearchRun = typeof aroDebounce === 'function'
+      ? aroDebounce(function () { renderHistoryList(); }, 120)
+      : function () { renderHistoryList(); };
     search.addEventListener('input', function () {
       ensureHistoryState().query = search.value || '';
-      renderHistoryList();
+      histSearchRun();
     });
   }
 

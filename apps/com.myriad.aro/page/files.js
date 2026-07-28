@@ -849,13 +849,17 @@ function bindRoomFilesUi() {
   }
 
   var search = $('room-files-search');
-  if (search) {
+  if (search && search.dataset.roomFilesSearchBound !== '1') {
+    search.dataset.roomFilesSearchBound = '1';
+    var localFilesSearch = typeof aroDebounce === 'function'
+      ? aroDebounce(function () { renderRoomFilesList(); }, 120)
+      : function () { renderRoomFilesList(); };
     search.addEventListener('input', function () {
       ensureRoomFilesState().query = search.value || '';
       if (ensureRoomFilesState().source === 'server' || supportsListRoomFiles()) {
         scheduleRoomFilesSearchRefresh();
       } else {
-        renderRoomFilesList();
+        localFilesSearch();
       }
     });
   }

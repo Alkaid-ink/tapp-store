@@ -439,164 +439,221 @@ function renderFeedSkeleton() {
   return html;
 }
 
+/**
+ * One-time event delegation for #feed-content.
+ * Replaces per-render querySelectorAll + addEventListener (hot path on every feed paint).
+ */
 function bindFeedContentActions(content) {
-  content.querySelectorAll('[data-action-unfollow]').forEach(function (btn) {
-    btn.addEventListener('click', function (e) { e.stopPropagation(); doUnfollow(btn.dataset.actionUnfollow); });
-  });
-  content.querySelectorAll('[data-action-unpublish]').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      doUnpublish(btn.dataset.contentType, btn.dataset.contentId);
-    });
-  });
-  content.querySelectorAll('[data-action-delete-post]').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      doDeleteTimelinePost({
-        content_type: btn.dataset.contentType || '',
-        content_id: btn.dataset.contentId || '',
-        activity_id: btn.dataset.activityId || '',
-        object_id: btn.dataset.objectId || '',
-      });
-    });
-  });
-  content.querySelectorAll('[data-action-like]').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      doToggleLike(btn.dataset.actionLike, btn.dataset.liked === '1');
-    });
-  });
-  content.querySelectorAll('[data-action-bookmark]').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      doToggleBookmark(btn.dataset.actionBookmark, btn.dataset.bookmarked === '1');
-    });
-  });
-  content.querySelectorAll('[data-action-announce]').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      var oid = btn.dataset.actionAnnounce;
-      var isAnnounced = btn.dataset.announced === '1';
-      if (isAnnounced) {
-        doUnannounce(oid);
-      } else {
-        openQuoteRepostModal(oid);
-      }
-    });
-  });
-  content.querySelectorAll('[data-action-reply]').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      toggleReplyComposer(btn.dataset.actionReply);
-    });
-  });
-  content.querySelectorAll('[data-action-reply-cancel]').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      state.replyOpenObjectId = null;
-      renderFeedContent();
-    });
-  });
-  content.querySelectorAll('[data-action-reply-submit]').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      var oid = btn.dataset.actionReplySubmit;
-      var card = btn.closest('.feed-item');
-      var box = card ? card.querySelector('.feed-reply-box textarea') : null;
-      var text = box ? box.value : '';
-      doSubmitReply(oid, text);
-    });
-  });
-  content.querySelectorAll('[data-action-share]').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      openShareModal(btn.dataset.actionShare || '', {
-        objectId: btn.dataset.objectId || btn.dataset.actionShare || '',
-        linkUrl: btn.dataset.shareUrl || '',
-        author: btn.dataset.shareAuthor || '',
-      });
-    });
-  });
-  content.querySelectorAll('[data-action-follow-back]').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      doFollowBack(btn.dataset.actionFollowBack);
-    });
-  });
-  if (typeof bindQuotedObjectClicks === 'function') bindQuotedObjectClicks(content);
-  // Open post detail (list is truncated; modal shows full body).
-  content.querySelectorAll('.feed-item[data-action-open-post]').forEach(function (card) {
-    if (card._aroOpenBound) return;
-    card._aroOpenBound = true;
-    function openFromCard(e) {
-      if (e) {
-        // Don't steal clicks from actions / media / nested quote / links.
-        if (e.target.closest(
-          'button, a, video, audio, input, textarea, select, .feed-item-actions, .feed-reply-box, .feed-item-quoted.is-clickable'
-        )) {
-          // Explicit "show more" still opens
-          if (!e.target.closest('[data-action-open-post].feed-item-more, button.feed-item-more')) {
-            return;
+  if (!content || content.dataset.feedDelegatesBound === '1') return;
+  content.dataset.feedDelegatesBound = '1';
+
+  function resolveFeedItemFromCard(card) {
+    if (!card) return null;
+    var oid = card.getAttribute('data-object-id') || '';
+    var item = oid && typeof findAnyFeedItemByObjectId === 'function'
+      ? findAnyFeedItemByObjectId(oid)
+      : null;
+    if (!item && oid && typeof findFeedItem === 'function') item = findFeedItem(oid);
+    if (!item) {
+      var lists = [state.timeline, state.bookmarks, state.published, state.feedItems];
+      for (var li = 0; li < lists.length && !item; li++) {
+        var arr = lists[li];
+        if (!Array.isArray(arr)) continue;
+        for (var i = 0; i < arr.length; i++) {
+          var it = arr[i];
+          if (!it) continue;
+          var rid = typeof resolveObjectId === 'function' ? resolveObjectId(it) : (it.object_id || '');
+          if (rid && String(rid) === String(oid)) { item = it; break; }
+          if (it.activity_id && card.getAttribute('data-activity-id')
+            && String(it.activity_id) === String(card.getAttribute('data-activity-id'))) {
+            item = it; break;
           }
         }
-        e.preventDefault();
-        e.stopPropagation();
-      }
-      var oid = card.getAttribute('data-object-id') || '';
-      var item = oid && typeof findAnyFeedItemByObjectId === 'function'
-        ? findAnyFeedItemByObjectId(oid)
-        : null;
-      if (!item && oid && typeof findFeedItem === 'function') item = findFeedItem(oid);
-      // Published list may not be in findAny — reconstruct minimal item from DOM/state
-      if (!item) {
-        var lists = [state.timeline, state.bookmarks, state.published, state.feedItems];
-        for (var li = 0; li < lists.length && !item; li++) {
-          var arr = lists[li];
-          if (!Array.isArray(arr)) continue;
-          for (var i = 0; i < arr.length; i++) {
-            var it = arr[i];
-            if (!it) continue;
-            var rid = typeof resolveObjectId === 'function' ? resolveObjectId(it) : (it.object_id || '');
-            if (rid && String(rid) === String(oid)) { item = it; break; }
-            if (it.activity_id && card.getAttribute('data-activity-id')
-              && String(it.activity_id) === String(card.getAttribute('data-activity-id'))) {
-              item = it; break;
-            }
-          }
-        }
-      }
-      if (item && typeof openFeedPostDetail === 'function') {
-        openFeedPostDetail(item);
-      } else if (oid && typeof openQuotedPostDetail === 'function') {
-        openQuotedPostDetail(oid, null, {
-          title: lang.postDetailTitle || lang.quoteViewTitle || 'Post',
-        });
       }
     }
-    card.addEventListener('click', openFromCard);
-    card.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ') openFromCard(e);
-    });
-  });
-  content.querySelectorAll('button.feed-item-more[data-action-open-post]').forEach(function (btn) {
-    if (btn._aroMoreBound) return;
-    btn._aroMoreBound = true;
-    btn.addEventListener('click', function (e) {
-      e.preventDefault();
+    return item;
+  }
+
+  function openFeedCard(card) {
+    if (!card) return;
+    var oid = card.getAttribute('data-object-id') || '';
+    var item = resolveFeedItemFromCard(card);
+    if (item && typeof openFeedPostDetail === 'function') {
+      openFeedPostDetail(item);
+    } else if (oid && typeof openQuotedPostDetail === 'function') {
+      openQuotedPostDetail(oid, null, {
+        title: lang.postDetailTitle || lang.quoteViewTitle || 'Post',
+      });
+    }
+  }
+
+  content.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+
+    var unfollow = t.closest('[data-action-unfollow]');
+    if (unfollow && content.contains(unfollow)) {
       e.stopPropagation();
-      var card = btn.closest('.feed-item');
-      if (card) card.click();
-    });
-  });
-  content.querySelectorAll('[data-action-copy-actor]').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
+      doUnfollow(unfollow.dataset.actionUnfollow);
+      return;
+    }
+    var unpublish = t.closest('[data-action-unpublish]');
+    if (unpublish && content.contains(unpublish)) {
       e.stopPropagation();
-      var text = btn.dataset.actionCopyActor || '';
-      if (!text) return;
-      if (typeof copyTextToClipboard === 'function') {
+      doUnpublish(unpublish.dataset.contentType, unpublish.dataset.contentId);
+      return;
+    }
+    var delPost = t.closest('[data-action-delete-post]');
+    if (delPost && content.contains(delPost)) {
+      e.stopPropagation();
+      doDeleteTimelinePost({
+        content_type: delPost.dataset.contentType || '',
+        content_id: delPost.dataset.contentId || '',
+        activity_id: delPost.dataset.activityId || '',
+        object_id: delPost.dataset.objectId || '',
+      });
+      return;
+    }
+    var likeBtn = t.closest('[data-action-like]');
+    if (likeBtn && content.contains(likeBtn)) {
+      e.stopPropagation();
+      doToggleLike(likeBtn.dataset.actionLike, likeBtn.dataset.liked === '1');
+      return;
+    }
+    var bmBtn = t.closest('[data-action-bookmark]');
+    if (bmBtn && content.contains(bmBtn)) {
+      e.stopPropagation();
+      doToggleBookmark(bmBtn.dataset.actionBookmark, bmBtn.dataset.bookmarked === '1');
+      return;
+    }
+    var annBtn = t.closest('[data-action-announce]');
+    if (annBtn && content.contains(annBtn)) {
+      e.stopPropagation();
+      var oidA = annBtn.dataset.actionAnnounce;
+      if (annBtn.dataset.announced === '1') doUnannounce(oidA);
+      else openQuoteRepostModal(oidA);
+      return;
+    }
+    var replyBtn = t.closest('[data-action-reply]');
+    if (replyBtn && content.contains(replyBtn)) {
+      e.stopPropagation();
+      toggleReplyComposer(replyBtn.dataset.actionReply);
+      return;
+    }
+    var replyCancel = t.closest('[data-action-reply-cancel]');
+    if (replyCancel && content.contains(replyCancel)) {
+      e.stopPropagation();
+      state.replyOpenObjectId = null;
+      // Force paint (fingerprint would otherwise skip)
+      state._feedRenderFp = '';
+      renderFeedContent();
+      return;
+    }
+    var replySubmit = t.closest('[data-action-reply-submit]');
+    if (replySubmit && content.contains(replySubmit)) {
+      e.stopPropagation();
+      var oidR = replySubmit.dataset.actionReplySubmit;
+      var cardR = replySubmit.closest('.feed-item');
+      var box = cardR ? cardR.querySelector('.feed-reply-box textarea') : null;
+      doSubmitReply(oidR, box ? box.value : '');
+      return;
+    }
+    var shareBtn = t.closest('[data-action-share]');
+    if (shareBtn && content.contains(shareBtn)) {
+      e.stopPropagation();
+      openShareModal(shareBtn.dataset.actionShare || '', {
+        objectId: shareBtn.dataset.objectId || shareBtn.dataset.actionShare || '',
+        linkUrl: shareBtn.dataset.shareUrl || '',
+        author: shareBtn.dataset.shareAuthor || '',
+      });
+      return;
+    }
+    var followBack = t.closest('[data-action-follow-back]');
+    if (followBack && content.contains(followBack)) {
+      e.stopPropagation();
+      doFollowBack(followBack.dataset.actionFollowBack);
+      return;
+    }
+    var copyActor = t.closest('[data-action-copy-actor]');
+    if (copyActor && content.contains(copyActor)) {
+      e.stopPropagation();
+      var text = copyActor.dataset.actionCopyActor || '';
+      if (text && typeof copyTextToClipboard === 'function') {
         copyTextToClipboard(text, { showMessage: false });
       }
-    });
+      return;
+    }
+
+    // Nested quote card
+    var quoteCard = t.closest('.feed-item-quoted.is-clickable[data-quote-object-id]');
+    if (quoteCard && content.contains(quoteCard)) {
+      e.preventDefault();
+      e.stopPropagation();
+      var qoid = quoteCard.getAttribute('data-quote-object-id') || '';
+      var textEl = quoteCard.querySelector(':scope > .feed-item-quoted-text');
+      var authorEl = quoteCard.querySelector(':scope > .feed-item-quoted-meta .feed-item-quoted-author');
+      openQuotedPostDetail(qoid, {
+        id: qoid,
+        type: 'Note',
+        content_preview: textEl ? textEl.textContent : '',
+        attributedTo: authorEl ? authorEl.textContent : '',
+      });
+      return;
+    }
+
+    // "Show more" control
+    var moreBtn = t.closest('button.feed-item-more[data-action-open-post], [data-action-open-post].feed-item-more');
+    if (moreBtn && content.contains(moreBtn)) {
+      e.preventDefault();
+      e.stopPropagation();
+      openFeedCard(moreBtn.closest('.feed-item'));
+      return;
+    }
+
+    // Windowed list: show more
+    var loadMore = t.closest('[data-feed-load-more], #feed-load-more');
+    if (loadMore && content.contains(loadMore)) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!state.feedVisible) state.feedVisible = {};
+      var subMore = state.feedSubTab || 'timeline';
+      var cur = state.feedVisible[subMore] || FEED_LIST_PAGE;
+      state.feedVisible[subMore] = cur + FEED_LIST_PAGE;
+      state._feedRenderFp = '';
+      renderFeedContent();
+      return;
+    }
+
+    // Open post detail from card body (not from nested interactive chrome)
+    var card = t.closest('.feed-item[data-action-open-post]');
+    if (card && content.contains(card)) {
+      if (t.closest(
+        'button, a, video, audio, input, textarea, select, .feed-item-actions, .feed-reply-box, .feed-item-quoted.is-clickable'
+      )) {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      openFeedCard(card);
+    }
+  });
+
+  content.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var t = e.target;
+    if (!t || !t.closest) return;
+    var quoteCard = t.closest('.feed-item-quoted.is-clickable[data-quote-object-id]');
+    if (quoteCard && content.contains(quoteCard) && (t === quoteCard || quoteCard.contains(document.activeElement))) {
+      e.preventDefault();
+      quoteCard.click();
+      return;
+    }
+    var card = t.closest('.feed-item[data-action-open-post]');
+    if (card && content.contains(card) && (t === card || t.getAttribute('tabindex') != null)) {
+      if (t.closest('button, a, input, textarea')) return;
+      e.preventDefault();
+      openFeedCard(card);
+    }
   });
 }
 
@@ -1060,19 +1117,7 @@ function findAnyFeedItemByObjectId(objectId) {
   return null;
 }
 
-/** Max characters shown on list cards (detail modal shows full body). */
-var FEED_CARD_TEXT_MAX = 280;
-
-function truncateFeedCardText(text, maxChars) {
-  text = String(text || '');
-  maxChars = maxChars || FEED_CARD_TEXT_MAX;
-  if (text.length <= maxChars) return { text: text, truncated: false };
-  // Prefer break near a newline / space
-  var cut = text.slice(0, maxChars);
-  var sp = Math.max(cut.lastIndexOf('\n'), cut.lastIndexOf(' '));
-  if (sp > maxChars * 0.55) cut = cut.slice(0, sp);
-  return { text: cut.replace(/\s+$/, '') + '…', truncated: true };
-}
+// FEED_CARD_TEXT_MAX + truncateFeedCardText live in feedUi.js
 
 /**
  * Open post / quote detail modal.
@@ -1859,6 +1904,33 @@ function findFeedItem(objectId) {
   return null;
 }
 
+/** Initial / step size for feed list windowing (DOM cap). */
+var FEED_LIST_PAGE = 60;
+
+/** Cheap fingerprint so identical feed lists skip full DOM rewrite. */
+function feedListFingerprint(sub, items, q, loading, err, visible) {
+  var n = (items && items.length) || 0;
+  var head = '';
+  var tail = '';
+  if (n > 0) {
+    var a = items[0] || {};
+    var b = items[n - 1] || {};
+    head = a.object_id || a.content_id || a.actor_url || a.id || a.username || '';
+    tail = b.object_id || b.content_id || b.actor_url || b.id || b.username || '';
+  }
+  return [sub || '', n, q || '', loading ? 1 : 0, err ? String(err).slice(0, 40) : '', head, tail, visible || 0].join('|');
+}
+
+function ensureFeedVisibleCount(sub, total) {
+  if (!state.feedVisible) state.feedVisible = {};
+  var cur = state.feedVisible[sub];
+  if (cur == null || cur < FEED_LIST_PAGE) cur = FEED_LIST_PAGE;
+  // Clamp if list shrank
+  if (total != null && cur > total) cur = total;
+  state.feedVisible[sub] = cur;
+  return cur;
+}
+
 function renderFeedContent() {
   var content = $('feed-content');
   var empty = $('feed-empty');
@@ -1871,6 +1943,7 @@ function renderFeedContent() {
 
   // Profile → settings (includes backup subsection)
   if (sub === 'settings' || sub === 'backup') {
+    state._feedRenderFp = '';
     if (searchBar) searchBar.style.display = 'none';
     if (empty) empty.style.display = 'none';
     if (typeof renderSettingsPage === 'function') {
@@ -1892,12 +1965,14 @@ function renderFeedContent() {
   var html = '';
 
   if (state.feedLoading && !hasLoaded) {
+    state._feedRenderFp = '';
     content.innerHTML = renderFeedSkeleton();
     if (empty) empty.style.display = 'none';
     return;
   }
 
   if (state.feedError) {
+    state._feedRenderFp = '';
     content.innerHTML = '';
     if (empty) empty.style.display = 'none';
     showFeedEmpty(state.feedError, 'error');
@@ -1905,6 +1980,7 @@ function renderFeedContent() {
   }
 
   if (!allItems || allItems.length === 0) {
+    state._feedRenderFp = '';
     content.innerHTML = '';
     // Prefer empty UI even before first load completes (avoids pure white main).
     showFeedEmpty(getFeedEmptyText(sub), hasLoaded ? 'empty' : (state.feedLoading ? 'loading' : 'empty'));
@@ -1912,6 +1988,7 @@ function renderFeedContent() {
   }
 
   if (items.length === 0 && q) {
+    state._feedRenderFp = '';
     content.innerHTML = searchNoResultsHtml();
     if (empty) empty.style.display = 'none';
     return;
@@ -1919,567 +1996,56 @@ function renderFeedContent() {
 
   if (empty) empty.style.display = 'none';
 
+  // Window long lists so first paint stays cheap (show more expands in place)
+  var visible = ensureFeedVisibleCount(sub, items.length);
+  var windowed = items.length > visible ? items.slice(0, visible) : items;
+  var hasMoreFeed = items.length > windowed.length;
+
+  // Skip identical list paint (poll / tab re-entry with same data)
+  var fp = feedListFingerprint(sub, items, q, state.feedLoading, null, visible);
+  if (fp && fp === state._feedRenderFp && content.childNodes.length > 0
+    && !content.querySelector('.feed-skeleton, .aro-search-empty')
+    && !!content.querySelector('.feed-load-more') === hasMoreFeed) {
+    return;
+  }
+  state._feedRenderFp = fp;
+
   if (sub === 'timeline' || sub === 'bookmarks') {
-    items.forEach(function (item) {
+    windowed.forEach(function (item) {
       html += renderTimelineItem(item);
     });
   } else if (sub === 'following') {
-    items.forEach(function (actor) {
+    windowed.forEach(function (actor) {
       html += renderActorItem(actor, 'following');
     });
   } else if (sub === 'followers') {
-    items.forEach(function (actor) {
+    windowed.forEach(function (actor) {
       html += renderActorItem(actor, 'followers');
     });
   } else if (sub === 'published') {
-    items.forEach(function (item) {
+    windowed.forEach(function (item) {
       html += renderPublishedItem(item);
     });
+  }
+
+  if (hasMoreFeed) {
+    var remain = items.length - windowed.length;
+    html += '<div class="feed-load-more-wrap">'
+      + '<button type="button" class="feed-load-more" id="feed-load-more" data-feed-load-more="1">'
+      + esc((lang.feedShowMore || lang.historyLoadMore || 'Show more') + ' (' + remain + ')')
+      + '</button></div>';
   }
 
   content.innerHTML = html;
   bindFeedContentActions(content);
 }
 
-function stripHtmlPreview(html) {
-  if (!html) return '';
-  return String(html)
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, '&')
-    .trim();
-}
-
-function extractNoteAttachments(contentJson) {
-  if (!contentJson) return [];
-  var atts = contentJson.attachment || contentJson.attachments || [];
-  if (!Array.isArray(atts)) {
-    if (atts && typeof atts === 'object') atts = [atts];
-    else return [];
-  }
-  return atts.filter(function (a) { return a && a.url; });
-}
-
-function renderTimelineMedia(attachments) {
-  if (!attachments || !attachments.length) return '';
-  var multi = attachments.length >= 2;
-  var h = '<div class="feed-item-media' + (multi ? ' feed-item-media-grid' : ' feed-item-media-single') + '">';
-  attachments.forEach(function (att) {
-    var url = att.url;
-    var mime = (att.mediaType || att.media_type || '').toLowerCase();
-    var type = (att.type || '').toLowerCase();
-    var isVideo = type === 'video' || mime.indexOf('video/') === 0;
-    if (multi) {
-      h += '<div class="feed-media-cell">';
-      if (isVideo) {
-        h += '<video src="' + esc(url) + '" controls playsinline preload="metadata"></video>';
-      } else {
-        h += '<img src="' + esc(url) + '" alt="" loading="lazy" />';
-      }
-      h += '</div>';
-    } else if (isVideo) {
-      h += '<video src="' + esc(url) + '" controls playsinline preload="metadata"></video>';
-    } else {
-      h += '<img src="' + esc(url) + '" alt="" loading="lazy" />';
-    }
-  });
-  h += '</div>';
-  return h;
-}
-
-function actorLabelFromUrl(url) {
-  if (!url) return '';
-  try {
-    var path = String(url).replace(/\/+$/, '');
-    var seg = path.split('/').pop() || '';
-    return seg || url;
-  } catch (e) {
-    return String(url);
-  }
-}
-
-function renderTimelineItem(item) {
-  var actor = item.actor || {};
-  var name = actor.display_name || actor.username || actorLabelFromUrl(actor.actor_url) || '?';
-  var handle = actor.username
-    ? '@' + actor.username + (actor.domain ? '@' + actor.domain : '')
-    : (actor.actor_url ? actor.actor_url : '');
-  var rawTs = item.created_at || item.received_at || item.timestamp || '';
-  var ts = '';
-  try { ts = timeAgo(rawTs); } catch (e) {}
-  var tsTitle = '';
-  try {
-    if (rawTs) {
-      var dTs = new Date(rawTs);
-      if (!isNaN(dTs.getTime())) tsTitle = dTs.toLocaleString();
-    }
-  } catch (eTs) {}
-  // content_json is normally the AP object; tolerate full Create envelope or aliases.
-  var contentJson = item.content_json || item.content || item.object || null;
-  if (contentJson && contentJson.object && typeof contentJson.object === 'object'
-      && !contentJson.content && !(contentJson.source && contentJson.source.content)
-      && !contentJson.summary && !contentJson.name) {
-    contentJson = contentJson.object;
-  }
-  var text = '';
-  var linkUrl = '';
-  var inReplyTo = '';
-  if (contentJson) {
-    text = stripHtmlPreview(
-      contentJson.title ||
-      contentJson.name ||
-      (contentJson.source && typeof contentJson.source === 'object' && contentJson.source.content) ||
-      contentJson.content ||
-      contentJson.summary ||
-      contentJson.content_preview ||
-      ''
-    );
-    // Prefer explicit external link; ignore AP Note self-url (otherwise whole body becomes a hyperlink).
-    linkUrl = contentJson.link || '';
-    if (!linkUrl && contentJson.url && typeof contentJson.url === 'string') {
-      var selfId = contentJson.id || '';
-      if (contentJson.url !== selfId && contentJson.type && contentJson.type !== 'Note'
-          && contentJson['mfp:kind'] !== 'repost' && contentJson.mfp_kind !== 'repost') {
-        linkUrl = contentJson.url;
-      }
-    }
-    if (typeof linkUrl !== 'string') linkUrl = '';
-    // Ring brew entries often put source as a string name
-    if (!text && contentJson.summary) text = stripHtmlPreview(contentJson.summary);
-    inReplyTo = contentJson.inReplyTo || contentJson.in_reply_to || '';
-    if (typeof inReplyTo !== 'string') inReplyTo = '';
-  }
-  if (!text && item.content_preview) text = stripHtmlPreview(item.content_preview);
-  var attachments = extractNoteAttachments(contentJson);
-  // Media-only Note: still show a short placeholder so the card is not blank.
-  if (!text && attachments.length) {
-    text = lang.composeMedia || '📎';
-  }
-  var objectId = resolveObjectId(item);
-  var liked = !!(item.liked_by_me);
-  var bookmarked = !!(item.bookmarked_by_me || item.is_bookmarked);
-  var announced = !!(item.announced_by_me);
-  var likeCount = item.like_count || 0;
-  var replyCount = item.reply_count || 0;
-  var announceCount = item.announce_count || 0;
-  var canInteract = !state.isGuest && !!objectId;
-  // Own Create posts (notes / library / report shares) can be quick-deleted.
-  var isOwn = typeof isOwnTimelineItem === 'function' && isOwnTimelineItem(item);
-  var publishTarget = isOwn && typeof extractPublishTarget === 'function' ? extractPublishTarget(item) : null;
-  var canDelete = !state.isGuest && isOwn && item.activity_type !== 'Announce'
-    && publishTarget && (publishTarget.content_id || publishTarget.activity_id);
-  var isQuoteRepost = !!(contentJson && (
-    contentJson['mfp:kind'] === 'repost' ||
-    contentJson.mfp_kind === 'repost' ||
-    item.object_type === 'repost'
-  ));
-  var isAnnounce = item.activity_type === 'Announce';
-  var isRepostCard = isQuoteRepost || isAnnounce;
-  // Never turn repost/note commentary into a single giant link.
-  if (isRepostCard || (contentJson && (contentJson.type === 'Note' || contentJson['mfp:kind'] === 'repost'))) {
-    linkUrl = contentJson && contentJson.link ? String(contentJson.link) : '';
-  }
-  var canOpenPost = !!(objectId || text || (attachments && attachments.length));
-  var h = '<div class="feed-item'
-    + (isRepostCard ? ' is-repost' : '')
-    + (inReplyTo && !isRepostCard ? ' is-reply' : '')
-    + (canOpenPost ? ' is-openable' : '')
-    + '" data-object-id="' + esc(objectId) + '"'
-    + (item.activity_id ? ' data-activity-id="' + esc(String(item.activity_id)) + '"' : '')
-    + (canOpenPost ? ' role="button" tabindex="0" data-action-open-post="1"' : '')
-    + '>';
-  h += '<div class="feed-item-avatar">' + avatarContentHtml(actor.avatar_url || '', name) + '</div>';
-  h += '<div class="feed-item-body">';
-  if (isRepostCard) {
-    h += '<div class="feed-item-repost-label">'
-      + '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>'
-      + '<span>' + esc(isQuoteRepost
-        ? (lang.quoteRepostLabel || lang.quoteRepostTitle || 'Quote repost')
-        : (lang.repostLabel || lang.repostBtn || 'Repost')) + '</span>'
-      + (name ? '<span class="feed-item-repost-by">' + esc(name) + '</span>' : '')
-      + '</div>';
-  } else if (inReplyTo) {
-    h += '<div class="feed-item-inreply">'
-      + '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M20 20v-7a4 4 0 00-4-4H4"/></svg>'
-      + '<span>' + esc(lang.inReplyTo || 'Replying to a post') + '</span></div>';
-  }
-  h += '<div class="feed-item-header">';
-  h += '<span class="feed-item-name">' + esc(name) + '</span>';
-  if (handle) h += '<span class="feed-item-handle">' + esc(handle) + '</span>';
-  if (actor.domain) {
-    h += '<span class="feed-item-domain" title="' + esc(actor.domain) + '">' + esc(actor.domain) + '</span>';
-  }
-  if (ts) {
-    h += '<span class="feed-item-sep">&middot;</span><span class="feed-item-time"'
-      + (tsTitle ? ' title="' + esc(tsTitle) + '"' : '') + '>' + esc(ts) + '</span>';
-  }
-  h += '</div>';
-  if (text) {
-    var trunc = truncateFeedCardText(text, FEED_CARD_TEXT_MAX);
-    var textCls = 'feed-item-text' + (trunc.truncated ? ' is-clamped' : '');
-    if (linkUrl) {
-      h += '<div class="' + textCls + '"><a href="' + esc(linkUrl) + '" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline">' + esc(trunc.text) + '</a></div>';
-    } else {
-      h += '<div class="' + textCls + '">' + esc(trunc.text) + '</div>';
-    }
-    if (trunc.truncated) {
-      h += '<button type="button" class="feed-item-more" data-action-open-post="1">'
-        + esc(lang.postShowMore || 'Show more') + '</button>';
-    }
-  }
-  // Nested quote chain: truncated on list; click opens original / parent detail.
-  if (isQuoteRepost && contentJson) {
-    var quoted = contentJson['mfp:quotedObject'] || contentJson.mfp_quotedObject || null;
-    if (quoted && typeof quoted === 'object') {
-      h += renderQuotedObjectHtml(quoted, 0, { interactive: true, full: false });
-    } else if (contentJson.quoteUrl || contentJson.inReplyTo || contentJson['mfp:quotedObjectId']) {
-      var fallbackId = contentJson['mfp:quotedObjectId'] || contentJson.quoteUrl
-        || contentJson.inReplyTo || '';
-      h += renderQuotedObjectHtml({
-        id: fallbackId,
-        type: 'Note',
-        content_preview: lang.quoteRepostQuoted || 'Quoted post',
-      }, 0, { interactive: true, full: false });
-    }
-  }
-  h += renderTimelineMedia(attachments);
-  // Action bar: interactions for signed-in users; share is always available (external intent).
-  var showShare = !!objectId || !!linkUrl || !!text;
-  if (canInteract || canDelete || showShare) {
-    h += '<div class="feed-item-actions">';
-    if (canInteract) {
-    // Reply
-    h += '<button type="button" class="feed-item-action" data-action-reply="' + esc(objectId) + '" title="' + esc(lang.replyBtn || 'Reply') + '" aria-label="' + esc(lang.replyBtn || 'Reply') + '">'
-      + '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a4 4 0 01-4 4H8l-5 3V7a4 4 0 014-4h10a4 4 0 014 4z"/></svg>'
-      + (replyCount ? '<span class="feed-item-action-count">' + esc(String(replyCount)) + '</span>' : '')
-      + '</button>';
-    // Repost
-    h += '<button type="button" class="feed-item-action' + (announced ? ' is-active is-announced' : '') + '" data-action-announce="' + esc(objectId) + '" data-announced="' + (announced ? '1' : '0') + '" aria-pressed="' + (announced ? 'true' : 'false') + '" title="' + esc(announced ? (lang.unrepostBtn || 'Undo repost') : (lang.repostBtn || 'Repost')) + '" aria-label="' + esc(announced ? (lang.unrepostBtn || 'Undo repost') : (lang.repostBtn || 'Repost')) + '">'
-      + '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>'
-      + (announceCount ? '<span class="feed-item-action-count">' + esc(String(announceCount)) + '</span>' : '')
-      + '</button>';
-    // Like
-    h += '<button type="button" class="feed-item-action' + (liked ? ' is-active is-liked' : '') + '" data-action-like="' + esc(objectId) + '" data-liked="' + (liked ? '1' : '0') + '" aria-pressed="' + (liked ? 'true' : 'false') + '" title="' + esc(liked ? (lang.unlikeBtn || 'Unlike') : (lang.likeBtn || 'Like')) + '" aria-label="' + esc(liked ? (lang.unlikeBtn || 'Unlike') : (lang.likeBtn || 'Like')) + '">'
-      + (liked
-        ? '<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" stroke="currentColor" stroke-width="1.5"><path d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.6l-1-1a5.5 5.5 0 00-7.8 7.8l1 1L12 21.2l7.8-7.8 1-1a5.5 5.5 0 000-7.8z"/></svg>'
-        : '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.6l-1-1a5.5 5.5 0 00-7.8 7.8l1 1L12 21.2l7.8-7.8 1-1a5.5 5.5 0 000-7.8z"/></svg>')
-      + (likeCount ? '<span class="feed-item-action-count">' + esc(String(likeCount)) + '</span>' : '')
-      + '</button>';
-    // Bookmark
-    h += '<button type="button" class="feed-item-action' + (bookmarked ? ' is-active is-bookmarked' : '') + '" data-action-bookmark="' + esc(objectId) + '" data-bookmarked="' + (bookmarked ? '1' : '0') + '" aria-pressed="' + (bookmarked ? 'true' : 'false') + '" title="' + esc(bookmarked ? (lang.unbookmarkBtn || 'Remove bookmark') : (lang.bookmarkBtn || 'Bookmark')) + '" aria-label="' + esc(bookmarked ? (lang.unbookmarkBtn || 'Remove bookmark') : (lang.bookmarkBtn || 'Bookmark')) + '">'
-      + (bookmarked
-        ? '<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" stroke="currentColor" stroke-width="1.5"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>'
-        : '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>')
-      + '</button>';
-    }
-    // Share external (compose + optional X intent URL — never server post)
-    if (showShare) {
-      h += '<button type="button" class="feed-item-action feed-item-action-share" data-action-share="' + esc(objectId || '') + '"'
-        + ' data-object-id="' + esc(objectId || '') + '"'
-        + ' data-share-url="' + esc(linkUrl || objectId || '') + '"'
-        + ' data-share-author="' + esc(name || handle || '') + '"'
-        + ' title="' + esc(lang.shareBtn || 'Share') + '"'
-        + ' aria-label="' + esc(lang.shareBtn || 'Share') + '">'
-        + '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>'
-        + '</button>';
-    }
-    // Delete own post (timeline quick-delete)
-    if (canDelete) {
-      h += '<button type="button" class="feed-item-action feed-item-action-danger" data-action-delete-post'
-        + ' data-content-type="' + esc(publishTarget.content_type || '') + '"'
-        + ' data-content-id="' + esc(publishTarget.content_id || '') + '"'
-        + ' data-activity-id="' + esc(publishTarget.activity_id || '') + '"'
-        + ' data-object-id="' + esc(objectId) + '"'
-        + ' title="' + esc(lang.deletePost || 'Delete') + '"'
-        + ' aria-label="' + esc(lang.deletePost || 'Delete') + '">'
-        + '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>'
-        + '</button>';
-    }
-    h += '</div>';
-    if (canInteract && state.replyOpenObjectId === objectId) {
-      h += '<div class="feed-reply-box" data-reply-for="' + esc(objectId) + '">';
-      h += '<textarea placeholder="' + esc(lang.replyPlaceholder || 'Write a reply…') + '" rows="3"></textarea>';
-      h += '<div class="feed-reply-actions">';
-      h += '<button type="button" class="feed-reply-cancel" data-action-reply-cancel="' + esc(objectId) + '">' + esc(lang.replyCancel || 'Cancel') + '</button>';
-      h += '<button type="button" class="feed-reply-submit" data-action-reply-submit="' + esc(objectId) + '">' + esc(lang.replySubmit || 'Reply') + '</button>';
-      h += '</div></div>';
-    }
-  }
-  h += '</div></div>';
-  return h;
-}
-
-function pendingStatusLabel(status) {
-  if (!status || status === 'accepted') return '';
-  if (status === 'pending') return lang.pendingConfirm || lang.pending || 'pending';
-  return status;
-}
-
-function renderActorItem(actor, context) {
-  // username may be null for unresolved remote actors — fall back to actor_url.
-  var name = actor.display_name || actor.username || actorLabelFromUrl(actor.actor_url) || '?';
-  var handle = actor.username
-    ? '@' + actor.username + (actor.domain ? '@' + actor.domain : '')
-    : (actor.actor_url || actor.domain || '');
-  var domain = actor.domain || '';
-  if (!domain && actor.actor_url) {
-    try {
-      domain = new URL(actor.actor_url).hostname || '';
-    } catch (eDom) { domain = ''; }
-  }
-  var isFollowingThem = isActorInFollowing(actor.actor_url);
-  // Mutual: they follow you (followers list) and you follow them; or following list where they also follow back.
-  var followsYou = false;
-  if (context === 'followers') {
-    followsYou = true;
-  } else if (context === 'following') {
-    var followers = state.followers || [];
-    for (var fi = 0; fi < followers.length; fi++) {
-      var f = followers[fi];
-      if (!f) continue;
-      var fu = typeof normalizeFederationUrl === 'function'
-        ? normalizeFederationUrl(f.actor_url)
-        : String(f.actor_url || '').trim();
-      var au = typeof normalizeFederationUrl === 'function'
-        ? normalizeFederationUrl(actor.actor_url)
-        : String(actor.actor_url || '').trim();
-      if (fu && au && fu === au) { followsYou = true; break; }
-      if (f.actor_url && actor.actor_url && String(f.actor_url) === String(actor.actor_url)) {
-        followsYou = true; break;
-      }
-    }
-  }
-  var isMutual = isFollowingThem && followsYou;
-  var h = '<div class="feed-item feed-actor-item' + (isMutual ? ' is-mutual' : '') + '"'
-    + (actor.actor_url ? ' data-actor-url="' + esc(actor.actor_url) + '"' : '') + '>';
-  h += '<div class="feed-item-avatar">' + avatarContentHtml(actor.avatar_url || '', name) + '</div>';
-  h += '<div class="feed-item-body">';
-  h += '<div class="feed-item-header">';
-  h += '<span class="feed-item-name">' + esc(name) + '</span>';
-  if (handle) h += '<span class="feed-item-handle">' + esc(handle) + '</span>';
-  h += '</div>';
-  // Secondary meta row: domain + relationship badges (X-style graph clarity)
-  h += '<div class="feed-actor-meta">';
-  if (domain) {
-    h += '<span class="feed-actor-domain" title="' + esc(domain) + '">' + esc(domain) + '</span>';
-  }
-  if (isMutual) {
-    h += '<span class="aro-badge aro-badge-mutual" title="' + esc(lang.mutualFollow || 'You follow each other') + '">'
-      + esc(lang.mutualFollow || 'Mutual') + '</span>';
-  } else if (context === 'followers' && isFollowingThem) {
-    h += '<span class="aro-badge aro-badge-following-them">' + esc(lang.followingBadge || 'Following') + '</span>';
-  } else if (context === 'following' && followsYou) {
-    h += '<span class="aro-badge aro-badge-follows-you">' + esc(lang.followsYouBadge || 'Follows you') + '</span>';
-  }
-  if (actor.status && actor.status !== 'accepted') {
-    h += '<span class="aro-badge aro-badge-pending">' + esc(pendingStatusLabel(actor.status)) + '</span>';
-  }
-  h += '</div>';
-  if (actor.bio) h += '<div class="feed-item-text feed-actor-bio">' + esc(actor.bio) + '</div>';
-  // Actions — copy handle/url for graph clarity + follow/unfollow
-  h += '<div class="feed-item-actions">';
-  var copyTarget = handle || actor.actor_url || '';
-  if (copyTarget) {
-    h += '<button type="button" class="feed-item-action" data-action-copy-actor="' + esc(copyTarget) + '"'
-      + ' title="' + esc(lang.copyHandle || lang.copied || 'Copy handle') + '"'
-      + ' aria-label="' + esc(lang.copyHandle || 'Copy handle') + '">'
-      + '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>'
-      + '<span>' + esc(lang.copyHandle || 'Copy') + '</span></button>';
-  }
-  if (context === 'following') {
-    h += '<button type="button" class="feed-item-action feed-item-action-danger" data-action-unfollow="' + esc(actor.actor_url || '') + '"'
-      + ' title="' + esc(lang.unfollowBtn || 'Unfollow') + '"'
-      + ' aria-label="' + esc(lang.unfollowBtn || 'Unfollow') + '">'
-      + '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>'
-      + '<span>' + esc(lang.unfollowBtn || 'Unfollow') + '</span></button>';
-  } else if (context === 'followers' && !state.isGuest) {
-    if (isFollowingThem) {
-      h += '<button type="button" class="feed-item-action feed-item-action-danger" data-action-unfollow="' + esc(actor.actor_url || '') + '"'
-        + ' title="' + esc(lang.unfollowBtn || 'Unfollow') + '"'
-        + ' aria-label="' + esc(lang.unfollowBtn || 'Unfollow') + '">'
-        + '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>'
-        + '<span>' + esc(lang.unfollowBtn || 'Unfollow') + '</span></button>';
-    } else if (actor.actor_url) {
-      h += '<button type="button" class="feed-item-action feed-item-action-primary" data-action-follow-back="' + esc(actor.actor_url || '') + '"'
-        + ' title="' + esc(lang.followBackBtn || lang.followBtn || 'Follow back') + '"'
-        + ' aria-label="' + esc(lang.followBackBtn || lang.followBtn || 'Follow back') + '">'
-        + '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>'
-        + '<span>' + esc(lang.followBackBtn || lang.followBtn || 'Follow back') + '</span></button>';
-    }
-  }
-  h += '</div></div></div>';
-  return h;
-}
-
-/** 已发布内容的可读类型名 */
-function publishedTypeLabel(type) {
-  var map = {
-    'note': lang.composePost,
-    'tapp': lang.attachTapp,
-    'brew-article': lang.attachBrew,
-    'library': lang.attachLibrary,
-    'report': lang.attachReport,
-    'repost': lang.quoteRepostLabel || lang.repostBtn || 'Repost',
-  };
-  return map[type] || type || '';
-}
-
-function renderPublishedItem(item) {
-  var isRepost = item.content_type === 'repost' || item.content_type === 'announce';
-  var typeIcons = { 'report': SVG_ICONS.report, 'brew-article': SVG_ICONS.memo, 'tapp': SVG_ICONS.tapp, 'library': SVG_ICONS.library, 'note': SVG_ICONS.page, 'repost': SVG_ICONS.page };
-  var icon = typeIcons[item.content_type] || SVG_ICONS.page;
-  var dateStr = '';
-  var dateTitle = '';
-  try { dateStr = timeAgo(item.published_at); } catch (e) {}
-  try {
-    if (item.published_at) {
-      var dPub = new Date(item.published_at);
-      if (!isNaN(dPub.getTime())) dateTitle = dPub.toLocaleString();
-    }
-  } catch (eTs) {}
-  // Prefer title as header line when useful; body uses summary/content_preview.
-  // attachments come from list_published (joined Create object) — same shape as Note AP.
-  var attachments = extractNoteAttachments(item);
-  var titleLine = stripHtmlPreview(item.title || item.name || '');
-  var preview = stripHtmlPreview(item.content_preview || '');
-  var summary = stripHtmlPreview(item.summary || '');
-  if (isRepost) {
-    // Commentary is the body; quoted snippet lives in summary (backend: "↪ …").
-    if (!preview) preview = titleLine || summary;
-    if (!titleLine) titleLine = publishedTypeLabel('repost');
-  } else {
-    if (!preview && titleLine) preview = titleLine;
-    if (!preview && summary) preview = summary;
-  }
-  // Media-only Note: still show a short placeholder so the card is not blank.
-  if (!preview && attachments.length) {
-    preview = lang.composeMedia || '📎';
-  }
-  if (!preview) preview = stripHtmlPreview(item.content_id || '');
-  if (looksLikeBareUrl(preview)) {
-    preview = publishedTypeLabel(item.content_type) || (lang.composePost || 'Post');
-  }
-  var pubObjectId = item.object_id || '';
-  if (!pubObjectId && item.content_json && item.content_json.id) pubObjectId = String(item.content_json.id);
-  var canOpenPub = !!(pubObjectId || preview || (attachments && attachments.length));
-  var h = '<div class="feed-item' + (isRepost ? ' is-repost' : '') + (canOpenPub ? ' is-openable' : '') + '"'
-    + (pubObjectId ? ' data-object-id="' + esc(String(pubObjectId)) + '"' : '')
-    + (item.activity_id ? ' data-activity-id="' + esc(String(item.activity_id)) + '"' : '')
-    + (canOpenPub ? ' role="button" tabindex="0" data-action-open-post="1"' : '')
-    + '>';
-  if (isRepost) {
-    h += '<div class="feed-item-avatar">' + icon + '</div>';
-  } else {
-    h += '<div class="feed-item-icon">' + icon + '</div>';
-  }
-  h += '<div class="feed-item-body">';
-  if (isRepost) {
-    h += '<div class="feed-item-repost-label">'
-      + '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>'
-      + '<span>' + esc(lang.quoteRepostLabel || lang.repostBtn || 'Repost') + '</span></div>';
-  }
-  h += '<div class="feed-item-header">';
-  h += '<span class="feed-item-name">' + esc(titleLine || publishedTypeLabel(item.content_type)) + '</span>';
-  if (dateStr) {
-    h += '<span class="feed-item-sep">&middot;</span><span class="feed-item-time"'
-      + (dateTitle ? ' title="' + esc(dateTitle) + '"' : '') + '>' + esc(dateStr) + '</span>';
-  }
-  h += '</div>';
-  if (preview && (!titleLine || preview !== titleLine || isRepost)) {
-    var pTrunc = truncateFeedCardText(preview, FEED_CARD_TEXT_MAX);
-    h += '<div class="feed-item-text' + (pTrunc.truncated ? ' is-clamped' : '') + '">' + esc(pTrunc.text) + '</div>';
-    if (pTrunc.truncated) {
-      h += '<button type="button" class="feed-item-more" data-action-open-post="1">'
-        + esc(lang.postShowMore || 'Show more') + '</button>';
-    }
-  }
-  // Quote-repost: truncated nested quote on list; click opens original.
-  if (isRepost) {
-    var pubCj = item.content_json || item.content || item.object || null;
-    if (pubCj && pubCj.object && typeof pubCj.object === 'object'
-      && !pubCj.content && !(pubCj.source && pubCj.source.content)) {
-      pubCj = pubCj.object;
-    }
-    var pubQuoted = pubCj && (pubCj['mfp:quotedObject'] || pubCj.mfp_quotedObject);
-    if (pubQuoted && typeof pubQuoted === 'object') {
-      h += renderQuotedObjectHtml(pubQuoted, 0, { interactive: true, full: false });
-    } else if (summary && summary !== preview) {
-      var qText = summary.replace(/^↪\s*/, '');
-      var qOid = (pubCj && (pubCj['mfp:quotedObjectId'] || pubCj.quoteUrl || pubCj.inReplyTo))
-        || item.object_id || '';
-      if (qText && !looksLikeBareUrl(qText)) {
-        h += renderQuotedObjectHtml({
-          id: qOid,
-          type: 'Note',
-          content_preview: qText,
-        }, 0, { interactive: true, full: false });
-      }
-    }
-  }
-  // Same media strip as timeline so Note images/videos appear on 已发布.
-  h += renderTimelineMedia(attachments);
-  if (titleLine && item.content_type && item.content_type !== 'note' && !isRepost) {
-    h += '<div class="feed-item-meta" style="font-size:11px;color:var(--text-secondary,#888)">' + esc(publishedTypeLabel(item.content_type)) + '</div>';
-  }
-  // Federation object / activity id for external share (intent only).
-  var shareObjectId = '';
-  if (item.object_id) shareObjectId = String(item.object_id);
-  else if (item.activity_id) shareObjectId = String(item.activity_id);
-  else if (item.note_id) shareObjectId = String(item.note_id);
-  else if (item.url && /^https?:\/\//i.test(String(item.url))) shareObjectId = String(item.url);
-  var shareUrl = '';
-  if (item.url && /^https?:\/\//i.test(String(item.url))) shareUrl = String(item.url);
-  else if (shareObjectId && /^https?:\/\//i.test(shareObjectId)) shareUrl = shareObjectId;
-  var shareAuthor = '';
-  try {
-    if (state.identity) {
-      shareAuthor = state.identity.display_name || '';
-      if (!shareAuthor && state.identity.username) {
-        shareAuthor = '@' + state.identity.username
-          + (state.identity.domain ? '@' + state.identity.domain : '');
-      }
-    }
-  } catch (eId) {}
-  h += '<div class="feed-item-actions">';
-  if (shareObjectId || shareUrl || preview) {
-    h += '<button type="button" class="feed-item-action feed-item-action-share" data-action-share="' + esc(shareObjectId || shareUrl || '') + '"'
-      + ' data-object-id="' + esc(shareObjectId || '') + '"'
-      + ' data-share-url="' + esc(shareUrl || shareObjectId || '') + '"'
-      + ' data-share-author="' + esc(shareAuthor || '') + '"'
-      + ' title="' + esc(lang.shareBtn || 'Share') + '"'
-      + ' aria-label="' + esc(lang.shareBtn || 'Share') + '">'
-      + '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>'
-      + '</button>';
-  }
-  h += '<button type="button" class="feed-item-action feed-item-action-danger" data-action-unpublish data-content-type="' + esc(item.content_type) + '" data-content-id="' + esc(item.content_id) + '"'
-    + ' title="' + esc(lang.removeBtn || 'Remove') + '"'
-    + ' aria-label="' + esc(lang.removeBtn || 'Remove') + '">'
-    + '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>'
-    + esc(lang.removeBtn) + '</button>';
-  h += '</div></div></div>';
-  return h;
-}
-
-function timeAgo(iso) {
-  if (!iso) return '';
-  var d = new Date(iso);
-  var now = new Date();
-  var sec = Math.floor((now - d) / 1000);
-  if (sec < 60) return sec + 's';
-  var min = Math.floor(sec / 60);
-  if (min < 60) return min + 'm';
-  var hr = Math.floor(min / 60);
-  if (hr < 24) return hr + 'h';
-  var day = Math.floor(hr / 24);
-  if (day < 30) return day + 'd';
-  try { return d.toLocaleDateString(currentLocale, { month: 'short', day: 'numeric' }); } catch (e) { return day + 'd'; }
-}
+// feed card HTML lives in page/feedUi.js (pageModules)
 
 function switchFeedSubTab(sub) {
+  // Reset window when changing tabs so we don't inherit a huge visible count
+  if (sub && state.feedVisible) state.feedVisible[sub] = FEED_LIST_PAGE;
+  state._feedRenderFp = '';
   if (state.feedSubTab === 'settings' && sub !== 'settings' && typeof ensureHistoryState === 'function') {
     try {
       var hs = ensureHistoryState();
@@ -2605,1125 +2171,9 @@ async function doFollow() {
   }
 }
 
-// ==================== Feed composer (freeform Note) ====================
-var composeAttachments = []; // { file, previewUrl, kind: 'image'|'video' }
-var COMPOSE_DRAFT_KEY = 'aro_compose_draft';
-/** Track whether last storage restore lacked attachable files. */
-var composeDraftTextOnly = false;
+// → feedCompose.js
 
-/**
- * Contextual + menu (owner feed only):
- * - timeline  → Post only
- * - following → Follow only
- * - followers / published / guest / non-feed → no +
- */
-function canComposePost() {
-  return !state.isGuest
-    && state.currentView === 'feed'
-    && state.feedSubTab === 'timeline';
-}
-
-function canFollowFromFeed() {
-  return !state.isGuest
-    && state.currentView === 'feed'
-    && state.feedSubTab === 'following';
-}
-
-function isComposeBusy() {
-  var publishBtn = $('feed-compose-publish');
-  return !!(publishBtn && publishBtn.disabled);
-}
-
-function getComposeText() {
-  var ta = $('feed-compose-text');
-  return ta ? String(ta.value || '') : '';
-}
-
-function composeHasContent() {
-  return !!(getComposeText().trim() || composeAttachments.length);
-}
-
-function setComposeDraftHint(visible) {
-  var hint = $('feed-compose-draft-hint');
-  if (!hint) return;
-  if (visible) {
-    hint.textContent = lang.composeDraftRestored || 'Draft restored';
-    hint.hidden = false;
-  } else {
-    hint.hidden = true;
-    hint.textContent = '';
-  }
-}
-
-function setComposeDraftNotice(visible) {
-  var notice = $('feed-compose-draft-notice');
-  if (!notice) return;
-  if (visible) {
-    notice.textContent = lang.composeDraftTextOnly || 'Draft kept text only';
-    notice.hidden = false;
-  } else {
-    notice.hidden = true;
-    notice.textContent = '';
-  }
-}
-
-function clearComposeForm() {
-  var ta = $('feed-compose-text');
-  if (ta) ta.value = '';
-  composeAttachments.forEach(function (a) {
-    if (a.previewUrl) try { URL.revokeObjectURL(a.previewUrl); } catch (e) {}
-  });
-  composeAttachments = [];
-  renderComposePreviews();
-  setComposeDraftHint(false);
-  setComposeDraftNotice(false);
-  composeDraftTextOnly = false;
-}
-
-function clearComposeDraftStorage() {
-  try {
-    if (Tapp.storage && typeof Tapp.storage.remove === 'function') {
-      Tapp.storage.remove(COMPOSE_DRAFT_KEY).catch(function () {});
-    }
-  } catch (e) { /* ignore */ }
-}
-
-/**
- * Persist draft to Tapp.storage.
- * Files cannot be reliably serialized — save text + fileNames metadata.
- * Same-session attachments stay in memory (composeAttachments).
- */
-function saveComposeDraftFromForm() {
-  if (!composeHasContent()) {
-    clearComposeDraftStorage();
-    return;
-  }
-  var payload = {
-    text: getComposeText(),
-    savedAt: Date.now(),
-    fileNames: composeAttachments.map(function (a) {
-      return (a.file && a.file.name) || a.name || '';
-    }).filter(Boolean)
-  };
-  try {
-    if (Tapp.storage && typeof Tapp.storage.set === 'function') {
-      Tapp.storage.set(COMPOSE_DRAFT_KEY, payload).catch(function () {});
-    }
-  } catch (e) { /* ignore */ }
-}
-
-/**
- * Restore draft from storage when form is empty (e.g. after reload).
- * Session attachments already in memory are kept as-is.
- * @returns {Promise<boolean>} true if anything was restored
- */
-async function restoreComposeDraft() {
-  var ta = $('feed-compose-text');
-  var hasSession = !!(ta && ta.value.trim()) || composeAttachments.length > 0;
-  if (hasSession) {
-    // Session still has content (dialog closed without clear).
-    if (composeHasContent()) setComposeDraftHint(true);
-    setComposeDraftNotice(composeDraftTextOnly && !composeAttachments.length);
-    return composeHasContent();
-  }
-  var draft = null;
-  try {
-    if (Tapp.storage && typeof Tapp.storage.get === 'function') {
-      draft = await Tapp.storage.get(COMPOSE_DRAFT_KEY);
-    }
-  } catch (e) { draft = null; }
-  if (!draft || typeof draft !== 'object') return false;
-  var text = typeof draft.text === 'string' ? draft.text : '';
-  var names = Array.isArray(draft.fileNames) ? draft.fileNames : [];
-  if (!text.trim() && !names.length) return false;
-  if (ta && text) ta.value = text;
-  // File blobs are not durable across reloads; only text is restored.
-  composeDraftTextOnly = names.length > 0;
-  setComposeDraftHint(true);
-  setComposeDraftNotice(composeDraftTextOnly);
-  return true;
-}
-
-function updateComposeButtonVisibility() {
-  updateFeedPlusVisibility();
-}
-
-function updateFeedPlusVisibility() {
-  var showPost = canComposePost();
-  var showFollow = canFollowFromFeed();
-  // showPlus = !isGuest && feed && (timeline || following) — equivalent to either action
-  var showPlus = showPost || showFollow;
-  var display = showPlus ? '' : 'none';
-
-  var wrap = $('feed-plus-wrap');
-  if (wrap) wrap.style.display = display;
-  var wrapMobile = $('feed-plus-wrap-mobile');
-  if (wrapMobile) wrapMobile.style.display = display;
-
-  document.querySelectorAll('[data-feed-plus="post"]').forEach(function (el) {
-    if (showPost) el.removeAttribute('hidden');
-    else el.setAttribute('hidden', '');
-  });
-  document.querySelectorAll('[data-feed-plus="follow"]').forEach(function (el) {
-    if (showFollow) el.removeAttribute('hidden');
-    else el.setAttribute('hidden', '');
-  });
-
-  if (!showPlus) closeFeedPlusMenu();
-}
-
-function closeFeedPlusMenu() {
-  ['feed-plus-menu', 'feed-plus-menu-mobile'].forEach(function (id) {
-    var menu = $(id);
-    if (!menu || menu.hidden) return;
-    menu.classList.remove('open');
-    menu.classList.remove('aro-leaving');
-    menu.hidden = true;
-  });
-  ['feed-plus-btn', 'feed-plus-mobile-btn'].forEach(function (id) {
-    var btn = $(id);
-    if (btn) btn.setAttribute('aria-expanded', 'false');
-  });
-}
-
-function openFeedPlusMenu(anchorBtn) {
-  if (!anchorBtn) return;
-  var menuId = anchorBtn.getAttribute('aria-controls') || 'feed-plus-menu';
-  var menu = $(menuId);
-  if (!menu) return;
-
-  // Close the other instance first
-  closeFeedPlusMenu();
-
-  menu.hidden = false;
-  menu.classList.remove('aro-leaving');
-  menu.classList.add('open');
-  anchorBtn.setAttribute('aria-expanded', 'true');
-
-  // Focus first visible item
-  var first = menu.querySelector('.feed-plus-item:not([hidden])');
-  if (first) {
-    try { first.focus(); } catch (e) { /* ignore */ }
-  }
-}
-
-function toggleFeedPlusMenu(anchorBtn) {
-  if (!anchorBtn) return;
-  var menuId = anchorBtn.getAttribute('aria-controls') || 'feed-plus-menu';
-  var menu = $(menuId);
-  if (menu && !menu.hidden && menu.classList.contains('open')) {
-    closeFeedPlusMenu();
-  } else {
-    openFeedPlusMenu(anchorBtn);
-  }
-}
-
-function handleFeedPlusAction(action) {
-  closeFeedPlusMenu();
-  if (action === 'post') {
-    openComposer();
-  } else if (action === 'follow') {
-    openFollowDialog();
-  }
-}
-
-function openFollowDialog() {
-  if (!canFollowFromFeed()) return;
-  var d = $('feed-follow-dialog');
-  if (!d) return;
-  showAroOverlay(d);
-  var input = $('feed-follow-input');
-  if (input) {
-    try { input.focus(); } catch (e) { /* ignore */ }
-  }
-}
-
-function closeFollowDialog() {
-  var d = $('feed-follow-dialog');
-  if (!d || d.style.display === 'none') return;
-  aroDismiss(d, { ms: 160 });
-}
-
-function openComposer() {
-  if (!canComposePost()) return;
-  closeFeedPlusMenu();
-  var d = $('feed-compose-dialog');
-  if (!d) return;
-  // Already open: just refocus, don't re-flash draft hints.
-  if (d.style.display !== 'none' && !d.classList.contains('aro-leaving')) {
-    var taOpen = $('feed-compose-text');
-    if (taOpen) {
-      try { taOpen.focus(); } catch (e) { /* ignore */ }
-    }
-    return;
-  }
-  showAroOverlay(d);
-  // Restore draft (storage or in-session), then focus.
-  Promise.resolve(restoreComposeDraft()).then(function () {
-    var ta = $('feed-compose-text');
-    if (ta) {
-      try { ta.focus(); } catch (e) { /* ignore */ }
-    }
-  }).catch(function () {
-    var ta = $('feed-compose-text');
-    if (ta) {
-      try { ta.focus(); } catch (e) { /* ignore */ }
-    }
-  });
-}
-
-/**
- * Close compose dialog.
- * @param {{ clear?: boolean }} opts  clear=true after successful publish (wipe form + storage).
- *   Default: auto-save draft when there is content (do not silent-drop).
- */
-function closeComposer(opts) {
-  opts = opts || {};
-  if (isComposeBusy() && !opts.clear) return;
-  var d = $('feed-compose-dialog');
-  if (opts.clear) {
-    clearComposeForm();
-    clearComposeDraftStorage();
-  } else {
-    // Auto-save on dismiss when user has typed / attached.
-    saveComposeDraftFromForm();
-    // Keep form values in DOM for same-session re-open; only hide draft banners.
-    setComposeDraftHint(false);
-    // Keep text-only notice state for next open if attachments still missing.
-  }
-  if (!d || d.style.display === 'none') return;
-  aroDismiss(d, { ms: 160 });
-}
-
-function renderComposePreviews() {
-  var box = $('feed-compose-previews');
-  if (!box) return;
-  if (!composeAttachments.length) {
-    box.innerHTML = '';
-    return;
-  }
-  var h = '';
-  composeAttachments.forEach(function (a, idx) {
-    h += '<div class="feed-compose-preview">';
-    if (a.kind === 'video') {
-      h += '<video src="' + esc(a.previewUrl) + '" muted></video>';
-    } else {
-      h += '<img src="' + esc(a.previewUrl) + '" alt="" />';
-    }
-    h += '<button type="button" class="feed-compose-preview-remove" data-compose-remove="' + idx + '" aria-label="' + esc(lang.remove || 'Remove') + '">&times;</button>';
-    h += '</div>';
-  });
-  box.innerHTML = h;
-  box.querySelectorAll('[data-compose-remove]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      var i = parseInt(btn.getAttribute('data-compose-remove'), 10);
-      if (isNaN(i) || i < 0 || i >= composeAttachments.length) return;
-      var removed = composeAttachments.splice(i, 1)[0];
-      if (removed && removed.previewUrl) try { URL.revokeObjectURL(removed.previewUrl); } catch (e) {}
-      renderComposePreviews();
-    });
-  });
-}
-
-function addComposeFiles(fileList, forceKind) {
-  if (!fileList || !fileList.length) return;
-  var maxImage = 10 * 1024 * 1024;
-  var maxVideo = 50 * 1024 * 1024;
-  for (var i = 0; i < fileList.length; i++) {
-    if (composeAttachments.length >= 8) break;
-    var file = fileList[i];
-    var mime = (file.type || '').toLowerCase();
-    var kind = forceKind || (mime.indexOf('video/') === 0 ? 'video' : 'image');
-    if (kind === 'image' && mime && mime.indexOf('image/') !== 0) {
-      notifyError(lang.mediaUnsupported || 'Unsupported');
-      continue;
-    }
-    if (kind === 'video' && mime && mime.indexOf('video/') !== 0) {
-      notifyError(lang.mediaUnsupported || 'Unsupported');
-      continue;
-    }
-    var max = kind === 'video' ? maxVideo : maxImage;
-    if (file.size > max) {
-      notifyError(lang.mediaTooLarge || lang.fileTooLarge || 'Too large');
-      continue;
-    }
-    composeAttachments.push({
-      file: file,
-      previewUrl: URL.createObjectURL(file),
-      kind: kind
-    });
-  }
-  renderComposePreviews();
-}
-
-function fileToDataUrl(file) {
-  return new Promise(function (resolve, reject) {
-    var reader = new FileReader();
-    reader.onload = function () { resolve(reader.result); };
-    reader.onerror = function () { reject(new Error('read failed')); };
-    reader.readAsDataURL(file);
-  });
-}
-
-/**
- * Client-side check mirroring host/backend media URL shape.
- * Path: /media/federation/{userId}/{filename} with safe single-segment name.
- */
-function isValidFederationMediaUrl(url) {
-  if (!url || typeof url !== 'string') return false;
-  var trimmed = url.trim();
-  if (!trimmed) return false;
-  // Reject before URL() normalizes ".." away
-  if (trimmed.indexOf('..') >= 0) return false;
-  try {
-    var u = new URL(trimmed);
-    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
-    if (u.pathname.indexOf('..') >= 0) return false;
-    var m = u.pathname.match(/^\/media\/federation\/(\d+)\/([A-Za-z0-9._-]+)$/);
-    return !!(m && m[1] && m[2]);
-  } catch (e) {
-    return false;
-  }
-}
-
-function unwrapUploadMediaResult(res) {
-  if (!res) return null;
-  // Bridge may return { url } or nested { data: { url } }
-  if (res.url) return res;
-  if (res.data && res.data.url) return res.data;
-  return res;
-}
-
-function unwrapPublishResult(res) {
-  if (!res) return null;
-  if (res.activity_id || res.content_id || typeof res.delivered_queued === 'number') return res;
-  if (res.data && (res.data.activity_id || res.data.content_id)) return res.data;
-  return res;
-}
-
-async function uploadComposeMedia(entry) {
-  var file = entry.file;
-  // Re-check raw size before data-URL conversion (aligns with backend limits).
-  var maxImage = 10 * 1024 * 1024;
-  var maxVideo = 50 * 1024 * 1024;
-  var kind = entry.kind === 'video' ? 'video' : 'image';
-  var maxBytes = kind === 'video' ? maxVideo : maxImage;
-  if (file && typeof file.size === 'number' && file.size > maxBytes) {
-    throw new Error(lang.mediaTooLarge || lang.fileTooLarge || 'File too large');
-  }
-  if (typeof Tapp.federation.uploadMedia === 'function') {
-    var dataUrl = await fileToDataUrl(file);
-    var res = await Tapp.federation.uploadMedia({
-      data: dataUrl,
-      name: file.name || 'upload.bin',
-      mime: file.type || (entry.kind === 'video' ? 'video/mp4' : 'image/jpeg')
-    });
-    var uploaded = unwrapUploadMediaResult(res);
-    if (!uploaded || !isValidFederationMediaUrl(uploaded.url)) {
-      console.error('[Aro] uploadMedia returned invalid URL', res);
-      throw new Error(lang.composeBadMediaUrl || 'Invalid media URL after upload');
-    }
-    return uploaded;
-  }
-  // Fallback: publish path unavailable
-  console.error('[Aro] uploadMedia not available on Tapp.federation');
-  throw new Error('uploadMedia not available');
-}
-
-/**
- * Soft-check that the published note (and media) appears on timeline/published.
- * Non-blocking: only warns via toast/console; never fails the publish UX.
- */
-function softVerifyPublishedNote(publishRes, expectedAttachments) {
-  var contentId = publishRes && (publishRes.content_id || publishRes.contentId);
-  var activityId = publishRes && (publishRes.activity_id || publishRes.activityId);
-  if (!contentId && !activityId) return;
-
-  var attempts = 0;
-  var maxAttempts = 4;
-  var delayMs = 700;
-  var wantMedia = !!(expectedAttachments && expectedAttachments.length);
-
-  function noteMatches(item) {
-    if (!item) return false;
-    var cj = item.content_json || item.content || {};
-    var cid = (cj['mfp:contentId'] || cj.content_id || item.content_id || '');
-    var aid = item.activity_id || (cj.id) || '';
-    if (contentId && String(cid) === String(contentId)) return true;
-    if (activityId && String(aid).indexOf(String(activityId)) >= 0) return true;
-    if (activityId && String(item.activity_id || '') === String(activityId)) return true;
-    return false;
-  }
-
-  function itemHasMedia(item) {
-    var atts = extractNoteAttachments(item.content_json || item.content || null);
-    return atts && atts.length > 0 && atts.every(function (a) { return a && a.url; });
-  }
-
-  function tick() {
-    attempts += 1;
-    Promise.all([
-      (typeof Tapp.federation.getTimeline === 'function'
-        ? Tapp.federation.getTimeline().catch(function (e) {
-            console.warn('[Aro] soft-verify getTimeline', e);
-            return null;
-          })
-        : Promise.resolve(null)),
-      (typeof Tapp.federation.getPublished === 'function'
-        ? Tapp.federation.getPublished().catch(function (e) {
-            console.warn('[Aro] soft-verify getPublished', e);
-            return null;
-          })
-        : Promise.resolve(null))
-    ]).then(function (pair) {
-      var timelineItems = (pair[0] && pair[0].items) || [];
-      var publishedItems = (pair[1] && pair[1].items) || [];
-      var found =
-        timelineItems.find(noteMatches) ||
-        publishedItems.find(noteMatches) ||
-        null;
-
-      if (found) {
-        if (wantMedia && !itemHasMedia(found)) {
-          console.warn('[Aro] soft-verify: note found but attachments missing on feed', found);
-          try {
-            Tapp.ui.showNotification({
-              title: lang.composeMediaMissingOnFeed || lang.composeTimelineMissing || 'Media missing',
-              type: 'warning'
-            });
-          } catch (e2) {}
-        }
-        return;
-      }
-
-      if (attempts < maxAttempts) {
-        setTimeout(tick, delayMs);
-        return;
-      }
-
-      console.warn('[Aro] soft-verify: published note not on timeline/published within timeout', {
-        contentId: contentId,
-        activityId: activityId
-      });
-      try {
-        Tapp.ui.showNotification({
-          title: lang.composeTimelineMissing || 'Not on timeline yet',
-          type: 'warning'
-        });
-      } catch (e3) {}
-    }).catch(function (e) {
-      console.warn('[Aro] soft-verify failed', e);
-    });
-  }
-
-  setTimeout(tick, delayMs);
-}
-
-async function publishComposeNote() {
-  if (state.isGuest) return;
-  var ta = $('feed-compose-text');
-  var text = ta ? ta.value.trim() : '';
-  if (!text && !composeAttachments.length) {
-    notifyError(lang.composeEmpty || 'Empty');
-    return;
-  }
-  var publishBtn = $('feed-compose-publish');
-  var cancelBtn = $('feed-compose-cancel');
-  var setBusy = function (busy) {
-    if (publishBtn) {
-      publishBtn.disabled = busy;
-      publishBtn.textContent = busy
-        ? (lang.composePublishing || '…')
-        : (lang.composePublish || 'Publish');
-    }
-    if (cancelBtn) cancelBtn.disabled = busy;
-  };
-  setBusy(true);
-  try {
-    var attachments = [];
-    var uploadedCount = 0;
-    for (var i = 0; i < composeAttachments.length; i++) {
-      if (publishBtn) publishBtn.textContent = lang.composeUploading || '…';
-      try {
-        var uploaded = await uploadComposeMedia(composeAttachments[i]);
-      } catch (upErr) {
-        console.error('[Aro] media upload failed at index', i, upErr);
-        if (uploadedCount > 0) {
-          notifyError(lang.composeUploadPartial || lang.composeUploadFail || lang.composeFail || 'Fail', upErr);
-        } else {
-          notifyError(lang.composeUploadFail || lang.composeFail || 'Fail', upErr);
-        }
-        // Do not half-publish: abort without createNote.
-        return;
-      }
-      if (!isValidFederationMediaUrl(uploaded.url)) {
-        console.error('[Aro] rejecting bad attachment URL before createNote', uploaded);
-        notifyError(lang.composeBadMediaUrl || lang.composeFail || 'Bad URL');
-        return;
-      }
-      attachments.push({
-        url: uploaded.url,
-        media_type: uploaded.media_type || uploaded.mediaType || composeAttachments[i].file.type,
-        name: uploaded.name || composeAttachments[i].file.name
-      });
-      uploadedCount += 1;
-    }
-    if (publishBtn) publishBtn.textContent = lang.composePublishing || '…';
-    var rawPublish;
-    var postVis = (typeof getDefaultPostVisibility === 'function' ? getDefaultPostVisibility() : 'public');
-    if (typeof Tapp.federation.createNote === 'function') {
-      rawPublish = await Tapp.federation.createNote({
-        text: text,
-        attachments: attachments,
-        visibility: postVis
-      });
-    } else if (typeof Tapp.federation.publish === 'function') {
-      rawPublish = await Tapp.federation.publish({
-        content_type: 'note',
-        text: text,
-        attachments: attachments,
-        visibility: postVis
-      });
-    } else {
-      console.error('[Aro] createNote/publish not available');
-      throw new Error('createNote not available');
-    }
-    var publishRes = unwrapPublishResult(rawPublish);
-    if (publishRes && publishRes.success === false) {
-      console.error('[Aro] publish response success=false', publishRes);
-      throw new Error(publishRes.error || lang.composeFail || 'Publish failed');
-    }
-
-    // Success: wipe draft + form (do not re-save published content).
-    closeComposer({ clear: true });
-    var successTitle = attachments.length > 0
-      ? (lang.composeSuccessMedia || lang.composeSuccess || 'OK')
-      : (lang.composeSuccess || 'OK');
-    var successMsg;
-    var queued = publishRes && (publishRes.delivered_queued != null
-      ? publishRes.delivered_queued
-      : publishRes.deliveredQueued);
-    if (typeof queued === 'number' && queued > 0) {
-      successMsg = String(lang.composeDeliveryQueued || 'Delivering to {n} followers')
-        .replace('{n}', String(queued));
-    }
-    try {
-      Tapp.ui.showNotification({
-        title: successTitle,
-        message: successMsg || undefined,
-        type: 'success'
-      });
-    } catch (e2) {}
-
-    // Force reload author timeline + published so the new note is visible.
-    state.feedLoaded.timeline = false;
-    state.feedLoaded.published = false;
-    if (state.feedSubTab !== 'timeline') {
-      switchFeedSubTab('timeline');
-    } else {
-      loadFeedSubTab();
-    }
-    updateFeedProfileHeader();
-
-    // Non-blocking soft verify (timeline/media presence).
-    softVerifyPublishedNote(publishRes, attachments);
-  } catch (e) {
-    console.error('[Aro] publishComposeNote failed', e);
-    notifyError(lang.composeFail || lang.unpublishFail || 'Fail', e);
-  } finally {
-    setBusy(false);
-  }
-}
-
-async function doUnfollow(actorUrl) {
-  try {
-    await Tapp.federation.unfollow(actorUrl);
-    loadFeedSubTab();
-    updateFeedProfileHeader();
-  } catch (e) {
-    notifyError(lang.unfollowFail, e);
-  }
-}
-
-async function doUnpublish(contentType, contentId) {
-  try {
-    await Tapp.federation.unpublish({ content_type: contentType, content_id: contentId });
-    // Keep published + timeline caches coherent after unpublish.
-    if (contentType && contentId && state.published) {
-      state.published = (state.published || []).filter(function (it) {
-        return !(it.content_type === contentType && String(it.content_id) === String(contentId));
-      });
-    }
-    if (contentType && contentId && state.timeline) {
-      state.timeline = (state.timeline || []).filter(function (it) {
-        var t = typeof extractPublishTarget === 'function' ? extractPublishTarget(it) : null;
-        if (t && t.content_type === contentType && String(t.content_id) === String(contentId)) return false;
-        return true;
-      });
-    }
-    state.feedLoaded.published = false;
-    state.feedLoaded.timeline = false;
-    loadFeedSubTab();
-    updateFeedProfileHeader();
-  } catch (e) {
-    notifyError(lang.unpublishFail, e);
-  }
-}
-
-/** Quick-delete own post from Home timeline (confirm + optimistic remove + unpublish). */
-async function doDeleteTimelinePost(target) {
-  target = target || {};
-  var contentType = target.content_type || '';
-  var contentId = target.content_id || '';
-  var activityId = target.activity_id || '';
-  var objectId = target.object_id || '';
-  if (!contentId && !activityId) return;
-  if (typeof aroConfirm === 'function') {
-    var ok = await aroConfirm(lang.deletePostConfirm || 'Delete this post?', true);
-    if (!ok) return;
-  }
-  // Optimistic: drop from timeline (and published if present).
-  var prevTimeline = state.timeline ? state.timeline.slice() : null;
-  var prevPublished = state.published ? state.published.slice() : null;
-  state.timeline = (state.timeline || []).filter(function (it) {
-    if (activityId && it.activity_id && String(it.activity_id) === String(activityId)) return false;
-    if (objectId && resolveObjectId(it) === objectId) return false;
-    if (contentType && contentId) {
-      var t = typeof extractPublishTarget === 'function' ? extractPublishTarget(it) : null;
-      if (t && t.content_type === contentType && String(t.content_id) === String(contentId)) return false;
-    }
-    return true;
-  });
-  if (contentType && contentId && state.published) {
-    state.published = (state.published || []).filter(function (it) {
-      return !(it.content_type === contentType && String(it.content_id) === String(contentId));
-    });
-  }
-  renderFeedContent();
-  try {
-    var req = {};
-    if (contentType) req.content_type = contentType;
-    if (contentId) req.content_id = contentId;
-    if (activityId) req.activity_id = activityId;
-    await Tapp.federation.unpublish(req);
-    state.feedLoaded.published = false;
-    updateFeedProfileHeader();
-  } catch (e) {
-    if (prevTimeline) state.timeline = prevTimeline;
-    if (prevPublished) state.published = prevPublished;
-    state.feedLoaded.timeline = false;
-    renderFeedContent();
-    notifyError(lang.deletePostFail || lang.unpublishFail, e);
-  }
-}
-
-// ==================== Rings View ====================
-async function loadRings() {
-  try {
-    var res = await Tapp.federation.getRings();
-    state.rings = (res && res.rings) || [];
-    state.activeRingId = null;
-    renderRingsSidebar();
-    hideRingDetail();
-  } catch (e) { console.error('[Aro] loadRings error:', e); }
-}
-
-function renderRingsSidebar() {
-  var list = $('ring-list');
-  if (!list) return;
-  if (state.rings.length === 0) {
-    list.innerHTML = '<div class="conv-empty conv-empty-fill"><span id="ring-empty-text">'
-      + esc(lang.emptyRings || 'No rings yet')
-      + '<br><span style="font-size:11px;opacity:.75">' + esc(lang.createRingTitle || '') + '</span></span></div>';
-    return;
-  }
-  var q = normalizeSearchQuery((state.search && state.search.ring) || '');
-  var rings = !q ? state.rings : state.rings.filter(function (ring) {
-    return matchesSearch(q, [
-      ring.ring_name,
-      ring.ring_id,
-      ring.ring_type,
-      ringTypeLabel(ring.ring_type),
-    ]);
-  });
-  if (rings.length === 0) {
-    list.innerHTML = searchNoResultsHtml();
-    return;
-  }
-  var typeIcons = { 'brew-recommend': SVG_ICONS.coffee, 'tapp-store': SVG_ICONS.puzzle, 'library-exchange': SVG_ICONS.library, 'instance-directory': SVG_ICONS.globe };
-  var html = '';
-  rings.forEach(function (ring) {
-    var icon = typeIcons[ring.ring_type] || SVG_ICONS.ring;
-    var name = ring.ring_name || ring.ring_id;
-    var peerText = (ring.peer_count || 0) + ' ' + lang.peers;
-    var activeClass = state.activeRingId === ring.ring_id ? ' conv-active' : '';
-    html += '<button class="conv-item' + activeClass + '" data-ring-id="' + esc(ring.ring_id) + '">'
-      + '<span class="conv-accent" aria-hidden="true"></span>'
-      + '<div class="conv-avatar avatar-room" style="border-radius:12px;font-size:16px">' + icon + '</div>'
-      + '<div class="conv-info">'
-      + '<div class="conv-top"><span class="conv-name">' + esc(name) + '</span></div>'
-      + '<div class="conv-bottom"><span class="conv-preview">' + esc(ringTypeLabel(ring.ring_type)) + ' · ' + esc(peerText) + '</span></div>'
-      + '</div>'
-      + '</button>';
-  });
-  list.innerHTML = html;
-  list.querySelectorAll('.conv-item').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      openRingDetail(btn.dataset.ringId);
-    });
-  });
-}
-
-function updateRingCreateCategoryVisibility() {
-  var type = (typeof getAroSelectValue === 'function'
-    ? getAroSelectValue('ring-type-select')
-    : (($('ring-type-select') || {}).value)) || 'brew-recommend';
-  var wrap = $('ring-brew-category-wrap');
-  if (!wrap) return;
-  if (type === 'brew-recommend') {
-    wrap.style.display = 'flex';
-    loadBrewCategoriesForRingCreate();
-  } else {
-    wrap.style.display = 'none';
-  }
-}
-
-function loadBrewCategoriesForRingCreate() {
-  var select = $('ring-brew-category-select');
-  var freeText = $('ring-brew-category-input');
-  if (!select) return;
-  if (typeof initAroSelect === 'function') initAroSelect(select);
-  // Keep the "all" option; rebuild the rest via custom select API
-  var allLabel = (lang.ringBrewCategoryAll || 'All my categories');
-  var baseOpts = [{ value: '', label: allLabel, id: 'ring-brew-category-all' }];
-  if (typeof setAroSelectOptions === 'function') {
-    setAroSelectOptions(select, baseOpts, '');
-  }
-  if (freeText) {
-    freeText.value = '';
-    freeText.style.display = 'none';
-  }
-  if (typeof Tapp === 'undefined' || !Tapp.brewList || typeof Tapp.brewList.categories !== 'function') {
-    // Fallback: free-text only
-    if (freeText) freeText.style.display = '';
-    select.style.display = 'none';
-    return;
-  }
-  select.style.display = '';
-  Tapp.brewList.categories().then(function (cats) {
-    var list = Array.isArray(cats) ? cats : (cats && cats.categories) || [];
-    var opts = [{ value: '', label: allLabel, id: 'ring-brew-category-all' }];
-    list.forEach(function (c) {
-      var name = (c && (c.name || c)) || '';
-      if (!name) return;
-      opts.push({ value: name, label: name });
-    });
-    if (typeof setAroSelectOptions === 'function') {
-      setAroSelectOptions(select, opts, '');
-    }
-    // If no categories from API, allow free-text
-    if (list.length === 0 && freeText) {
-      freeText.style.display = '';
-    }
-  }).catch(function () {
-    if (freeText) freeText.style.display = '';
-    select.style.display = 'none';
-  });
-}
-
-async function doCreateRing() {
-  if (!requireAdminAction()) return;
-  var input = $('ring-name-input');
-  var btn = $('create-ring-btn');
-  if (!input) return;
-  var name = input.value.trim();
-  if (!name) return;
-  var type = (typeof getAroSelectValue === 'function'
-    ? getAroSelectValue('ring-type-select')
-    : (($('ring-type-select') || {}).value)) || 'brew-recommend';
-  var req = { name: name, ring_type: type };
-  if (type === 'brew-recommend') {
-    var catSelect = $('ring-brew-category-select');
-    var catInput = $('ring-brew-category-input');
-    var cat = '';
-    if (catSelect && catSelect.style.display !== 'none') {
-      cat = ((typeof getAroSelectValue === 'function'
-        ? getAroSelectValue(catSelect)
-        : catSelect.value) || '').trim();
-    }
-    if (!cat && catInput && catInput.style.display !== 'none') {
-      cat = (catInput.value || '').trim();
-    }
-    if (cat) req.category = cat;
-  }
-  if (btn) { btn.disabled = true; btn.textContent = lang.creating; }
-  try {
-    await Tapp.federation.createRing(req);
-    input.value = '';
-    var catSel = $('ring-brew-category-select');
-    if (catSel && typeof setAroSelectValue === 'function') setAroSelectValue(catSel, '', true);
-    else if (catSel) catSel.value = '';
-    var catIn = $('ring-brew-category-input');
-    if (catIn) catIn.value = '';
-    var d = $('ring-create-dialog');
-    if (d) aroDismiss(d, { ms: 170 });
-    loadRings();
-  } catch (e) {
-    notifyError(lang.createRingFail, e);
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = lang.createRingBtn; }
-  }
-}
-
-async function doLeaveRing(ringId) {
-  if (!requireAdminAction()) return;
-  try {
-    await Tapp.federation.leaveRing(ringId);
-    hideRingDetail();
-    loadRings();
-  } catch (e) {
-    notifyError(lang.leaveRingFail, e);
-  }
-}
-
-/** Copy the active ring's id for sharing with another instance. */
-async function copyRingId() {
-  var ring = state.ringDetail;
-  var ringId = (ring && ring.ring_id) || state.activeRingId || '';
-  if (!ringId) {
-    try { Tapp.ui.showNotification({ title: lang.copyFail, type: 'error' }); } catch (e0) {}
-    return;
-  }
-  var ok = await copyTextToClipboard(ringId, { silent: true });
-  try {
-    Tapp.ui.showNotification({
-      title: ok ? (lang.ringIdCopied || lang.copied) : lang.copyFail,
-      message: ok ? ringId : undefined,
-      type: ok ? 'success' : 'error',
-    });
-  } catch (e1) {}
-}
-
-// ==================== Ring Detail (inline panel) ====================
-function openRingDetail(ringId) {
-  state.activeRingId = ringId;
-  state.ringDetail = null;
-  state.ringPeers = [];
-  // Update sidebar active
-  var list = $('ring-list');
-  if (list) list.querySelectorAll('.conv-item').forEach(function (btn) {
-    btn.classList.toggle('conv-active', btn.dataset.ringId === ringId);
-  });
-  // Show detail panel
-  $('ring-empty-state').style.display = 'none';
-  var detail = $('ring-detail');
-  if (detail) {
-    detail.style.display = '';
-    aroPlayEnter(detail, 'aro-panel-enter');
-  }
-  // Optimistic ring_id fill (full detail arrives from loadRingDetail)
-  var idLabelEl = $('ring-id-label');
-  if (idLabelEl) idLabelEl.textContent = lang.ringId || 'Ring ID';
-  var idValueEl = $('ring-id-value');
-  if (idValueEl) {
-    idValueEl.textContent = ringId || '';
-    idValueEl.setAttribute('title', ringId || '');
-  }
-  var idCopyBtn = $('ring-id-copy');
-  if (idCopyBtn) {
-    idCopyBtn.disabled = !ringId;
-    idCopyBtn.setAttribute('title', lang.copy || 'Copy');
-  }
-  // Mobile
-  $('ring-sidebar').classList.add('sidebar-hidden-mobile');
-  var main = detail ? detail.closest('.panel-main') : null;
-  if (main) {
-    main.classList.add('panel-main-show-mobile');
-    aroPlayEnter(main, 'aro-panel-enter');
-  }
-  loadRingDetail(ringId);
-}
-
-function hideRingDetail() {
-  state.activeRingId = null;
-  state.ringDetail = null;
-  state.ringPeers = [];
-  var detail = $('ring-detail');
-  if (detail) {
-    detail.style.display = 'none';
-    detail.classList.remove('aro-panel-enter');
-  }
-  var empty = $('ring-empty-state');
-  if (empty) {
-    empty.style.display = '';
-    aroPlayEnter(empty, 'aro-panel-enter');
-  }
-  var sidebar = $('ring-sidebar');
-  if (sidebar) {
-    sidebar.classList.remove('sidebar-hidden-mobile');
-    aroPlayEnter(sidebar, 'aro-panel-enter');
-  }
-  var main = detail ? detail.closest('.panel-main') : null;
-  if (main) main.classList.remove('panel-main-show-mobile');
-}
-
-async function loadRingDetail(ringId) {
-  try {
-    var results = await Promise.all([
-      Tapp.federation.getRing(ringId),
-      Tapp.federation.getRingPeers(ringId)
-    ]);
-    if (state.activeRingId !== ringId) return; // user closed
-    state.ringDetail = results[0];
-    state.ringPeers = (results[1] && results[1].peers) || [];
-    renderRingDetail();
-  } catch (e) {
-    console.error('[Aro] loadRingDetail error:', e);
-  }
-}
-
-function renderRingDetail() {
-  var ring = state.ringDetail;
-  if (!ring) return;
-  var typeIcons = { 'brew-recommend': SVG_ICONS.coffee, 'tapp-store': SVG_ICONS.puzzle, 'library-exchange': SVG_ICONS.library, 'instance-directory': SVG_ICONS.globe };
-  var iconEl = $('ring-detail-icon');
-  if (iconEl) iconEl.innerHTML = typeIcons[ring.ring_type] || SVG_ICONS.ring;
-  var nameEl = $('ring-detail-name');
-  // Prefer display name; ring_id is always shown separately in the id bar
-  if (nameEl) nameEl.textContent = ring.ring_name || ring.ring_id;
-  var metaEl = $('ring-detail-meta');
-  if (metaEl) {
-    var parts = [];
-    parts.push('<span class="meta-badge">' + esc(ringTypeLabel(ring.ring_type)) + '</span>');
-    parts.push('<span class="meta-badge">' + esc(state.ringPeers.length + ' ' + lang.peers) + '</span>');
-    var ringCat = ring.gossip_config && (ring.gossip_config.category || ring.gossip_config.brew_category);
-    if (ringCat) {
-      parts.push('<span class="meta-badge">' + esc(String(ringCat)) + '</span>');
-    }
-    if (ring.last_sync_at) {
-      try { parts.push('<span class="meta-badge">' + esc(timeAgo(ring.last_sync_at)) + '</span>'); } catch (e) {}
-    }
-    metaEl.innerHTML = parts.join('');
-  }
-
-  // Always show ring_id (separate from title) for cross-instance sharing
-  var ringId = ring.ring_id || state.activeRingId || '';
-  var idLabelEl = $('ring-id-label');
-  if (idLabelEl) idLabelEl.textContent = lang.ringId || 'Ring ID';
-  var idValueEl = $('ring-id-value');
-  if (idValueEl) {
-    idValueEl.textContent = ringId;
-    idValueEl.setAttribute('title', ringId);
-  }
-  var idCopyBtn = $('ring-id-copy');
-  if (idCopyBtn) {
-    idCopyBtn.disabled = !ringId;
-    idCopyBtn.setAttribute('title', lang.copy || 'Copy');
-    idCopyBtn.setAttribute('aria-label', (lang.copy || 'Copy') + ' ' + (lang.ringId || 'Ring ID'));
-  }
-
-  // Sync / leave labels
-  var syncLabel = $('ring-sync-label');
-  if (syncLabel) syncLabel.textContent = lang.syncBtn;
-  var leaveLabel = $('ring-leave-label');
-  if (leaveLabel) leaveLabel.textContent = lang.leaveBtn;
-
-  // Peer input
-  var peerInput = $('ring-peer-input');
-  if (peerInput) peerInput.placeholder = lang.addPeerPlaceholder;
-  var addPeerBtn = $('ring-add-peer-btn');
-  if (addPeerBtn) addPeerBtn.textContent = lang.addPeerBtn;
-  applyAdminControls();
-
-  // Render peers as member-item style
-  var peersList = $('ring-peers-list');
-  var peersEmpty = $('ring-peers-empty');
-  if (!peersList) return;
-
-  if (state.ringPeers.length === 0) {
-    peersList.innerHTML = '';
-    if (peersEmpty) { peersEmpty.style.display = ''; peersEmpty.querySelector('span').textContent = lang.emptyPeers; }
-    return;
-  }
-  if (peersEmpty) peersEmpty.style.display = 'none';
-
-  var html = '';
-  state.ringPeers.forEach(function (peer) {
-    var url = peer.actor_url || peer.peer_url || peer.url || peer;
-    var urlStr = typeof url === 'string' ? url : JSON.stringify(url);
-    var initial = SVG_ICONS.globe;
-    html += '<div class="member-item">'
-      + '<div class="member-avatar" style="border-radius:6px;font-size:12px">' + initial + '</div>'
-      + '<div class="member-info">'
-      + '<div class="member-name">' + esc(urlStr) + '</div>'
-      + '</div>'
-      + (state.isAdmin ? '<button class="member-kick ring-peer-remove-btn" data-peer-url="' + esc(typeof url === 'string' ? url : '') + '" title="Remove">'
-      + '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>'
-      + '</button>' : '')
-      + '</div>';
-  });
-  peersList.innerHTML = html;
-  applyAdminControls();
-
-  peersList.querySelectorAll('.ring-peer-remove-btn').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      doRemovePeer(btn.dataset.peerUrl);
-    });
-  });
-}
-
-async function doAddPeer() {
-  if (!requireAdminAction()) return;
-  var input = $('ring-peer-input');
-  var btn = $('ring-add-peer-btn');
-  if (!input || !state.activeRingId) return;
-  var peerUrl = input.value.trim();
-  if (!peerUrl) return;
-  if (btn) btn.disabled = true;
-  try {
-    await Tapp.federation.addPeer(state.activeRingId, { peer: peerUrl });
-    input.value = '';
-    loadRingDetail(state.activeRingId);
-  } catch (e) {
-    notifyError(lang.addPeerFail, e);
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-async function doRemovePeer(peerUrl) {
-  if (!requireAdminAction()) return;
-  if (!state.activeRingId || !peerUrl) return;
-  try {
-    await Tapp.federation.removePeer(state.activeRingId, peerUrl);
-    loadRingDetail(state.activeRingId);
-  } catch (e) {
-    notifyError(lang.removePeerFail, e);
-  }
-}
-
-async function doTriggerSync() {
-  if (!requireAdminAction()) return;
-  if (!state.activeRingId) return;
-  var btn = $('ring-sync-btn');
-  var statusEl = $('ring-sync-status');
-  if (btn) btn.disabled = true;
-  if (statusEl) { statusEl.style.display = ''; statusEl.className = 'ring-sync-bar'; statusEl.textContent = lang.syncing; }
-  try {
-    await Tapp.federation.triggerSync(state.activeRingId);
-    if (statusEl) { statusEl.className = 'ring-sync-bar ring-sync-ok'; statusEl.textContent = lang.syncSuccess; }
-    // Refresh detail after sync
-    loadRingDetail(state.activeRingId);
-  } catch (e) {
-    if (statusEl) { statusEl.className = 'ring-sync-bar ring-sync-err'; statusEl.textContent = lang.syncFail + errorSuffix(e); }
-  } finally {
-    if (btn) btn.disabled = false;
-    // Auto-hide status after 3s
-    setTimeout(function () {
-      if (statusEl) statusEl.style.display = 'none';
-    }, 3000);
-  }
-}
+// → ringsUi.js
 
 // ==================== Event Binding ====================
 function bindEvents() {
@@ -4067,11 +2517,30 @@ function bindEvents() {
   var input = $('msg-input');
   if (input) {
     input.addEventListener('keydown', function (e) {
+      // @ mention picker steals arrows / Enter / Tab / Escape when open
+      if (typeof onMentionKeydown === 'function' && onMentionKeydown(e)) return;
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); }
     });
     input.addEventListener('input', function () {
       autoResizeInput(this);
       updateSendState();
+      if (typeof onMentionInput === 'function') onMentionInput(this);
+    });
+    // Caret moved with arrows without typing — refresh active @ token
+    input.addEventListener('keyup', function (e) {
+      if (!e) return;
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') {
+        if (typeof onMentionInput === 'function') onMentionInput(this);
+      }
+    });
+    input.addEventListener('blur', function () {
+      // Delay so mousedown on picker can fire first
+      setTimeout(function () {
+        if (typeof closeMentionPicker === 'function') closeMentionPicker();
+      }, 180);
+    });
+    input.addEventListener('click', function () {
+      if (typeof onMentionInput === 'function') onMentionInput(this);
     });
     // Paste image from clipboard (screenshot / copy image) → attach preview
     input.addEventListener('paste', function (e) {

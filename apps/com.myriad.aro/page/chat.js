@@ -94,6 +94,18 @@ function bindConvListClicks() {
   if (!list || list.dataset.convClickBound === '1') return;
   list.dataset.convClickBound = '1';
   list.addEventListener('click', function (e) {
+    // Empty-state CTA (rebuilt on each empty paint — delegated)
+    var cta = e.target && e.target.closest ? e.target.closest('#conv-empty-cta, .conv-empty-cta') : null;
+    if (cta && list.contains(cta)) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof showCreateDialog === 'function') showCreateDialog();
+      else {
+        var createBtn = $('create-btn');
+        if (createBtn) createBtn.click();
+      }
+      return;
+    }
     var item = e.target && e.target.closest ? e.target.closest('.conv-item') : null;
     if (!item || !list.contains(item)) return;
     var kind = item.getAttribute('data-kind') || item.dataset.kind;
@@ -102,6 +114,22 @@ function bindConvListClicks() {
     e.preventDefault();
     if (typeof openConversation === 'function') openConversation(kind, id);
   });
+}
+
+/** Skip full list rewrite when tab/search/selection/items are unchanged. */
+function convListFingerprint(items, tab, q, activeId) {
+  var n = (items && items.length) || 0;
+  var unreadSum = 0;
+  var idSig = '';
+  for (var i = 0; i < n; i++) {
+    var it = items[i];
+    unreadSum += (it.unread || 0);
+    // Compact id order signature (order changes when last_activity moves)
+    if (i < 12 || i >= n - 3) {
+      idSig += (it.kind || '')[0] + ':' + (it.id || '') + ':' + (it.unread || 0) + ':' + (it.sortTime || '') + ';';
+    }
+  }
+  return [tab || '', q || '', activeId || '', n, unreadSum, idSig].join('|');
 }
 
 function renderConvList() {
@@ -115,14 +143,16 @@ function renderConvList() {
   var tabItems = filterConversationByTab(allItems);
   var q = (state.search && state.search.conv) || '';
   var items = filterConversationItems(tabItems, q);
+  var tab = state.convTab || 'recent';
 
   if (tabItems.length === 0 && !q) {
+    state._convListFp = '';
     var emptyTitle = lang.noConv || lang.title || 'Messenger';
     var emptyHint = lang.noConvHint || lang.selectHint || 'Start a chat with +';
-    if ((state.convTab || 'recent') === 'room') {
+    if (tab === 'room') {
       emptyTitle = lang.convTabRoomEmpty || lang.rooms || lang.convTabRoom || 'Groups';
       emptyHint = lang.convTabRoomEmptyHint || lang.noRoomsHint || lang.noConvHint || emptyHint;
-    } else if ((state.convTab || 'recent') === 'dm') {
+    } else if (tab === 'dm') {
       emptyTitle = lang.convTabDmEmpty || lang.dm || lang.convTabDm || 'DMs';
       emptyHint = lang.convTabDmEmptyHint || lang.noConvHint || emptyHint;
     } else {
@@ -136,25 +166,22 @@ function renderConvList() {
       + '<span class="conv-empty-hint">' + esc(emptyHint) + '</span>'
       + '<button type="button" class="conv-empty-cta" id="conv-empty-cta">' + esc(ctaLabel) + '</button>'
       + '</div></div>';
-    var cta = $('conv-empty-cta');
-    if (cta) {
-      cta.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (typeof showCreateDialog === 'function') showCreateDialog();
-        else {
-          var createBtn = $('create-btn');
-          if (createBtn) createBtn.click();
-        }
-      });
-    }
     return;
   }
 
   if (items.length === 0) {
+    state._convListFp = '';
     list.innerHTML = searchNoResultsHtml();
     return;
   }
+
+  var fp = convListFingerprint(items, tab, q, state.activeId);
+  if (fp && fp === state._convListFp && list.querySelector('.conv-item')) {
+    // Still sync active highlight without full rebuild when only selection changed
+    // (fingerprint includes activeId — so this is true skip)
+    return;
+  }
+  state._convListFp = fp;
 
   var html = '';
   items.forEach(function (item) {
@@ -644,10 +671,68 @@ function doForward(msg) {
 }
 
 // ==================== Render: Messages ====================
+
+/** Coalesce rapid poll/WS renders into one paint frame. */
+var _renderMsgRaf = 0;
+var _renderMsgPendingOpts = null;
+
+/**
+ * Schedule renderMessages on the next animation frame (merge opts).
+ * Use for poll/WS bursts. Prefer direct renderMessages for open/error paths.
+ */
+function scheduleRenderMessages(opts) {
+  var incoming = opts || {};
+  if (!_renderMsgPendingOpts) {
+    _renderMsgPendingOpts = {
+      animateNew: !!incoming.animateNew,
+      newCount: Math.max(0, incoming.newCount || 0),
+      stickBottom: !!incoming.stickBottom,
+      forceFull: !!incoming.forceFull,
+      forceFullHistory: !!incoming.forceFullHistory,
+    };
+  } else {
+    var cur = _renderMsgPendingOpts;
+    cur.animateNew = !!(cur.animateNew || incoming.animateNew);
+    cur.newCount = Math.max(cur.newCount || 0, incoming.newCount || 0);
+    cur.stickBottom = !!(cur.stickBottom || incoming.stickBottom);
+    cur.forceFull = !!(cur.forceFull || incoming.forceFull);
+    cur.forceFullHistory = !!(cur.forceFullHistory || incoming.forceFullHistory);
+  }
+  if (_renderMsgRaf) return;
+  var raf = typeof requestAnimationFrame === 'function'
+    ? requestAnimationFrame
+    : function (cb) { return setTimeout(cb, 16); };
+  _renderMsgRaf = raf(function () {
+    _renderMsgRaf = 0;
+    var o = _renderMsgPendingOpts;
+    _renderMsgPendingOpts = null;
+    renderMessages(o || {});
+  });
+}
+
+/** True when the user is near the bottom of the transcript (auto-scroll safe). */
+function isMessagesNearBottom(el, px) {
+  if (!el) return true;
+  var threshold = px == null ? 96 : px;
+  try {
+    return (el.scrollHeight - el.scrollTop - el.clientHeight) <= threshold;
+  } catch (e) {
+    return true;
+  }
+}
+
+// resolveMessageType / msgTextHtml / bindMessagesDelegates / buildMessageEntryHtml / libraryMediaCardHtml → msgUi.js
+
+/** Soft cap for full-window HTML rebuild when user is on the live tail (history still in state). */
+var MSG_RENDER_MAX = 180;
+
 function renderMessages(opts) {
   opts = opts || {};
   var container = $('messages');
   if (!container) return;
+  // Ensure delegated handlers exist before any empty/full path returns.
+  bindMessagesDelegates(container);
+  bindMsgContextMenu(container);
   state.pinnedBarDismissed = false;
 
   // Pending channel/room invite or open-join: centered CTA card instead of transcript/header buttons.
@@ -672,12 +757,6 @@ function renderMessages(opts) {
         + '<p style="font-size:12px;opacity:.8;max-width:240px;line-height:1.45">' + esc(String(state.chatLoadError)) + '</p>'
         + '<button type="button" class="messages-retry-btn" id="messages-retry-btn">' + esc(lang.feedRetry || 'Try again') + '</button>'
         + '</div>';
-      var retryBtn = $('messages-retry-btn');
-      if (retryBtn) {
-        retryBtn.addEventListener('click', function () {
-          if (state.activeKind && state.activeId) openConversation(state.activeKind, state.activeId);
-        });
-      }
     } else {
       var hint = state.activeKind === 'channel' ? lang.emptyChatHint : lang.emptyRoomHint;
       container.innerHTML = '<div class="messages-empty"><div class="messages-empty-icon">'
@@ -694,585 +773,169 @@ function renderMessages(opts) {
   var animateNew = !!opts.animateNew && !state.skipMsgAppear && !prefersReducedMotion();
   var newCount = Math.max(0, opts.newCount || 0);
   var appearFrom = animateNew ? Math.max(0, state.messages.length - newCount) : state.messages.length;
+  // stickBottom: own send / open — always follow tail. Otherwise only if user is near bottom.
+  var wasNearBottom = !!opts.stickBottom || isMessagesNearBottom(container);
+  var prevScrollTop = container.scrollTop;
+  var prevScrollHeight = container.scrollHeight;
   state.skipMsgAppear = false;
 
-  var html = '';
-  var lastDayKey = '';
-  state.messages.forEach(function (msg, idx) {
-    var local = isLocalActor(msg.sender_actor);
-    var sender = (msg.sender_actor || '').split('/').pop() || '?';
-    var payload = (typeof msg.payload === 'object' && msg.payload) ? msg.payload : {};
-    var msgType = msg.message_type || 'text';
-    // Auto-detect content type from payload when message_type is generic
-    if (msgType === 'text' || !msgType) {
-      var knownShareTypes = { tapp: 1, brew: 1, library: 1, report: 1, image: 1, file: 1, 'file-meta': 1 };
-      if (payload.content_type && typeof payload.content_type === 'string' && knownShareTypes[payload.content_type]) {
-        msgType = payload.content_type;
-      } else if (payload.tapp_id) {
-        msgType = 'tapp';
-      } else if (payload.brew_id || payload.brew_link) {
-        msgType = 'brew';
-      } else if (payload.report_id) {
-        msgType = 'report';
-      } else if (payload.platform_id && (payload.item_id || payload.title)) {
-        msgType = 'library';
-      } else if (payload.data && payload.mime_type && payload.mime_type.indexOf('image/') === 0) {
-        msgType = 'image';
-      } else if (payload.transfer_id && payload.filename) {
-        msgType = 'file-meta';
-      } else if (payload.data && payload.filename) {
-        msgType = 'file';
-      }
-    }
-    // E2E key exchange is protocol traffic stored as history — show as system
-    // separator, never as a bubble of raw {algorithm, publicKey, direction}.
-    if (isE2eKeyExchangeMessage(msg, msgType, payload)) {
-      var kxLabel = e2eKeyExchangeLabel(msg, payload);
-      html += '<div class="msg-day-sep msg-e2e-sep" data-msg-id="' + esc(msg.message_id || '') + '">'
-        + '<span class="msg-day-label">' + esc(kxLabel) + '</span></div>';
-      return;
-    }
-    var text = getPayloadText(msg.payload);
-    var pinned = msg.is_pinned ? '<span class="msg-pin"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 11V4a1 1 0 011-1h4a1 1 0 011 1v7"/><path d="M5 17h14"/><path d="M7 11l-2 6h14l-2-6"/></svg></span>' : '';
-
-    // Resolve avatar and display name for remote messages
-    var avatarUrl = '';
-    var displayName = sender;
-    if (!local) {
-      if (state.activeKind === 'channel' && state.channelDetail) {
-        avatarUrl = state.channelDetail.remote_actor_avatar || '';
-        displayName = state.channelDetail.remote_actor_name || sender;
-      } else if (state.activeKind === 'room') {
-        var member = findMemberByActor(msg.sender_actor);
-        if (member) {
-          displayName = member.display_name || sender;
-          avatarUrl = member.avatar_url || '';
-        }
-      }
-    }
-
-    // Day separators
-    var dayKey = '';
-    try {
-      var md = new Date(msg.created_at);
-      if (!isNaN(md)) dayKey = md.getFullYear() + '-' + md.getMonth() + '-' + md.getDate();
-    } catch (e) { dayKey = ''; }
-    if (dayKey && dayKey !== lastDayKey) {
-      lastDayKey = dayKey;
-      html += '<div class="msg-day-sep"><span class="msg-day-label">' + esc(dayLabel(msg.created_at)) + '</span></div>';
-    }
-
-    // Compact: same sender within ~5 minutes
-    var prevMsg = idx > 0 ? state.messages[idx - 1] : null;
-    var sameSender = prevMsg && sameActorUrl(prevMsg.sender_actor, msg.sender_actor);
-    var compact = false;
-    if (sameSender && prevMsg && prevMsg.created_at && msg.created_at) {
-      try {
-        var dt = Math.abs(new Date(msg.created_at) - new Date(prevMsg.created_at));
-        compact = dt < 5 * 60 * 1000;
-      } catch (e2) { compact = false; }
-    }
-
-    html += '<div class="msg-row ' + (local ? 'msg-local' : 'msg-remote') + (compact ? ' msg-compact' : '')
-      + (idx >= appearFrom ? ' msg-appear' : '')
-      + '" data-msg-id="' + esc(msg.message_id || '') + '">';
-    if (!local) {
-      if (compact) {
-        html += '<div class="msg-avatar-spacer"></div>';
-      } else {
-        html += '<div class="msg-avatar">' + avatarContentHtml(avatarUrl, displayName) + '</div>';
-      }
-    }
-    // Rich media / share cards carry their own surface — the card *is* the bubble
-    // whenever there is no caption or quote to host alongside it.
-    var isMediaMsg = (msgType === 'image' && payload.data)
-      || msgType === 'file' || msgType === 'file-meta'
-      || msgType === 'tapp' || msgType === 'brew' || msgType === 'library' || msgType === 'report';
-    var bareMedia = isMediaMsg && !payload.text && !payload.quote_sender && !payload.quote_text;
-
-    html += '<div class="msg-bubble ' + (local ? 'bubble-local' : 'bubble-remote')
-      + (bareMedia ? ' bubble-media' : '') + '">';
-    html += '<button type="button" class="msg-more-btn" title="' + esc(lang.msgActions || 'Message actions') + '" aria-label="' + esc(lang.msgActions || 'Message actions') + '">'
-      + '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>'
-      + '</button>';
-    if (!local && !compact) {
-      html += '<div class="msg-sender">' + esc(displayName) + '</div>';
-    }
-
-    // Render quoted message if present (snapshot travels in payload for both parties)
-    if (payload.quote_sender || payload.quote_text || payload.quote_id) {
-      var qId = payload.quote_id || msg.reply_to || '';
-      html += '<button type="button" class="msg-quote-block"'
-        + (qId ? ' data-quote-id="' + esc(qId) + '"' : '')
-        + ' title="' + esc(lang.roomFilesJump || lang.historyJump || 'Show in chat') + '">'
-        + '<div class="msg-quote-bar"></div>'
-        + '<div class="msg-quote-content">'
-        + '<div class="msg-quote-sender">' + esc(payload.quote_sender || '') + '</div>'
-        + '<div class="msg-quote-text">' + esc(payload.quote_text || '') + '</div>'
-        + '</div></button>';
-    }
-
-    // Render content based on message type
-    if (msgType === 'image' && payload.data) {
-      // Use message-sized validator (not safeIconUrl's 256 KiB icon cap).
-      var safeImg = typeof safeMessageImageUrl === 'function'
-        ? safeMessageImageUrl(payload.data)
-        : safeIconUrl(payload.data);
-      var isStickerMsg = !!(payload.sticker === true || payload.sticker === 1 || payload.as_sticker);
-      if (safeImg) {
-        if (isStickerMsg) {
-          // Compact sticker bubble (no photo chrome)
-          html += '<button type="button" class="msg-sticker" data-media-idx="' + idx + '"'
-            + ' aria-label="' + esc(payload.filename || lang.stickerBtn || 'Sticker') + '">'
-            + '<img class="msg-sticker-img" src="' + esc(safeImg) + '" alt="" loading="lazy" draggable="false" />'
-            + '</button>';
-        } else {
-          html += '<figure class="msg-media" data-media-idx="' + idx + '" tabindex="0" role="button"'
-            + ' aria-label="' + esc(payload.filename || lang.attachImage || 'Image') + '">'
-            + '<img class="msg-image" src="' + esc(safeImg) + '" alt="' + esc(payload.filename || '') + '" loading="lazy" />'
-            + '<span class="msg-media-veil"></span>'
-            + '<span class="msg-media-zoom">' + SVG_ICONS.expand + '</span>'
-            + '</figure>';
-        }
-      } else {
-        html += '<div class="msg-text">' + esc(payload.filename || lang.attachImage || 'Image') + '</div>';
-      }
-      if (payload.text && !isStickerMsg) html += '<div class="msg-text msg-caption">' + esc(payload.text) + '</div>';
-    } else if (msgType === 'file' || msgType === 'file-meta') {
-      var fileMeta = fileCardMeta(payload.filename, payload.mime_type);
-      var hasInline = !!(payload.data);
-      var hasTransfer = !!(payload.transfer_id);
-      var canDownload = hasInline || hasTransfer;
-      var metaBits = [];
-      if (payload.size) metaBits.push(formatFileSize(payload.size));
-      if (fileMeta.ext) metaBits.push(fileMeta.ext);
-      if (hasTransfer && !hasInline) metaBits.push(lang.attachFile || 'file');
-      var sizeLabel = metaBits.join(' · ');
-      var fileTitle = canDownload
-        ? (lang.downloadFile || payload.filename || 'File')
-        : (payload.filename || lang.previewFile || 'File');
-      // Inline base64 OR completed chunked transfer (transfer_id) → downloadable
-      html += '<button type="button" class="msg-file-card' + (canDownload ? '' : ' msg-file-card-disabled') + '"'
-        + ' data-kind="' + esc(fileMeta.kind) + '" data-file-idx="' + idx + '"'
-        + (hasInline ? ' data-has-inline="1"' : '')
-        + (hasTransfer ? ' data-transfer-id="' + esc(payload.transfer_id) + '"' : '')
-        + (canDownload ? '' : ' disabled')
-        + ' title="' + esc(fileTitle) + '">'
-        + '<span class="msg-file-icon">' + fileMeta.glyph
-        + (fileMeta.ext ? '<em class="msg-file-ext">' + esc(fileMeta.ext) + '</em>' : '') + '</span>'
-        + '<span class="msg-file-info">'
-        + '<span class="msg-file-name">' + esc(payload.filename || 'file') + '</span>'
-        + '<span class="msg-file-size">' + esc(sizeLabel) + '</span>'
-        + '</span>'
-        + '<span class="msg-file-action">' + (canDownload ? SVG_ICONS.download : SVG_ICONS.cloud) + '</span>'
-        + '</button>';
-      if (payload.text) html += '<div class="msg-text msg-caption">' + esc(payload.text) + '</div>';
-    } else if (msgType === 'tapp' || msgType === 'brew' || msgType === 'library' || msgType === 'report') {
-      // A library share that carries cover art renders as an image-forward media
-      // card (poster + sender attribution); everything else stays the compact row.
-      var mediaView = (msgType === 'library') ? libraryMediaView(payload) : null;
-      if (mediaView && safeIconUrl(mediaView.image)) {
-        html += libraryMediaCardHtml(idx, payload, mediaView);
-        if (payload.text) html += '<div class="msg-text msg-caption">' + esc(payload.text) + '</div>';
-      } else {
-      var shareIcons = { tapp: SVG_ICONS.tapp, brew: SVG_ICONS.brew, library: SVG_ICONS.library, report: SVG_ICONS.report };
-      var shareCardId = 'share-card-' + idx;
-      // Unified share fields so cards never render blank (type label + title + optional desc/cover).
-      var shareView = resolveShareCardView(msgType, payload);
-      var shareTitle = shareView.title;
-      var shareDesc = shareView.description;
-      var shareCover = shareView.image;
-      // The icon carries the type, so it must be the real source mark where one
-      // exists: cover art > the tapp's own icon > the source site / platform
-      // logo > the generic type glyph (older messages carry no logo fields).
-      var shareSlug = '';
-      if (msgType === 'report') shareSlug = payload.platform || payload.platform_id || '';
-      else if (msgType === 'library') shareSlug = payload.platform_id || '';
-      else if (msgType === 'brew') shareSlug = payload.source_name || '';
-      var shareLogo = platformLogoSvg(shareSlug);
-      var shareFavicon = msgType === 'brew' ? safeIconUrl(payload.source_icon) : '';
-      var iconContent = '';
-      // '' | 'brand' (known platform → brand palette) | 'img' (favicon supplies
-      // its own colors, so the card stays neutral)
-      var iconMark = '';
-      if (shareCover && safeIconUrl(shareCover)) {
-        iconContent = '<img src="' + esc(safeIconUrl(shareCover)) + '" alt="" />';
-      } else if (msgType === 'tapp' && payload.tapp_icon) {
-        // ARO-01: never inject untrusted SVG/HTML from federation payload
-        iconContent = sanitizeRemoteSvg(payload.tapp_icon) || shareIcons.tapp || SVG_ICONS.tapp;
-      } else if (shareFavicon) {
-        // data-fallback: swapped in on load error (dead favicon / hotlink block)
-        iconContent = '<img class="msg-share-favicon" src="' + esc(shareFavicon) + '" alt="" data-fallback="' + esc(msgType) + '" />';
-        iconMark = 'img';
-      } else if (shareLogo) {
-        iconContent = shareLogo;
-        iconMark = 'brand';
-      } else {
-        // payload.icon may be remote SVG/HTML — sanitize or fall back
-        var rawIcon = payload.icon || '';
-        iconContent = (rawIcon && sanitizeRemoteSvg(rawIcon))
-          || shareIcons[msgType]
-          || SVG_ICONS.file;
-      }
-      // Brand accent drives --acc (tile, wash, hover border) for known platforms.
-      // Emitted as -l/-d pairs so the stylesheet — not inline style — picks the
-      // theme variant; an inline --acc would outrank the .dark rule.
-      var shareAccent = iconMark === 'brand' ? platformAccent(shareSlug) : null;
-      var shareAccentStyle = shareAccent
-        ? ';--acc-l:' + shareAccent.l + ';--acc-d:' + shareAccent.d
-        : '';
-      // Determine tapp share acceptance status from storage (stable key, not list idx)
-      var tappAcceptStatus = '';
-      var stKey = '';
-      if (msgType === 'tapp' && payload.tapp_id) {
-        stKey = typeof tappAcceptStorageKey === 'function'
-          ? tappAcceptStorageKey(msg, payload)
-          : ('tapp_accept_' + payload.tapp_id + '_' + (msg.message_id || idx));
-        tappAcceptStatus = (state.tappAcceptMap && state.tappAcceptMap[stKey]) || '';
-      }
-      // Undecided incoming tapp share → decision card (no drill-in affordance yet)
-      var shareNeedsDecision = (msgType === 'tapp' && !local && !tappAcceptStatus);
-      html += '<div class="msg-share-card" id="' + shareCardId + '"'
-        + ' style="cursor:pointer' + shareAccentStyle + '" data-type="' + esc(msgType) + '"'
-        + (payload.tapp_id ? ' data-tapp-id="' + esc(payload.tapp_id) + '"' : '')
-        + (payload.tapp_version ? ' data-tapp-version="' + esc(payload.tapp_version) + '"' : '')
-        + (payload.tapp_name ? ' data-tapp-name="' + esc(payload.tapp_name) + '"' : '')
-        + ((payload.store_source || payload.storeSource) && isValidStoreSourceRef(payload.store_source || payload.storeSource)
-          ? ' data-store-source="' + esc(payload.store_source || payload.storeSource) + '"'
-          : '')
-        + (payload.brew_id ? ' data-brew-id="' + esc(String(payload.brew_id)) + '"' : '')
-        + (payload.brew_link && safeExternalHref(payload.brew_link) ? ' data-brew-link="' + esc(safeExternalHref(payload.brew_link)) + '"' : '')
-        + (payload.platform_id ? ' data-platform-id="' + esc(payload.platform_id) + '"' : '')
-        + (payload.item_id ? ' data-item-id="' + esc(String(payload.item_id)) + '"' : '')
-        + (payload.item_type || (payload.content_type && payload.content_type !== 'library')
-          ? ' data-item-type="' + esc(String(payload.item_type || payload.content_type)) + '"'
-          : '')
-        + (payload.artist ? ' data-artist="' + esc(payload.artist) + '"' : '')
-        + (payload.album ? ' data-album="' + esc(payload.album) + '"' : '')
-        + (function () {
-            var eu = typeof libraryExternalUrl === 'function' ? libraryExternalUrl(payload) : '';
-            if (!eu && payload.external_url) eu = safeExternalHref(payload.external_url) || '';
-            return eu ? ' data-external-url="' + esc(eu) + '"' : '';
-          })()
-        + (typeof isPlayableLibraryShare === 'function' && isPlayableLibraryShare(payload)
-          ? ' data-playable="1"'
-          : '')
-        + (shareCover && safeIconUrl(shareCover) ? ' data-image="' + esc(safeIconUrl(shareCover)) + '"' : '')
-        + (payload.report_id ? ' data-report-id="' + esc(payload.report_id) + '"' : '')
-        + (payload.summary ? ' data-report-summary="' + esc(payload.summary) + '"' : '')
-        + (payload.platform ? ' data-report-platform="' + esc(payload.platform) + '"' : '')
-        + (payload.content_preview ? ' data-report-content-preview="' + esc(payload.content_preview) + '"' : '')
-        + ' data-msg-idx="' + idx + '"'
-        + (msg.message_id ? ' data-msg-id="' + esc(msg.message_id) + '"' : '')
-        + (stKey ? ' data-accept-key="' + esc(stKey) + '"' : '')
-        + (shareNeedsDecision ? ' data-pending="1"' : '')
-        + (iconMark ? ' data-mark="' + iconMark + '"' : '')
-        + '>'
-        + '<span class="msg-share-wash" aria-hidden="true"></span>'
-        + '<div class="msg-share-main">'
-        + '<div class="msg-share-icon"' + (shareCover && safeIconUrl(shareCover) ? ' data-cover="1"' : '') + (iconMark ? ' data-mark="' + iconMark + '"' : '') + '>' + iconContent + '</div>'
-        + '<div class="msg-share-body">'
-        + '<div class="msg-share-title">' + esc(shareTitle) + '</div>'
-        + (shareDesc ? '<div class="msg-share-desc">' + esc(shareDesc) + '</div>' : '');
-      // Version badge + status pill for tapp
-      if (msgType === 'tapp') {
-        html += '<div class="msg-share-meta">';
-        if (payload.tapp_version) html += '<span class="msg-share-ver">v' + esc(payload.tapp_version) + '</span>';
-        if (local) {
-          // Sender: show pending status
-          html += '<span class="msg-share-status msg-share-status-pending">' + esc(lang.tappSharePending) + '</span>';
-        } else if (tappAcceptStatus === 'accepted') {
-          html += '<span class="msg-share-status msg-share-status-accepted">' + esc(lang.tappShareAccepted) + '</span>';
-        } else if (tappAcceptStatus === 'rejected') {
-          html += '<span class="msg-share-status msg-share-status-rejected">' + esc(lang.tappShareRejected) + '</span>';
-        }
-        html += '</div>';
-      }
-      var goPlayable = msgType === 'library' && typeof isPlayableLibraryShare === 'function' && isPlayableLibraryShare(payload);
-      html += '</div>'
-        + (shareNeedsDecision ? '' : '<span class="msg-share-go" aria-hidden="true">'
-          + (goPlayable ? SVG_ICONS.playCircle : SVG_ICONS.chevronRight)
-          + '</span>')
-        + '</div>';
-      // Receiver: accept/reject span the card footer, below the main row
-      if (shareNeedsDecision) {
-        html += '<div class="msg-share-actions">'
-          + '<button type="button" class="msg-share-btn-reject" data-reject-idx="' + idx + '" data-accept-key="' + esc(stKey) + '">' + esc(lang.rejectTapp) + '</button>'
-          + '<button type="button" class="msg-share-btn-accept" data-accept-idx="' + idx + '" data-accept-key="' + esc(stKey) + '">' + esc(lang.acceptTapp) + '</button>'
-          + '</div>';
-      }
-      html += '</div>';
-      if (payload.text) html += '<div class="msg-text msg-caption">' + esc(payload.text) + '</div>';
-      }
-    } else {
-      html += '<div class="msg-text">' + esc(text) + '</div>';
-    }
-
-    html += '<div class="msg-footer">' + pinned + '<span class="msg-time" title="' + esc(fullTimeStr(msg.created_at)) + '">' + timeStr(msg.created_at) + '</span></div>'
-      + '</div></div>';
-  });
-  container.innerHTML = html;
-  container.scrollTop = container.scrollHeight;
-
-  // ⋯ / long-press / contextmenu bound once via bindMsgContextMenu
-
-  // Bind tapp accept/reject buttons (stable accept key, not array index)
-  container.querySelectorAll('.msg-share-btn-accept').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      var card = btn.closest('.msg-share-card');
-      var tappId = card ? card.dataset.tappId : '';
-      if (!tappId) return;
-      var stKey = (btn.dataset.acceptKey || (card && card.dataset.acceptKey) || '').trim();
-      if (!stKey) {
-        var msgIdx = parseInt(btn.dataset.acceptIdx, 10);
-        var m0 = state.messages && state.messages[msgIdx];
-        stKey = typeof tappAcceptStorageKey === 'function' && m0
-          ? tappAcceptStorageKey(m0, m0.payload || {})
-          : ('tapp_accept_' + tappId + '_' + (m0 && m0.message_id ? m0.message_id : msgIdx));
-      }
-      if (!state.tappAcceptMap) state.tappAcceptMap = {};
-      state.tappAcceptMap[stKey] = 'accepted';
-      Tapp.storage.set(stKey, 'accepted').catch(function () {});
-      // Open install detail immediately
-      openTappDetail(tappId, card);
-      renderMessages();
-    });
-  });
-  container.querySelectorAll('.msg-share-btn-reject').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      var card = btn.closest('.msg-share-card');
-      var tappId = card ? card.dataset.tappId : '';
-      if (!tappId) return;
-      var stKey = (btn.dataset.acceptKey || (card && card.dataset.acceptKey) || '').trim();
-      if (!stKey) {
-        var msgIdxR = parseInt(btn.dataset.rejectIdx, 10);
-        var m1 = state.messages && state.messages[msgIdxR];
-        stKey = typeof tappAcceptStorageKey === 'function' && m1
-          ? tappAcceptStorageKey(m1, m1.payload || {})
-          : ('tapp_accept_' + tappId + '_' + (m1 && m1.message_id ? m1.message_id : msgIdxR));
-      }
-      if (!state.tappAcceptMap) state.tappAcceptMap = {};
-      state.tappAcceptMap[stKey] = 'rejected';
-      Tapp.storage.set(stKey, 'rejected').catch(function () {});
-      renderMessages();
-    });
-  });
-  // File card → inline data URL or chunked transfer_id download
-  container.querySelectorAll('.msg-file-card').forEach(function (card) {
-    if (card.disabled) return;
-    card.addEventListener('click', function (e) {
-      e.stopPropagation();
-      var idx = parseInt(card.dataset.fileIdx, 10);
-      var m = state.messages[idx];
-      if (!m || !m.payload) return;
-      downloadMessageFile(m.payload, card);
-    });
-  });
-
-  // Quote snapshot → jump to original message (same conversation, both parties)
-  container.querySelectorAll('.msg-quote-block[data-quote-id]').forEach(function (qEl) {
-    qEl.addEventListener('click', function (e) {
-      e.stopPropagation();
-      var qid = qEl.getAttribute('data-quote-id');
-      if (!qid) return;
-      if (typeof jumpToHistoryMessage === 'function') {
-        jumpToHistoryMessage(qid);
-      } else {
-        var target = container.querySelector('[data-msg-id="' + qid.replace(/"/g, '') + '"]');
-        if (target) {
-          try { target.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (eJ) {}
-          target.classList.add('msg-highlight');
-          setTimeout(function () {
-            try { target.classList.remove('msg-highlight'); } catch (eK) {}
-          }, 2200);
-        }
-      }
-    });
-  });
-
-  // Dead favicon → fall back to the generic type glyph rather than a broken tile
-  container.querySelectorAll('.msg-share-favicon[data-fallback]').forEach(function (img) {
-    img.addEventListener('error', function () {
-      var tile = img.parentNode;
-      if (!tile) return;
-      var glyphs = { tapp: SVG_ICONS.tapp, brew: SVG_ICONS.brew, library: SVG_ICONS.library, report: SVG_ICONS.report };
-      // Clear the mark on both tile and card: with no source mark left, the
-      // message type is the only identity again, so the type wash comes back.
-      tile.removeAttribute('data-mark');
-      var markedCard = tile.closest('.msg-share-card');
-      if (markedCard) markedCard.removeAttribute('data-mark');
-      tile.innerHTML = glyphs[img.dataset.fallback] || SVG_ICONS.file;
-    });
-  });
-
-  // Image / sticker bubbles → full-screen viewer
-  container.querySelectorAll('.msg-media[data-media-idx], .msg-sticker[data-media-idx]').forEach(function (fig) {
-    var open = function (e) {
-      e.stopPropagation();
-      var m = state.messages[parseInt(fig.dataset.mediaIdx, 10)];
-      if (!m || !m.payload || !m.payload.data) return;
-      openImageViewer(m.payload.data, m.payload.filename || '');
-    };
-    fig.addEventListener('click', open);
-    fig.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(e); }
-    });
-  });
-
-  // Media cards: tag real cover orientation once loaded so CSS can adapt the
-  // layout (games ship landscape banners, anime/music portrait posters), and
-  // fall back to the platform glyph if the cover fails to load.
-  container.querySelectorAll('.msg-media-card .msg-media-cover-img').forEach(function (img) {
-    var apply = function () {
-      var card = img.closest('.msg-media-card');
-      // Music stays square regardless of the source image's real aspect.
-      if (!card || card.dataset.orient === 'square' || !img.naturalWidth || !img.naturalHeight) return;
-      card.dataset.orient = (img.naturalWidth / img.naturalHeight >= 1.15) ? 'landscape' : 'portrait';
-    };
-    if (img.complete && img.naturalWidth) apply();
-    else img.addEventListener('load', apply);
-    img.addEventListener('error', function () {
-      var cover = img.closest('.msg-media-cover');
-      if (cover) cover.setAttribute('data-broken', '1');
-    });
-  });
-
-  // Share cards: library/brew = play or open link (no intermediate detail sheet).
-  // Tapp/report still need install / snapshot sheets.
-  container.querySelectorAll('.msg-share-card[data-type], .msg-media-card[data-type]').forEach(function (card) {
-    card.addEventListener('click', function (e) {
-      if (e.target.closest('.msg-share-actions')) return;
-      e.preventDefault();
-      e.stopPropagation();
-      var type = card.dataset.type;
-      var payload = typeof shareCardPayload === 'function' ? shareCardPayload(card) : {};
-      if (!payload.platform_id && card.dataset.platformId) payload.platform_id = card.dataset.platformId;
-      if (!payload.item_id && card.dataset.itemId) payload.item_id = card.dataset.itemId;
-      if (!payload.item_type && card.dataset.itemType) payload.item_type = card.dataset.itemType;
-      if (!payload.external_url && card.dataset.externalUrl) payload.external_url = card.dataset.externalUrl;
-      if (!payload.image && card.dataset.image) payload.image = card.dataset.image;
-      if (!payload.artist && card.dataset.artist) payload.artist = card.dataset.artist;
-      if (!payload.album && card.dataset.album) payload.album = card.dataset.album;
-      if (!payload.brew_link && card.dataset.brewLink) payload.brew_link = card.dataset.brewLink;
-      if (!payload.title) {
-        var tEl = card.querySelector('.msg-share-title, .msg-media-title');
-        if (tEl) payload.title = tEl.textContent || '';
-      }
-
-      if (type === 'tapp' && card.dataset.tappId) {
-        var stKey = (card.dataset.acceptKey || '').trim();
-        if (!stKey) {
-          stKey = 'tapp_accept_' + card.dataset.tappId + '_' + (card.dataset.msgIdx || '');
-        }
-        var status = state.tappAcceptMap && state.tappAcceptMap[stKey];
-        var isLocal = card.closest('.msg-local');
-        if (isLocal || status === 'accepted') {
-          openTappDetail(card.dataset.tappId, card);
-        }
-        return;
-      }
-
-      if (type === 'report') {
-        var rid = card.dataset.reportId || payload.report_id;
-        if (rid) openReportDetail(rid, card);
-        return;
-      }
-
-      // library / brew: direct play or open link — no detail sheet
-      if (typeof activateShareCard === 'function') {
-        activateShareCard(type, payload, card).then(function (result) {
-          if (result === 'played' || result === 'opened') return;
-          try {
-            Tapp.ui.showNotification({
-              title: lang.shareNoAction || lang.openOriginal || lang.loadFail || 'Unavailable',
-              message: type === 'library'
-                ? (lang.shareNoLink || 'No playable media or link for this share')
-                : (lang.shareNoLink || 'No link for this share'),
-              type: 'info',
-            });
-          } catch (eN) { /* ignore */ }
-        }).catch(function () {
-          try {
-            Tapp.ui.showNotification({
-              title: lang.mediaPlayFail || lang.loadFail || 'Failed',
-              type: 'error',
-            });
-          } catch (e2) { /* ignore */ }
-        });
-      }
-    });
-  });
-  renderPinnedBar();
-  bindMsgContextMenu(container);
-}
-
-/**
- * Image-forward media card for a library share that carries cover art.
- * The cover leads (with the platform's logo as a corner mark); beside/under it
- * sit just the title and one compact meta row — kind, rating, and the sender's
- * playtime / watch progress. No source text, no separators. Orientation: games
- * banner, music square, everything else portrait (corrected once loaded).
- */
-function libraryMediaCardHtml(idx, payload, view) {
-  var slug = view.platform || '';
-  var logo = platformLogoSvg(slug);
-  var accent = logo ? platformAccent(slug) : null;
-  var accentStyle = accent ? ';--acc-l:' + accent.l + ';--acc-d:' + accent.d : '';
-  var orient = view.itemType === 'music' ? 'square' : mediaCoverOrient(view.itemType);
-
-  // One meta row, gap-spaced (icons delimit — no dots/dividers). Music leads
-  // with the artist (and album when it differs from the title); other media
-  // show kind · rating · the sender's playtime/watch progress.
-  var meta = '';
-  if (view.itemType === 'music' && (view.artist || view.album)) {
-    if (view.artist) meta += '<span class="msg-media-kind">' + esc(view.artist) + '</span>';
-    if (view.album && view.album !== view.title) meta += '<span class="msg-media-sub">' + esc(view.album) + '</span>';
-  } else {
-    var kindLabel = mediaKindLabel(view.itemType);
-    if (kindLabel) meta += '<span class="msg-media-kind">' + esc(kindLabel) + '</span>';
-    if (view.ratingText) meta += '<span class="msg-media-rate">' + SVG_ICONS.star + esc(view.ratingText) + '</span>';
-    if (view.stat) meta += '<span class="msg-media-stat">' + view.stat.icon + esc(view.stat.text) + '</span>';
+  // Soft window: when on the live tail with a huge buffer, only paint the last N rows.
+  // Full history remains in state.messages for load-older / jump-to.
+  var hState = typeof ensureHistoryState === 'function' ? ensureHistoryState() : null;
+  var loadingOlder = !!(hState && hState.mainLoadingOlder);
+  var renderStart = 0;
+  if (
+    !opts.forceFullHistory
+    && !loadingOlder
+    && state.messages.length > MSG_RENDER_MAX
+    && (wasNearBottom || opts.stickBottom || opts.animateNew)
+  ) {
+    renderStart = state.messages.length - MSG_RENDER_MAX;
+  }
+  // After user explicitly loaded older pages, prefer full paint unless hard-cap
+  if (opts.forceFull || (hState && hState.hasMoreMain === false && !wasNearBottom && !opts.stickBottom)) {
+    // reading mid-history: paint everything we have (load-older path uses forceFull)
+    if (opts.forceFull && !opts.stickBottom) renderStart = 0;
   }
 
-  var cover = '<div class="msg-media-cover">'
-    + '<img class="msg-media-cover-img" src="' + esc(view.image) + '" alt="" loading="lazy" />'
-    + '<span class="msg-media-cover-fallback" aria-hidden="true">' + (logo || SVG_ICONS.library) + '</span>'
-    + (logo ? '<span class="msg-media-logo" data-mark="brand" aria-hidden="true">' + logo + '</span>' : '')
-    + '</div>';
+  // ---- Fast path: append-only when DOM tail still matches previous last message ----
+  if (
+    !opts.forceFull
+    && animateNew
+    && newCount > 0
+    && newCount <= 8
+    && state.messages.length > newCount
+    && renderStart === 0 // only when not soft-windowing (or window still covers tail)
+  ) {
+    var prevLen = state.messages.length - newCount;
+    var anchorMsg = state.messages[prevLen - 1];
+    var lastRow = null;
+    var rows = container.querySelectorAll('.msg-row[data-msg-id]');
+    if (rows && rows.length) lastRow = rows[rows.length - 1];
+    if (
+      anchorMsg
+      && anchorMsg.message_id
+      && lastRow
+      && lastRow.getAttribute('data-msg-id') === anchorMsg.message_id
+      && !container.querySelector('.messages-empty, .messages-opening')
+    ) {
+      var appendHtml = '';
+      var dayCtx = { lastDayKey: '' };
+      // Seed day key from last existing separator / message
+      try {
+        if (anchorMsg.created_at) {
+          var ad = new Date(anchorMsg.created_at);
+          if (!isNaN(ad)) dayCtx.lastDayKey = ad.getFullYear() + '-' + ad.getMonth() + '-' + ad.getDate();
+        }
+      } catch (eDay) { /* ignore */ }
+      for (var ai = prevLen; ai < state.messages.length; ai++) {
+        appendHtml += buildMessageEntryHtml(state.messages[ai], ai, {
+          appearFrom: appearFrom,
+          dayCtx: dayCtx,
+        });
+      }
+      if (appendHtml) {
+        container.insertAdjacentHTML('beforeend', appendHtml);
+        // Orientation for any new covers that may already be complete
+        container.querySelectorAll('.msg-media-card .msg-media-cover-img').forEach(function (img) {
+          if (!img.complete || !img.naturalWidth) return;
+          var card = img.closest('.msg-media-card');
+          if (!card || card.dataset.orient === 'square') return;
+          card.dataset.orient = (img.naturalWidth / img.naturalHeight >= 1.15) ? 'landscape' : 'portrait';
+        });
+        if (wasNearBottom) {
+          try { container.scrollTop = container.scrollHeight; } catch (eScr) { /* ignore */ }
+        }
+        renderPinnedBar();
+        return;
+      }
+    }
+  }
 
-  var playable = typeof isPlayableLibraryShare === 'function' && isPlayableLibraryShare(payload);
-  var extUrl = typeof libraryExternalUrl === 'function' ? libraryExternalUrl(payload) : '';
-  return '<div class="msg-media-card" data-type="library" data-orient="' + orient + '"'
-    + ' data-msg-idx="' + idx + '"'
-    + (payload.platform_id ? ' data-platform-id="' + esc(payload.platform_id) + '"' : '')
-    + (payload.item_id ? ' data-item-id="' + esc(String(payload.item_id)) + '"' : '')
-    + (payload.item_type || payload.content_type
-      ? ' data-item-type="' + esc(String(payload.item_type || payload.content_type)) + '"'
-      : '')
-    + (payload.artist ? ' data-artist="' + esc(payload.artist) + '"' : '')
-    + (payload.album ? ' data-album="' + esc(payload.album) + '"' : '')
-    + (extUrl ? ' data-external-url="' + esc(extUrl) + '"' : '')
-    + (playable ? ' data-playable="1"' : '')
-    + (view.image ? ' data-image="' + esc(view.image) + '"' : '')
-    + (accent ? ' data-mark="brand"' : '')
-    + ' style="cursor:pointer' + accentStyle + '"'
-    + ' title="' + esc(playable
-      ? (lang.mediaPlayHint || lang.nowPlaying || 'Play')
-      : (lang.openOriginal || 'Open')) + '">'
-    + cover
-    + '<div class="msg-media-info">'
-    + '<div class="msg-media-title">' + esc(view.title) + '</div>'
-    + (meta ? '<div class="msg-media-meta">' + meta + '</div>' : '')
-    + '</div>'
-    + '<span class="msg-media-go" aria-hidden="true">'
-    + (playable ? SVG_ICONS.playCircle : SVG_ICONS.chevronRight)
-    + '</span>'
-    + '</div>';
+  // When soft-windowing, append path may still work if last DOM row is in window
+  if (
+    !opts.forceFull
+    && animateNew
+    && newCount > 0
+    && newCount <= 8
+    && renderStart > 0
+  ) {
+    var prevLenW = state.messages.length - newCount;
+    var anchorMsgW = state.messages[prevLenW - 1];
+    var lastRowW = null;
+    var rowsW = container.querySelectorAll('.msg-row[data-msg-id]');
+    if (rowsW && rowsW.length) lastRowW = rowsW[rowsW.length - 1];
+    if (
+      anchorMsgW && anchorMsgW.message_id && lastRowW
+      && lastRowW.getAttribute('data-msg-id') === anchorMsgW.message_id
+    ) {
+      var appendHtmlW = '';
+      var dayCtxW = { lastDayKey: '' };
+      try {
+        if (anchorMsgW.created_at) {
+          var adW = new Date(anchorMsgW.created_at);
+          if (!isNaN(adW)) dayCtxW.lastDayKey = adW.getFullYear() + '-' + adW.getMonth() + '-' + adW.getDate();
+        }
+      } catch (eDayW) { /* ignore */ }
+      for (var aj = prevLenW; aj < state.messages.length; aj++) {
+        appendHtmlW += buildMessageEntryHtml(state.messages[aj], aj, {
+          appearFrom: appearFrom,
+          dayCtx: dayCtxW,
+        });
+      }
+      if (appendHtmlW) {
+        container.insertAdjacentHTML('beforeend', appendHtmlW);
+        if (wasNearBottom) {
+          try { container.scrollTop = container.scrollHeight; } catch (eScrW) { /* ignore */ }
+        }
+        renderPinnedBar();
+        return;
+      }
+    }
+  }
+
+  var html = '';
+  if (renderStart > 0) {
+    html += '<div class="msg-history-hint" role="status">'
+      + '<button type="button" class="msg-history-hint-btn" id="msg-expand-history" data-msg-expand-history="1">'
+      + esc((lang.msgEarlier || lang.historyLoadMore || 'Earlier messages')
+        + ' · ' + renderStart)
+      + '</button></div>';
+  }
+  var dayCtxFull = { lastDayKey: '' };
+  for (var ri = renderStart; ri < state.messages.length; ri++) {
+    html += buildMessageEntryHtml(state.messages[ri], ri, {
+      appearFrom: appearFrom,
+      dayCtx: dayCtxFull,
+    });
+  }
+  container.innerHTML = html;
+
+  // Apply orientation for already-decoded covers (load event may have fired before insert)
+  container.querySelectorAll('.msg-media-card .msg-media-cover-img').forEach(function (img) {
+    if (!img.complete || !img.naturalWidth) return;
+    var card = img.closest('.msg-media-card');
+    if (!card || card.dataset.orient === 'square') return;
+    card.dataset.orient = (img.naturalWidth / img.naturalHeight >= 1.15) ? 'landscape' : 'portrait';
+  });
+
+  if (wasNearBottom) {
+    try { container.scrollTop = container.scrollHeight; } catch (eScr2) { /* ignore */ }
+  } else {
+    // Preserve reading position when history above grew / pin refresh mid-scroll
+    try {
+      var delta = container.scrollHeight - prevScrollHeight;
+      if (delta) container.scrollTop = prevScrollTop + Math.max(0, delta);
+      else container.scrollTop = prevScrollTop;
+    } catch (eScr3) { /* ignore */ }
+  }
+
+  renderPinnedBar();
 }
 
-/** Full-screen image viewer for image bubbles. */
+
+// libraryMediaCardHtml → msgUi.js
+
 function openImageViewer(src, name) {
   if (!src) return;
   var overlay = document.createElement('div');

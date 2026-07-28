@@ -1,14 +1,52 @@
 // ==================== Render: Members ====================
 // Full function lives here (must not be split across history/files modules).
+
+/** One-time kick/role click delegation on #member-list. */
+function bindMemberListActions() {
+  var list = $('member-list');
+  if (!list || list.dataset.memberActionsBound === '1') return;
+  list.dataset.memberActionsBound = '1';
+  list.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    var kick = t.closest('.member-kick');
+    if (kick && list.contains(kick)) {
+      e.preventDefault();
+      var actorK = kick.getAttribute('data-actor');
+      if (actorK) doKickMember(actorK);
+      return;
+    }
+    var roleBtn = t.closest('.member-role-btn');
+    if (roleBtn && list.contains(roleBtn)) {
+      e.preventDefault();
+      var actorR = roleBtn.getAttribute('data-actor');
+      var role = roleBtn.getAttribute('data-role');
+      if (actorR && role) doSetMemberRole(actorR, role);
+    }
+  });
+}
+
+function membersListFingerprint(members, q, myRole, canKick, canSetRole) {
+  var n = (members && members.length) || 0;
+  var sig = '';
+  for (var i = 0; i < n; i++) {
+    var m = members[i];
+    sig += (m.actor_url || '') + ':' + (m.role || '') + ':' + (m.membership_status || m.status || '') + ';';
+  }
+  return [n, q || '', myRole || '', canKick ? 1 : 0, canSetRole ? 1 : 0, sig].join('|');
+}
+
 function renderMembers() {
   var panel = $('member-panel');
   if (!panel) return;
+  bindMemberListActions();
 
   if (state.activeKind !== 'room' || !state.roomDetail) {
     // Always clear mobile full-screen sheet — stuck member-open-mobile blocks the list.
     panel.classList.remove('member-open-mobile', 'member-expanded-tablet');
     panel.style.display = 'none';
     panel.style.pointerEvents = 'none';
+    state._membersListFp = '';
     return;
   }
   // Desktop: show side panel. Mobile: keep hidden until user opens (member-open-mobile).
@@ -35,17 +73,32 @@ function renderMembers() {
     return (m.membership_status || m.status || 'active') === 'pending';
   });
   if (hasPendingMember) memberTitleCount = state.members.length;
-  $('member-title').textContent = lang.members + ' (' + memberTitleCount + ')';
+  var titleEl = $('member-title');
+  if (titleEl) titleEl.textContent = lang.members + ' (' + memberTitleCount + ')';
 
   var myRole = state.roomDetail.my_role || '';
   var myPending = (state.roomDetail.my_membership_status || state.roomDetail.membership_status || 'active') === 'pending';
   var canKick = !myPending && (myRole === 'owner' || myRole === 'admin');
+  var canSetRole = !myPending && myRole === 'owner'
+    && typeof Tapp !== 'undefined' && Tapp.federation
+    && typeof Tapp.federation.setMemberRole === 'function';
   var memberQ = (state.search && state.search.member) || '';
   var memberQuery = normalizeSearchQuery(memberQ);
   var filteredMembers = !memberQuery ? state.members : state.members.filter(function (m) {
     var name = m.display_name || (m.actor_url || '').split('/').pop() || '';
     return matchesSearch(memberQuery, [name, m.actor_url, m.role, m.username, m.membership_status]);
   });
+
+  var fp = membersListFingerprint(filteredMembers, memberQuery, myRole, canKick, canSetRole);
+  var listEl = $('member-list');
+  if (fp && fp === state._membersListFp && listEl && listEl.childNodes.length > 0) {
+    var inviteWrapSkip = $('invite-wrap');
+    if (inviteWrapSkip) {
+      inviteWrapSkip.style.display = (!myPending && state.roomDetail && myRole) ? '' : 'none';
+    }
+    return;
+  }
+  state._membersListFp = fp;
 
   var html = '';
   if (state.members.length > 0 && filteredMembers.length === 0) {
@@ -55,7 +108,7 @@ function renderMembers() {
       var name = m.display_name || (m.actor_url || '').split('/').pop() || '?';
       // 普通成员不显示角色，减少列表噪音；仅标出群主/管理员
       var roleText = (m.role && m.role !== 'member') ? roleLabel(m.role) : '';
-      var mStatus = m.membership_status || 'active';
+      var mStatus = m.membership_status || m.status || 'active';
       if (mStatus === 'pending') {
         roleText = roleText
           ? (roleText + ' · ' + (lang.pending || 'Pending'))
@@ -67,28 +120,36 @@ function renderMembers() {
         + '<div class="member-name">' + esc(name) + '</div>'
         + (roleText ? '<div class="member-role">' + esc(roleText) + '</div>' : '')
         + '</div>';
-      if (m.is_local) {
+      if (mStatus === 'active' && m.role !== 'owner') {
+        html += '<div class="member-actions">';
+        if (canSetRole) {
+          if (m.role === 'admin') {
+            html += '<button type="button" class="member-role-btn" data-actor="'
+              + esc(m.actor_url || '') + '" data-role="member" title="'
+              + esc(lang.demoteAdmin || 'Remove admin') + '">'
+              + esc(lang.demoteAdminShort || 'Demote') + '</button>';
+          } else {
+            html += '<button type="button" class="member-role-btn" data-actor="'
+              + esc(m.actor_url || '') + '" data-role="admin" title="'
+              + esc(lang.promoteAdmin || 'Make admin') + '">'
+              + esc(lang.promoteAdminShort || 'Admin') + '</button>';
+          }
+        }
+        if (canKick) {
+          html += '<button type="button" class="member-kick" data-actor="'
+            + esc(m.actor_url || '') + '" title="' + esc(lang.kick) + '" aria-label="'
+            + esc(lang.kick) + '">'
+            + '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>'
+            + '</button>';
+        }
+        html += '</div>';
+      } else if (m.is_local) {
         html += '<span class="member-local">' + esc(lang.local) + '</span>';
-      } else if (canKick && m.role !== 'owner') {
-        html += '<button type="button" class="member-kick" data-actor="' + esc(m.actor_url || '') + '" title="' + esc(lang.kick) + '" aria-label="' + esc(lang.kick) + '">'
-          + '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>'
-          + '</button>';
       }
       html += '</div>';
     });
   }
-  $('member-list').innerHTML = html;
-
-  // Wire kick buttons
-  if (canKick) {
-    var kicks = document.querySelectorAll('.member-kick');
-    kicks.forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var actor = btn.getAttribute('data-actor');
-        if (actor) doKickMember(actor);
-      });
-    });
-  }
+  if (listEl) listEl.innerHTML = html;
 
   // Show invite icon for active room members only
   var inviteWrap = $('invite-wrap');
@@ -330,7 +391,10 @@ function renderChatHeader() {
     if (!roomPending && (rm.my_role === 'owner' || rm.my_role === 'admin')) {
       menuItems += '<button type="button" class="manage-item" id="action-edit-room" role="menuitem">'
         + '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
-        + esc(lang.editRoom) + '</button>';
+        + esc(lang.editRoom || lang.roomSettings || 'Group settings') + '</button>';
+      menuItems += '<button type="button" class="manage-item" id="action-room-stickers" role="menuitem">'
+        + '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="9" cy="10" r="1" fill="currentColor"/><circle cx="15" cy="10" r="1" fill="currentColor"/><path d="M8.4 13.6c.95 1.4 2.2 2.15 3.6 2.15s2.65-.75 3.6-2.15" stroke-linecap="round"/></svg>'
+        + esc(lang.stickerTabRoom || lang.manageStickers || 'Group stickers') + '</button>';
     }
     if (!roomPending && rm.my_role !== 'owner') {
       menuItems += '<button type="button" class="manage-item manage-item-danger" id="action-leave" role="menuitem">'
@@ -384,6 +448,28 @@ function renderChatHeader() {
   if (leaveBtn) leaveBtn.addEventListener('click', function () { closeManageDropdown(); doLeaveRoom(); });
   var editRoomBtn = $('action-edit-room');
   if (editRoomBtn) editRoomBtn.addEventListener('click', function () { closeManageDropdown(); showEditRoomDialog(); });
+  var stickersBtn = $('action-room-stickers');
+  if (stickersBtn) {
+    stickersBtn.addEventListener('click', function () {
+      closeManageDropdown();
+      // Open sticker panel on Group tab (admin edit UI).
+      if (typeof openStickerPanel === 'function') {
+        if (typeof setStickerTab === 'function') setStickerTab('room');
+        else {
+          try {
+            if (typeof ensureStickerState === 'function') {
+              ensureStickerState().tab = 'room';
+            }
+            if (typeof _stickerTab !== 'undefined') _stickerTab = 'room';
+          } catch (eT) { /* ignore */ }
+        }
+        openStickerPanel();
+        if (typeof setStickerTab === 'function') setStickerTab('room');
+      } else if (typeof notifyError === 'function') {
+        notifyError(lang.stickerApiMissing || 'Stickers unavailable');
+      }
+    });
+  }
   var dissolveBtn = $('action-dissolve');
   if (dissolveBtn) dissolveBtn.addEventListener('click', function () { closeManageDropdown(); doDissolveRoom(); });
   var transferBtn = $('action-transfer-owner');
