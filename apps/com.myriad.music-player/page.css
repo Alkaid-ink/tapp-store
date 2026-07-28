@@ -255,8 +255,20 @@ html, body {
   column-gap: 16px;
   min-height: 0;
   min-width: 0;
-  /* 禁止过渡 grid 列宽：过渡中会出现 ~8px 极窄宽，pre-wrap 歌词会炸高并把滚动锁死。
-     侧栏显隐用 .player-right 的 opacity/transform 过渡即可。 */
+  /* 列宽切换：hero（封面+标题）与侧栏同节奏滑动——这是模式切换的主动效。
+     1.1.36 曾整条删掉以规避「过渡中 ~8px 极窄宽 → pre-wrap 歌词炸高 → 滚动锁死」，
+     代价是 hero 变成硬跳。1.1.39 改为保留过渡 + 过渡期间挂起歌词测量
+     （lyricFx.settleUntil，见 main.js），窄宽帧根本不会被测到。 */
+  transition:
+    grid-template-columns 0.46s cubic-bezier(0.33, 0.86, 0.2, 1),
+    column-gap 0.46s cubic-bezier(0.33, 0.86, 0.2, 1);
+}
+
+/* 关动效时不要过渡，避免 reduce-motion 下的滑动 */
+@media (prefers-reduced-motion: reduce) {
+  .content-area {
+    transition: none;
+  }
 }
 
 /* 左右列分流：左列可见以保留封面圆角/阴影；右列必须 hidden+min-height:0

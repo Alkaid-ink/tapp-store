@@ -654,6 +654,7 @@ var lyricFx = {
   remeasureTimer: null, // 侧栏展开过渡结束后的兜底重测
   ro: null,           // 容器 ResizeObserver（cleanup 时断开）
   roTimer: null,      // RO 防抖句柄
+  settleUntil: 0,     // 侧栏列宽过渡结束前挂起测量（时间戳，ms）
 };
 var lyricResumeTimer = null;
 
@@ -704,17 +705,20 @@ function resetLyricFxLayoutCache(opts) {
   }
 }
 
-// 面板不可见时 w/h 为 0。列宽已取消 CSS 过渡，打开后应立刻有真实宽度。
-// 仍保留下限，防止 0fr 折叠态误测。
+// 面板不可见时 w/h 为 0；列宽过渡中会扫过一串中间宽度。
+// 下限只挡住折叠态，中间宽度由 lyricMeasureSuspended() 挡。
 var LYRIC_MIN_VIEW_W = 80;
 var LYRIC_MIN_VIEW_H = 40;
 
 /**
  * 测行高并建立 y 布局。
+ * force=true 仅供「过渡真的结束了」的权威重测使用；其余调用在列宽过渡期间一律拒测，
+ * 否则会拿中间宽度算出偏高的行（0.46s 过渡里肉眼可见地错一下）。
  */
-function measureLyricLayout() {
+function measureLyricLayout(force) {
   var container = $('lyrics-container');
   if (!container || !lyricFx.inner || lyricFx.items.length === 0) return false;
+  if (!force && lyricMeasureSuspended()) return false;
   var h = container.clientHeight;
   var w = container.clientWidth;
   if (h < LYRIC_MIN_VIEW_H || w < LYRIC_MIN_VIEW_W) return false;
@@ -768,17 +772,20 @@ function ensureLyricLayoutReady() {
       Math.abs(w - lyricFx.viewW) <= 4) {
     return true;
   }
+  // 列宽过渡中：沿用上一次布局，且**不能**清 measured——清了之后本次测量必然被拒，
+  // focusLyricItemK 会因 ensureLyricLayoutReady() 为 false 而整条罢工（歌词卡住不动）
+  if (lyricMeasureSuspended()) return lyricFx.measured;
   lyricFx.measured = false;
   return measureLyricLayout();
 }
 
-/** 测完后回焦（或保持手动滚动位置） */
-function applyLyricLayoutRemeasure(gen, songId) {
+/** 测完后回焦（或保持手动滚动位置）。force 由过渡结束的权威重测传入 */
+function applyLyricLayoutRemeasure(gen, songId, force) {
   if (gen !== lyricFx.layoutGen) return false;
   if (songId != null && String(pageState.lyricsSongId) !== String(songId)) return false;
   if (lyricFx.items.length === 0) return false;
   lyricFx.measured = false;
-  if (!measureLyricLayout()) return false;
+  if (!measureLyricLayout(force)) return false;
   lyricFx.focusK = -1;
   if (pageState.autoScrollEnabled) {
     var idx = pageState.currentLyricIndex >= 0 ? pageState.currentLyricIndex : 0;
@@ -815,7 +822,9 @@ function scheduleLyricLayoutRemeasure(afterMs) {
     }
     lyricFx.remeasureTimer = setTimeout(function() {
       lyricFx.remeasureTimer = null;
-      applyLyricLayoutRemeasure(gen, songId);
+      // 兜底权威重测：过渡若已结束就强制测一次（transitionend 丢失时的保险）
+      lyricFx.settleUntil = 0;
+      applyLyricLayoutRemeasure(gen, songId, !sideLayoutAnimating());
     }, afterMs);
   }
 }
@@ -832,7 +841,27 @@ function findLyricItemK(lineIdx) {
   return -1;
 }
 
+// 视口外剔除带（上下各留一屏）。viewH 未测出时返回 null = 不剔除。
+function lyricCullBand() {
+  var vh = lyricFx.viewH || 0;
+  if (vh < LYRIC_MIN_VIEW_H) return null;
+  return { top: -vh, bottom: vh * 2 };
+}
+
+/**
+ * 屏外行退出绘制。
+ * 每行都带 blur(5px) + will-change，长歌单就是上百个各自要做模糊的合成层，
+ * 滚动时逐帧全量重绘——这是滚动卡顿的主要来源。visibility:hidden 仍保留布局盒
+ * （measureLyricLayout 读 offsetHeight 不受影响），但不再绘制/合成。
+ */
+function setLyricItemVisible(it, visible) {
+  if (it._vis === visible) return;
+  it._vis = visible;
+  it.el.style.visibility = visible ? '' : 'hidden';
+}
+
 function snapLyricItems() {
+  var band = lyricCullBand();
   for (var k = 0; k < lyricFx.items.length; k++) {
     var it = lyricFx.items[k];
     it.pos = it.y - lyricFx.targetS;
@@ -843,6 +872,7 @@ function snapLyricItems() {
     it._ws = Math.round(it.scale * 10000);
     it.el.style.transform =
       'translate3d(0,' + it.pos.toFixed(2) + 'px,0) scale(' + it.scale.toFixed(4) + ')';
+    setLyricItemVisible(it, !band || (it.pos > band.top && it.pos < band.bottom));
   }
 }
 
@@ -908,12 +938,57 @@ function relayoutLyricsIfNeeded(allowUnmeasured, force) {
   }
 }
 
+// 桌面列宽过渡 0.46s（page.css .content-area），留一点余量再做权威重测
+var SIDE_LAYOUT_TRANSITION_MS = 520;
+
 function getSideLayoutSettleMs() {
-  // 列宽已无过渡；Sheet 入场约 0.36s，opacity 侧栏约 0.32s
+  // 移动端是 Sheet 入场约 0.36s；桌面是 grid 列宽过渡
   try {
     if (typeof checkIsMobile === 'function' && checkIsMobile()) return 380;
   } catch (e) { /* ignore */ }
-  return 80;
+  return SIDE_LAYOUT_TRANSITION_MS;
+}
+
+/**
+ * 过渡期间挂起歌词测量。
+ * 列宽过渡中容器会扫过一串中间宽度（起点甚至只有几 px），此时测出的行高属于
+ * 别的宽度——最窄那几帧还会让 pre-wrap 歌词炸高并锁死滚动（1.1.34–1.1.36 的老账）。
+ * 挂起窗口内只沿用上一次布局，过渡结束后做一次权威重测。
+ */
+function suspendLyricMeasure(ms) {
+  var until = nowMs() + (ms || getSideLayoutSettleMs());
+  if (until > lyricFx.settleUntil) lyricFx.settleUntil = until;
+}
+
+/** .content-area 的列宽过渡是否仍在跑（比纯计时更准，慢机器上也不会提前放行） */
+function sideLayoutAnimating() {
+  var ca = document.querySelector('.content-area');
+  if (!ca || typeof ca.getAnimations !== 'function') return false;
+  try {
+    var list = ca.getAnimations();
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].playState === 'running') return true;
+    }
+  } catch (e) { /* ignore */ }
+  return false;
+}
+
+function lyricMeasureSuspended() {
+  return nowMs() < lyricFx.settleUntil || sideLayoutAnimating();
+}
+
+/** 列宽过渡结束即做一次权威重测（不必等 settle 定时器） */
+function bindSideLayoutTransitionEnd() {
+  var ca = document.querySelector('.content-area');
+  if (!ca || ca._mpTransBound) return;
+  ca._mpTransBound = true;
+  ca.addEventListener('transitionend', function(e) {
+    if (e.target !== ca) return;
+    if (e.propertyName !== 'grid-template-columns' && e.propertyName !== 'column-gap') return;
+    lyricFx.settleUntil = 0; // 过渡真结束，立刻放行测量
+    if (lyricFx.items.length === 0) return;
+    applyLyricLayoutRemeasure(lyricFx.layoutGen, pageState.lyricsSongId, true);
+  });
 }
 
 /**
@@ -922,6 +997,8 @@ function getSideLayoutSettleMs() {
  */
 function forceLyricsPanelRelayout(/* soft */) {
   if (lyricFx.items.length === 0) return;
+  // 打开/关闭侧栏必然触发列宽过渡：整段过渡期间不接受中间宽度的测量结果
+  suspendLyricMeasure();
   // 强制样式刷盘：class 刚挂上时读到的可能仍是旧几何
   var pr = $('player-right');
   var c = $('lyrics-container');
@@ -939,17 +1016,21 @@ function bindLyricContainerResizeObserver() {
   container._lyricRoBound = true;
   var ro = new ResizeObserver(function() {
     if (lyricFx.items.length === 0) return;
-    // 宽度从窄变宽是关键路径：立刻排队重测（仍 debounce 合并过渡帧）
+    // 列宽过渡中的中间宽度一律不测：把重测推到过渡结束之后
+    var delay = lyricMeasureSuspended()
+      ? Math.max(50, lyricFx.settleUntil - nowMs() + 30)
+      : 50;
     if (lyricFx.roTimer) clearTimeout(lyricFx.roTimer);
     lyricFx.roTimer = setTimeout(function() {
       lyricFx.roTimer = null;
       if (lyricFx.items.length === 0) return;
       relayoutLyricsIfNeeded(true, true);
-    }, 50);
+    }, delay);
   });
   ro.observe(container);
   // 存句柄供 cleanup 断开（原来是闭包局部变量，销毁后仍在观察）
   lyricFx.ro = ro;
+  bindSideLayoutTransitionEnd();
 }
 
 // ========================================
@@ -1128,14 +1209,17 @@ function lyricWaveTickBody(now) {
   // 视口外剔除：目标位与当前位都在可视区外一屏以上的行直接吸附——
   // 弹簧过程本来就看不见，省掉长歌单每帧几百次 transform 写入
   // （这正是当初把切行改成瞬移的性能顾虑，剔除后波浪可以放心开回来）
-  var vh = lyricFx.viewH || 0;
-  var cullAbove = vh >= LYRIC_MIN_VIEW_H ? -vh : -Infinity;
-  var cullBelow = vh >= LYRIC_MIN_VIEW_H ? vh * 2 : Infinity;
+  var band = lyricCullBand();
+  var cullAbove = band ? band.top : -Infinity;
+  var cullBelow = band ? band.bottom : Infinity;
 
   for (var k = 0; k < lyricFx.items.length; k++) {
     var it = lyricFx.items[k];
     var ty = it.y - lyricFx.targetS;
-    if ((ty < cullAbove && it.pos < cullAbove) || (ty > cullBelow && it.pos > cullBelow)) {
+    var culled = (ty < cullAbove && it.pos < cullAbove) || (ty > cullBelow && it.pos > cullBelow);
+    // 屏外行退出绘制：省掉每帧上百个 blur 合成层（滚动卡顿主因）
+    setLyricItemVisible(it, !culled);
+    if (culled) {
       // 远处行：吸附即可（写入去重会让稳态帧零 DOM 操作），不参与 moving 判定
       it.pos = ty;
       it.v = 0;
@@ -1188,19 +1272,11 @@ function retargetLyricItemsNow() {
 
 // 手动滚动后恢复自动跟焦的等待（原 3s 过长，回焦体感慢）
 var LYRIC_RESUME_MS = 1100;
-// 回焦距离在这么多屏以内走波浪；翻得更远就瞬移——长途弹簧只会糊成一片
-var LYRIC_RESUME_WAVE_SCREENS = 1.5;
 
-/** 某行处于焦点位时应有的虚拟滚动位；布局没就绪返回 null */
-function desiredLyricS(lineIdx) {
-  var k = findLyricItemK(lineIdx);
-  if (k < 0) return null;
-  if (!ensureLyricLayoutReady()) return null;
-  var it = lyricFx.items[k];
-  return it.y - lyricFx.viewH * LYRIC_FOCAL + it.h / 2;
-}
-
-// 用户手动滚动：暂停自动跟随，稍后回焦当前行（近距离走波浪，远距离瞬移）
+// 用户手动滚动：暂停自动跟随，稍后**始终以波浪**回焦当前行。
+// 不再按距离切瞬移：线性弹簧的收敛时间与幅度无关（5000px 与 300px 同样约 1s，
+// 只是中途更快），所以"远了就糊"的顾虑不成立；而按屏高设阈值在移动端/长歌单里
+// 会让常规的翻两屏也落进瞬移分支，观感就是回焦直接闪现。
 function userLyricScrollBegin() {
   pageState.autoScrollEnabled = false;
   if (lyricResumeTimer) clearTimeout(lyricResumeTimer);
@@ -1212,10 +1288,7 @@ function userLyricScrollBegin() {
     // （原先走 instant 时由 stopLyricWave 顺手清零，改波浪后必须显式清）
     lyricFx.momentumV = 0;
     if (pageState.currentLyricIndex >= 0) {
-      var want = desiredLyricS(pageState.currentLyricIndex);
-      var far = want === null ||
-        Math.abs(want - lyricFx.targetS) > lyricFx.viewH * LYRIC_RESUME_WAVE_SCREENS;
-      focusLyricLine(pageState.currentLyricIndex, far);
+      focusLyricLine(pageState.currentLyricIndex, false);
     }
   }, LYRIC_RESUME_MS);
 }
@@ -1514,6 +1587,12 @@ function syncNoLyricsLayout() {
   }
 
   root.classList.remove('mp-lyrics-loading'); // 废弃加载动画类
+  // 列宽/hero 会因这些类变化而进入 0.46s 过渡：期间挂起歌词测量
+  var layoutSig = layoutFocus + '|' + (confirmedEmpty ? 1 : 0) + '|' + (assumeHasLyrics ? 1 : 0);
+  if (layoutSig !== syncNoLyricsLayout._sig) {
+    syncNoLyricsLayout._sig = layoutSig;
+    suspendLyricMeasure();
+  }
   root.classList.toggle('mp-no-lyrics', confirmedEmpty);
   root.classList.toggle('mp-has-lyrics', assumeHasLyrics);
   root.classList.toggle('mp-side-playlist', layoutFocus === 'playlist');
