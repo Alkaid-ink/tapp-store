@@ -1431,7 +1431,7 @@ function getSidePanelFocus() {
  * 无歌词布局策略：
  * - 无词（0 有效行）+ 歌词 Tab 开着 → 封面优先（无歌词模式），侧栏按 none 收起
  * - 无词 + 都不选 → 封面优先
- * - 有词（≥1 行实质内容）+ 歌词 Tab → 正常双栏歌词（优先认定有词）
+ * - 有词（≥5 行实质内容）+ 歌词 Tab → 正常双栏歌词
  * - 列表 Tab → 始终双栏，不因无词改 hero
  */
 function syncNoLyricsLayout() {
@@ -1510,9 +1510,11 @@ function getCurrentTrackDurationSec() {
   return 0;
 }
 
+// 有效实质行少于此数 → 视作无歌词（封面优先 / empty）
+var MIN_USABLE_LYRIC_LINES = 5;
+
 /**
- * 统计可用于展示的歌词行（有时间 + 非空文本）。
- * 判定原则：优先「有」——只要有实质内容就算有词，不因行少拒收。
+ * 统计可用于展示的歌词行（实质文本；占位文案不计）。
  */
 function countUsableLyricLines(lyrics) {
   if (!lyrics || lyrics.length === 0) return 0;
@@ -1524,7 +1526,7 @@ function countUsableLyricLines(lyrics) {
     if (ln.time != null && ln.time !== '' && (!isFinite(t) || t < 0)) continue;
     var text = String(ln.text || '').replace(/\s+/g, ' ').trim();
     if (!text) continue;
-    // 仅整行就是「无词占位」时跳过；其余一律算有
+    // 整行就是「无词占位」时跳过
     if (/^(纯音乐|instrumental|暂无歌词|无歌词|lyrics?\s*not\s*found)$/i.test(text)) continue;
     n++;
   }
@@ -1532,12 +1534,12 @@ function countUsableLyricLines(lyrics) {
 }
 
 /**
- * 是否按「有歌词」处理（优先有、而不是优先无）：
- * - 有 ≥1 行实质歌词 → true（进有词 / 保持侧栏）
- * - 完全没有 / 只有占位文案 → false（无歌词模式）
+ * 是否按「有歌词」处理：
+ * - 实质行 ≥ 5 → true（有词 / 侧栏）
+ * - 少于 5 行 / 无词 / 仅占位 → false（无歌词模式）
  */
 function areLyricsUsable(lyrics) {
-  return countUsableLyricLines(lyrics) >= 1;
+  return countUsableLyricLines(lyrics) >= MIN_USABLE_LYRIC_LINES;
 }
 
 /**
@@ -1550,7 +1552,7 @@ function shouldApplyNoLyricsMode() {
 }
 
 /**
- * 按当前歌词刷新 ready/empty（优先有词：≥1 行实质内容即 ready）。
+ * 按当前歌词刷新 ready/empty（实质行 ≥5 为 ready；少于 5 视作无词）。
  * 已 ready 且 DOM 在时：只同步侧栏 class，不强制全量 relayout。
  */
 function revalidateLyricsContentMode(opts) {
@@ -1649,7 +1651,7 @@ function renderLyrics(lyrics, currentIndex) {
   var container = $('lyrics-container');
   if (!container) return;
 
-  // 确认无词 → 无歌词模式；有 ≥1 行实质内容 → ready
+  // 无词或实质行 < 5 → 无歌词模式；≥5 → ready
   if (!lyrics || lyrics.length === 0 || !areLyricsUsable(lyrics)) {
     lyricFx.items = [];
     lyricFx.inner = null;
