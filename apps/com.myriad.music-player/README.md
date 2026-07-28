@@ -4,6 +4,13 @@
 
 ## Changelog
 
+### 1.1.33
+
+- 全端歌词滚动：测高前清 scale transform，避免行距累计错乱
+- 桌面侧栏 panel/lyrics 绝对铺满，稳定 clientHeight
+- wheel deltaMode 归一化；lyric-line touch-action:none 不再与 JS 抢手势
+- minS>maxS 时不再锁死滚动
+
 ### 1.1.32
 
 - 修复每首歌歌词必加载两次（init snapshot + 同曲在飞勿 gen++ 作废）

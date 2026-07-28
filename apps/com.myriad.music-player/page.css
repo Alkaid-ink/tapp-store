@@ -767,6 +767,8 @@ html.mp-has-lyrics .track-title {
   /* 禁止浏览器抢垂直手势，避免与 JS 歌词滚动打架 */
   touch-action: none;
   overscroll-behavior: none;
+  /* 保证可命中 wheel/touch（空绝对子节点时部分引擎 hit-test 异常） */
+  pointer-events: auto;
   /* 上下渐隐遮罩 */
   mask-image: linear-gradient(
     to bottom,
@@ -829,9 +831,9 @@ html.mp-has-lyrics .track-title {
     color 0.4s ease-out,
     background 0.3s ease;
   box-sizing: border-box;
-  /* 🎯 WebKit 兼容性：移除 contain，确保触摸事件可以正常工作 */
   -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
+  /* 必须 none：manipulation 会让浏览器抢 pan，与 JS 波浪滚动打架 */
+  touch-action: none;
 }
 
 .lyric-line:hover {
@@ -3147,7 +3149,44 @@ html.mp-no-lyrics #lyric-trans-btn {
   html.mp-side-lyrics .player-right,
   html.mp-side-playlist .player-right {
     min-height: 0;
+    height: 100%;
     padding-right: 8px;
+    /* 给绝对铺满的 panel 当定位根 */
+    position: relative;
+  }
+
+  /* 桌面侧栏 panel 绝对铺满右栏（高度跟 content-area 走，不靠左列内容） */
+  html.mp-side-lyrics .player-right > .panel,
+  html.mp-side-playlist .player-right > .panel {
+    position: absolute;
+    inset: 0;
+    width: auto;
+    height: auto;
+    min-height: 0;
+  }
+
+  /* 歌词区再绝对铺满 panel：clientHeight 稳定可测/可滚 */
+  html.mp-side-lyrics .player-right .panel-lyrics .lyrics-scroll {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    flex: none;
+    width: auto;
+    height: auto;
+    min-height: 0;
+  }
+
+  /* 列表保持 flex：header + scroll，避免写死 header 高度 */
+  html.mp-side-playlist .player-right .panel-playlist {
+    display: flex;
+    flex-direction: column;
+  }
+  html.mp-side-playlist .player-right .panel-playlist .playlist-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
   }
 }
 
