@@ -4211,6 +4211,9 @@ async function initPage() {
     if (trackChanged) {
       significantChange = true;
       colorOnly = false;
+      // 跳转意图只属于上一首：不清的话（点歌词/拖进度后立刻切歌）新曲会拿
+      // 旧曲的目标时间当作播放位置，歌词时钟直接落在几十秒处，约 1.5s 才回正
+      seekIntent = null;
       bindTrackFromStatus(state);
       // 同曲已在飞（常见：init 已 load，首帧 state 仍报 trackChanged）→ 绝不能 gen++ 作废
       var alreadyLoadingSame = nextTrackId != null &&
