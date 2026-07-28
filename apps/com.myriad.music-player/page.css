@@ -265,6 +265,8 @@ html, body {
 .content-area > .player-right {
   min-width: 0;
   max-width: 100%;
+  /* 左列勿裁封面阴影/圆角；标题外溢靠 track-info overflow */
+  overflow: visible;
 }
 
 /* ========================================
@@ -500,9 +502,6 @@ html, body {
   border-radius: var(--radius-lg);
   overflow: hidden;
   isolation: isolate;
-  /* WebKit：圆角+transform 时强制按圆角遮罩，避免底角被拆成直角 */
-  -webkit-mask-image: -webkit-radial-gradient(white, black);
-  mask-image: radial-gradient(white, black);
   box-shadow:
     0 20px 60px color-mix(in srgb, var(--music-primary) 30%, transparent),
     0 8px 20px rgba(0, 0, 0, 0.2);
@@ -510,6 +509,7 @@ html, body {
   transition: transform 0.55s cubic-bezier(0.34, 1.45, 0.5, 1);
   /* box-shadow 含 --music-primary：勿单独 transition，避免描边/光晕慢于主题色 */
   will-change: transform;
+  /* 独立层 + 圆角由 overflow 裁切；勿用 mask radial（会软边/底角异常） */
   transform: translateZ(0);
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
@@ -2107,15 +2107,22 @@ html.mp-has-lyrics .track-title {
 @media (max-width: 768px) {
   :root {
     --lyric-fs: clamp(30px, 6.8vw, 40px);
-    --m-pad-x: max(18px, env(safe-area-inset-left, 0px));
-    --m-pad-r: max(18px, env(safe-area-inset-right, 0px));
+    /* 内容/控制岛相对「安全区内边」的统一间距（左=右=底） */
+    --m-gutter: 16px;
+    --m-pad-x: var(--m-gutter);
+    --m-pad-r: var(--m-gutter);
     --m-stage: min(86vw, min(340px, 50vh));
   }
 
   #tapp-content {
     grid-template-rows: minmax(0, 1fr) auto;
     gap: 0;
-    padding: 0;
+    /* 安全区只吃在 content 外壳，岛的 gutter 再叠在安全区内侧 → 三边视觉一致 */
+    padding:
+      0
+      env(safe-area-inset-right, 0px)
+      env(safe-area-inset-bottom, 0px)
+      env(safe-area-inset-left, 0px);
   }
 
   .content-area {
@@ -2124,9 +2131,9 @@ html.mp-has-lyrics .track-title {
     margin: 0;
     padding:
       max(16px, env(safe-area-inset-top, 0px))
-      var(--m-pad-r)
+      var(--m-gutter)
       12px
-      var(--m-pad-x);
+      var(--m-gutter);
     min-height: 0;
     flex: 1;
   }
@@ -2255,15 +2262,12 @@ html.mp-has-lyrics .track-title {
     opacity: 1;
   }
 
-  /* —— 悬浮控制坞：更紧凑的胶囊 —— */
+  /* —— 悬浮控制坞：左=右=底 同一 gutter —— */
   .controls-bar {
     flex-direction: column;
     align-items: stretch;
     gap: 6px;
-    margin:
-      0 max(14px, env(safe-area-inset-right, 0px))
-      calc(8px + env(safe-area-inset-bottom, 0px))
-      max(14px, env(safe-area-inset-left, 0px));
+    margin: 0 var(--m-gutter) var(--m-gutter);
     padding: 8px 12px 8px;
     border-radius: 22px;
     background:
@@ -2423,7 +2427,7 @@ html.mp-has-lyrics .track-title {
     top: auto;
     left: auto;
     flex: 0 0 auto;
-    padding: 6px 56px 10px var(--m-pad-x);
+    padding: 6px 56px 10px var(--m-gutter);
     font-size: 17px;
     font-weight: 650;
     letter-spacing: -0.02em;
@@ -2434,7 +2438,7 @@ html.mp-has-lyrics .track-title {
     display: flex;
     position: absolute;
     top: 22px;
-    right: max(10px, env(safe-area-inset-right, 0px));
+    right: var(--m-gutter);
     width: 40px;
     height: 40px;
     border-radius: 50%;
@@ -2486,7 +2490,7 @@ html.mp-has-lyrics .track-title {
 
   .panel-lyrics,
   .panel-playlist {
-    padding: 0 var(--m-pad-x) 8px;
+    padding: 0 var(--m-gutter) 8px;
     box-sizing: border-box;
   }
 
@@ -2523,14 +2527,14 @@ html.mp-has-lyrics .track-title {
   }
 
   .fab-host--br {
-    right: max(14px, env(safe-area-inset-right, 0px));
-    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    right: var(--m-gutter);
+    bottom: var(--m-gutter);
     gap: 10px;
   }
 
   #lyrics-fabs.fab-host--br {
-    right: max(16px, env(safe-area-inset-right, 0px));
-    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    right: var(--m-gutter);
+    bottom: var(--m-gutter);
   }
 
   .fab-btn {
@@ -2572,7 +2576,8 @@ html.mp-has-lyrics .track-title {
 
     .controls-bar {
       gap: 4px;
-      margin-bottom: calc(4px + env(safe-area-inset-bottom, 0px));
+      /* 矮屏仍保持左=右=底 gutter 一致 */
+      margin: 0 var(--m-gutter) var(--m-gutter);
       padding: 6px 10px;
       border-radius: 18px;
     }
