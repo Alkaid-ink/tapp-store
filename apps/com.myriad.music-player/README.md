@@ -4,6 +4,22 @@
 
 ## Changelog
 
+### 1.1.38
+
+修 1.1.37 自己引入的回归：**世代绑定不该本地自增**。
+
+- `boundGeneration` 只能存宿主给的世代号。`isStatusCurrent` 是拿事件里的
+  `status.generation` 跟它比大小，本地计数器与宿主计数器是两套编号，混用直接判错
+- 宿主的 generation 从 0 起（`useRef(0)`），只有选歌才 `++`。1.1.37 在首次绑定时
+  本地自增到 1，之后每个 `generation: 0` 的事件都被判为过期 →
+  `updatePlayerUI` / `updateProgressOnly` 永久跳过
+- 症状：刚进页面歌名停在「未在播放」、进度条不动、`mp-has-track` 不挂，
+  页面挂着歌词模式的类却没有 track 类 → 有词/无词布局错乱；切一次歌才自愈
+- 宿主不下发世代时，串曲由 `boundTrackId` 比较兜住，本就不需要世代
+- 对照实测（harness 按真实宿主把 generation 设为 0）：
+  1.1.37 初始 `isStatusCurrent=false`、歌名「未在播放」、缺 `mp-has-track`；
+  1.1.38 初始正常，有词↔无词来回切四次布局类与侧栏状态全对
+
 ### 1.1.37
 
 - 切行恢复波浪跟焦：progress 热路径原本一律 `focusInstant`，弹簧引擎被整个绕过，

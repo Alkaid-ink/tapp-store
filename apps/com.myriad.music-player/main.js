@@ -435,19 +435,23 @@ function isStatusCurrent(status) {
   return true;
 }
 
-/** 切歌时绑定新曲 + 世代（单调递增） */
+/**
+ * 切歌时绑定新曲 + 世代。
+ *
+ * boundGeneration 只允许存**宿主给的**世代号，绝不本地自增：
+ * isStatusCurrent 是拿事件里的 status.generation 跟它比大小，本地计数器与
+ * 宿主计数器是两套编号，混用会直接判错。宿主的 generation 从 0 起步且只有
+ * 选歌才 ++，本地若先自增到 1，之后每个带 generation:0 的事件都会被判为过期，
+ * updatePlayerUI / updateProgressOnly 永久跳过（封面标题进度全冻结）。
+ * 宿主不下发世代时，串曲由 boundTrackId 比较兜住，无需世代。
+ */
 function bindTrackFromStatus(status) {
   var track = status && status.currentTrack;
   var tid = track ? String(track.id) : null;
   var gen = (status && typeof status.generation === 'number') ? status.generation : 0;
-  // 必须先取旧值再赋值：原来先写 boundTrackId 再比较，else if 恒为 false，
-  // 宿主不下发 generation 时世代永远停在 0，isStatusCurrent 的世代校验形同虚设
-  var prevId = pageState.boundTrackId;
   pageState.boundTrackId = tid;
   if (gen > 0) {
     pageState.boundGeneration = gen;
-  } else if (tid && String(prevId) !== tid) {
-    pageState.boundGeneration = (pageState.boundGeneration || 0) + 1;
   }
 }
 
