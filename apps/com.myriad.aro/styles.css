@@ -1371,7 +1371,7 @@ button.is-busy{opacity:.72;cursor:wait;pointer-events:none}
 .msg-avatar{width:28px;height:28px;border-radius:50%;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;background:rgba(var(--tapp-primary-rgb,128,128,128),.12);color:var(--tapp-primary,#888);margin-bottom:2px}
 .msg-avatar img{width:100%;height:100%;object-fit:cover}
 .msg-avatar-spacer{width:28px;flex-shrink:0}
-.msg-bubble{position:relative;max-width:72%;padding:8px 12px;border-radius:16px;font-size:13px;line-height:1.5}
+.msg-bubble{position:relative;max-width:min(72%,100%);min-width:0;padding:8px 12px;border-radius:16px;font-size:13px;line-height:1.5;box-sizing:border-box}
 .bubble-local{background:var(--tapp-primary,#6366f1);color:#fff;border-bottom-right-radius:6px}
 .bubble-remote{background:rgba(128,128,128,.08);color:var(--text-primary,#1a1a1a);border-bottom-left-radius:6px}
 .msg-more-btn{position:absolute;top:2px;right:2px;width:32px;height:32px;min-width:32px;min-height:32px;border:none;border-radius:8px;background:transparent;color:inherit;opacity:0;pointer-events:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:opacity .12s,background .12s;z-index:2}
@@ -1381,8 +1381,8 @@ button.is-busy{opacity:.72;cursor:wait;pointer-events:none}
 @media (hover:none),(pointer:coarse){
   .msg-more-btn{opacity:.55;pointer-events:auto}
 }
-.msg-sender{font-size:11px;font-weight:600;color:var(--tapp-primary,#6366f1);margin-bottom:2px;padding-right:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.msg-text{white-space:pre-wrap;overflow-wrap:break-word}
+.msg-sender{font-size:11px;font-weight:600;color:var(--tapp-primary,#6366f1);margin-bottom:2px;padding-right:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;min-width:0}
+.msg-text{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;min-width:0;max-width:100%}
 .msg-footer{display:flex;align-items:center;gap:4px;margin-top:3px}
 .msg-local .msg-footer{justify-content:flex-end}
 .msg-remote .msg-footer{justify-content:flex-start}
@@ -1609,6 +1609,8 @@ button.is-busy{opacity:.72;cursor:wait;pointer-events:none}
   border-radius:4px;
   padding:0 3px;
   margin:0 1px;
+  /* Long @names must wrap, not stretch the bubble */
+  overflow-wrap:anywhere;word-break:break-word;
 }
 .dark .mention-picker{
   background:rgba(22,22,24,.98);
@@ -1901,7 +1903,7 @@ button.is-busy{opacity:.72;cursor:wait;pointer-events:none}
 .msg-quote-bar{width:3px;border-radius:2px;background:var(--tapp-primary,#6366f1);flex-shrink:0;margin-right:8px}
 .msg-quote-content{min-width:0;flex:1}
 .msg-quote-sender{font-size:11px;font-weight:600;opacity:.7;margin-bottom:1px}
-.msg-quote-text{font-size:12px;opacity:.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+.msg-quote-text{font-size:12px;opacity:.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;min-width:0}
 .bubble-local .msg-quote-block{background:rgba(255,255,255,.15)}
 .bubble-local .msg-quote-block:hover{background:rgba(255,255,255,.22)}
 .bubble-local .msg-quote-bar{background:rgba(255,255,255,.6)}
@@ -2832,3 +2834,118 @@ button.aro-select-trigger.create-input{
 .quote-view-source{font-size:10.5px;opacity:.5;margin-top:6px}
 .dark .quote-view-name{color:rgba(255,255,255,.92)}
 .dark .quote-view-text{color:rgba(255,255,255,.88)}
+
+/* ===================================================================
+   Mobile text overflow / narrow viewport hardening
+   Prevents long URLs, actor ids, filenames, and titles from blowing
+   flex layouts on phone widths. Applied after base component styles.
+   =================================================================== */
+.msg-row{min-width:0;max-width:100%}
+.msg-bubble{overflow-wrap:anywhere}
+.msg-caption{min-width:0;max-width:100%;overflow-wrap:anywhere;word-break:break-word}
+.msg-share-card,.msg-file-card,.msg-media-card{max-width:100%;min-width:0;box-sizing:border-box}
+.msg-share-main{min-width:0}
+.msg-file-card{width:100%;max-width:100%}
+.msg-media{max-width:min(300px,100%)!important}
+.bubble-media{max-width:min(340px,100%)!important}
+.msg-quote-block{max-width:100%;min-width:0;box-sizing:border-box}
+.msg-quote-sender{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.msg-sticker{max-width:min(160px,70vw)}
+.msg-sticker-img{max-width:100%;height:auto}
+.member-item{min-width:0;max-width:100%}
+.member-role{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.meta-badge{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-actions .action-btn{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.forward-item span,.forward-item-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mention-item-name,.mention-item-sub{max-width:100%}
+.edit-room-id-value,.ring-id-value{max-width:100%}
+.feed-item{min-width:0;max-width:100%;box-sizing:border-box}
+.feed-item-body{max-width:100%}
+.feed-item-text,.feed-item-quoted-text{overflow-wrap:anywhere;word-break:break-word}
+.feed-compose-text{overflow-wrap:anywhere;word-break:break-word;max-width:100%;box-sizing:border-box}
+.create-dialog-title,.history-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.aro-delivery-banner-text strong,
+.aro-delivery-banner-text span{overflow-wrap:anywhere;word-break:break-word}
+
+@media(max-width:768px){
+  /* Chat header: name must yield space to action icons */
+  .chat-header{gap:8px;padding:10px 10px}
+  .chat-name{font-size:14px;max-width:100%}
+  .chat-actions{max-width:min(48vw,200px);gap:4px}
+  .chat-meta{gap:4px;max-width:100%}
+  .meta-badge{font-size:9px;padding:2px 6px;max-width:min(42vw,140px)}
+
+  /* Bubbles: less side padding so content width is usable */
+  .msg-local{padding-left:max(12px,8vw)}
+  .msg-remote{padding-right:max(12px,8vw)}
+  .msg-bubble{max-width:min(88%,100%);font-size:14px;padding:8px 11px}
+  .bubble-media{max-width:min(100%,92vw)!important}
+  .msg-media{max-width:min(280px,86vw)!important}
+  .msg-image{max-height:min(280px,50vh)}
+  .msg-share-card{min-width:0;width:100%}
+  .msg-share-main{padding:12px;gap:10px}
+  .msg-share-icon{width:42px;height:42px;border-radius:12px}
+  .msg-share-title{font-size:13.5px;-webkit-line-clamp:3}
+  .msg-share-desc{font-size:11.5px;-webkit-line-clamp:2}
+  .msg-file-name{font-size:13px}
+  .msg-quote-text{max-width:100%}
+
+  /* Conv list already ellipsizes; tighten gaps */
+  .conv-name{font-size:13.5px}
+  .conv-preview{font-size:12px}
+  .sidebar-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;max-width:100%}
+
+  /* Feed cards: names/handles share one row without horizontal scroll */
+  .feed-item{padding:14px 14px}
+  .feed-item-name{max-width:min(42%,160px)!important}
+  .feed-item-domain{max-width:min(28vw,96px)}
+  .feed-item-header{gap:4px}
+  .feed-section-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+  .feed-main-header{padding:10px 12px;gap:8px}
+  .nav-feed-name{max-width:min(22vw,72px)}
+
+  /* Member sheet full-screen */
+  .member-panel.member-open-mobile .member-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .member-panel.member-open-mobile .member-name{max-width:100%}
+
+  /* Composer / mention / stickers */
+  .input-float-wrap{padding-left:10px;padding-right:10px}
+  .mention-picker{max-width:100%;box-sizing:border-box}
+  .mention-item-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mention-item-sub{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .msg-input{font-size:16px} /* iOS: avoid zoom on focus */
+
+  /* Dialogs */
+  .create-dialog{width:min(100%,calc(100vw - 24px));max-width:100%;box-sizing:border-box}
+  .create-dialog-title{padding-right:8px}
+  .create-input{max-width:100%;box-sizing:border-box}
+  .edit-room-id-value{font-size:11px}
+
+  /* History / files sheet */
+  .history-item-name,.history-item-text{max-width:100%}
+  .history-subtitle{max-width:100%}
+  .room-file-name{max-width:100%!important}
+
+  /* Forward sheet */
+  .forward-sheet{max-width:min(100%,400px);width:100%;box-sizing:border-box}
+  .forward-item{min-width:0}
+  .forward-item>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* Pinned bar */
+  .pinned-bar{padding:6px 10px}
+  .pinned-bar-text{max-width:100%}
+
+  /* Delivery banner */
+  .aro-delivery-banner{left:8px;right:8px;bottom:calc(76px + env(safe-area-inset-bottom,0px))}
+}
+
+@media(max-width:380px){
+  .msg-local{padding-left:8px}
+  .msg-remote{padding-right:8px}
+  .msg-bubble{max-width:92%}
+  .chat-actions{max-width:42vw}
+  .nav-feed-name{max-width:56px}
+  .feed-item-name{max-width:min(38%,120px)!important}
+  .meta-badge{max-width:min(36vw,100px)}
+  .aro-nav-item{padding:6px 8px;font-size:10px}
+}
