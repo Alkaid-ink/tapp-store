@@ -614,7 +614,7 @@ html.mp-has-lyrics .track-title {
 }
 
 .track-artist {
-  font-size: 17px; /* 整体大 1 号 */
+  font-size: 15px; /* 有词/无词统一再降 2px */
   font-weight: 500;
   margin-top: 0; /* 行距只由 .track-info gap 控制 */
   line-height: 1.3;
@@ -2166,7 +2166,7 @@ html.mp-has-lyrics .track-title {
   }
   
   .track-artist {
-    font-size: 15px;
+    font-size: 13px;
   }
   
   /* 底部 Sheet：歌词/列表同盒叠层；安全区 + 顶栏把手区 */
@@ -2412,7 +2412,7 @@ html.mp-has-lyrics .track-title {
     }
 
     .track-artist {
-      font-size: 13px;
+      font-size: 11px;
     }
 
     .controls-bar {
@@ -2502,7 +2502,7 @@ html.mp-has-lyrics .track-title {
   }
 
   .track-artist {
-    font-size: 16px;
+    font-size: 14px;
   }
 
   .lyric-line {
