@@ -313,15 +313,15 @@ async function initAnimationConfig() {
     // 监听动画级别变化
     Tapp.animation.onLevelChange(function(level) {
       pageState.animConfig.level = level;
-      pageState.animConfig.shouldAnimate = level !== 'none';
-      
-      // 根据新级别调整动画（light：无背景漂移；none：全停）
-      if (level === 'none' || level === 'light') {
+      pageState.animConfig.shouldAnimate = !isAnimMinimal(level);
+
+      // 根据新级别调整动画（light：无背景漂移；最低档：全停）
+      if (isAnimMinimal(level) || level === 'light') {
         stopBackgroundAnimation();
       } else if (pageState.status && pageState.status.isPlaying) {
         startBackgroundAnimation();
       }
-      if (level === 'none' || level === 'light') {
+      if (isAnimMinimal(level) || level === 'light') {
         clearRhythmRipples();
       }
       syncFxCompositing();
@@ -334,9 +334,22 @@ async function initAnimationConfig() {
   }
 }
 
+// 宿主的档位词表是 'exlight' | 'light' | 'standard'（见 useAnimationLevel.ts），
+// 其中 'exlight' 正是 prefers-reduced-motion 的落点且**不可被用户覆盖**。
+// 本文件此前一律按 'none' 判断——宿主从不下发这一档，于是：
+//   ① shouldAnimate() 里的 level !== 'none' 是恒真死条件；
+//   ② onLevelChange 把 shouldAnimate 重算成 level !== 'none'，exlight 得到 true，
+//      把初始那次正确的 false 覆盖掉；
+//   ③ isAnimLight() 不认识 exlight，于是走完整 standard 路径。
+// 结果就是减弱动效的用户在档位事件后拿到最重的视觉路径。'none' 保留只为向后兼容。
+function isAnimMinimal(level) {
+  var l = level || pageState.animConfig.level;
+  return l === 'exlight' || l === 'none';
+}
+
 // 检查是否应该执行动画（系统级外层门控）
 function shouldAnimate() {
-  return pageState.animConfig.shouldAnimate && pageState.animConfig.level !== 'none';
+  return pageState.animConfig.shouldAnimate && !isAnimMinimal();
 }
 
 // 动态视觉效果是否启用：用户开关 ∧ 系统 shouldAnimate ∧ 非移动端
@@ -348,7 +361,8 @@ function visualFxEnabled() {
 // 系统动画级别为 light：降级重视觉（涟漪/背景漂移关闭，Aurora 简化）
 // 列表 EQ 与 visualFx 开关语义不变
 function isAnimLight() {
-  return pageState.animConfig.level === 'light';
+  // exlight 比 light 更省：即便某条 FX 路径被走到，也必须拿轻量分支
+  return pageState.animConfig.level === 'light' || isAnimMinimal();
 }
 
 // 播放中 + FX 有效启用时挂 will-change 合成层；暂停/关 FX/移动端时卸下
@@ -396,7 +410,7 @@ var pageState = {
   bgPhase: 0,
   // 统一动画调度器配置
   animConfig: {
-    level: 'standard',        // 'none' | 'light' | 'standard'
+    level: 'standard',        // 宿主词表：'exlight' | 'light' | 'standard'
     loop: true,
     durationScale: 1,
     shouldAnimate: true,

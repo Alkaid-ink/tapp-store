@@ -4,6 +4,30 @@
 
 ## Changelog
 
+### 1.1.40
+
+**减弱动效档位一直被忽略。** 宿主的档位词表是 `'exlight' | 'light' | 'standard'`
+（`useAnimationLevel.ts`），其中 `exlight` 正是 `prefers-reduced-motion` 的落点
+且**不可被用户覆盖**；`animation.shouldAnimate` 返回 `!isExlight(level)`。
+而本文件通篇按 `'none'` 判断——宿主从不下发这一档：
+
+- `shouldAnimate()` 里的 `level !== 'none'` 是恒真死条件
+- `onLevelChange` 把 `shouldAnimate` 重算成 `level !== 'none'`，`exlight` 得到
+  **true**，把初始那次正确的 `false` 覆盖掉
+- `isAnimLight()` 不认识 `exlight`，于是走完整 standard 路径
+
+净效果：开了减弱动效的用户，只要档位事件一到，就拿到**最重**的视觉路径
+（60fps rAF + Aurora + 涟漪 + 背景漂移）。新增 `isAnimMinimal()` 统一判定，
+`'none'` 保留仅为向后兼容。
+
+实测（harness 按真实宿主实现 `shouldAnimate = !isExlight(level)`）：
+
+| | 1.1.39 | 1.1.40 |
+| --- | --- | --- |
+| exlight 初始 | shouldAnimate=false / fx=false | 同左 ✓ |
+| exlight 档位事件后 | **true / true** ✗ | **false / false** ✓ |
+| light / standard | — | 正常开启，standard 切行仍为 ~0.8s 弹簧 ✓ |
+
 ### 1.1.39
 
 **hero 区（封面+标题）模式切换动效找回。** 真因不在 1.1.37/1.1.38，而在 1.1.36：
