@@ -4,6 +4,10 @@
 
 ## Changelog
 
+### 1.0.8
+
+- 主题色切换改为 CSS 渐变插值（`@property` + transition）
+
 ### 1.0.7
 
 - 识别宿主 `hasThemePalette`：占位/默认色不覆盖上一首主题

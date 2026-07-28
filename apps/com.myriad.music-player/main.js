@@ -1,4 +1,4 @@
-// Music Player Tapp v1.0.7
+// Music Player Tapp v1.0.8
 
 var MP_DEBUG = false;
 function mpDebug() {
@@ -511,12 +511,10 @@ function applyThemeColors(status, forceNeutral) {
     : (lastColors.dark || NEUTRAL_THEME.dark);
 
   var did = false;
+  // 只写 --music-*，--accent-* 由 CSS 从 var(--music-primary) 派生，便于整轨插值
   if (primary !== lastColors.primary) {
     lastColors.primary = primary;
     root.style.setProperty('--music-primary', primary);
-    root.style.setProperty('--accent-color', primary);
-    root.style.setProperty('--accent-light', primary + '26');
-    root.style.setProperty('--accent-glow', primary + '66');
     did = true;
   }
   if (secondary !== lastColors.secondary) {

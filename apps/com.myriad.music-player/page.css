@@ -1,3 +1,41 @@
+/* Music Player Tapp — theme color interpolation */
+
+@property --music-primary {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #fc3c44;
+}
+@property --music-secondary {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #ff6b6b;
+}
+@property --music-accent {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #ff8a8a;
+}
+@property --music-light {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #ffb3b3;
+}
+@property --music-dark {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #cc2e34;
+}
+@property --lyric-active-primary {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #fc3c44;
+}
+@property --lyric-active-secondary {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #ff6b6b;
+}
+
 /* Music Player Tapp v3.0 - Apple Music Style (No Scroll) */
 
 /* ========================================
@@ -58,6 +96,23 @@
   --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-spring: 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  --theme-color-ease: 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* 封面主题色 / 歌词高亮色：渐变到新色（需 @property） */
+  transition:
+    --music-primary var(--theme-color-ease),
+    --music-secondary var(--theme-color-ease),
+    --music-accent var(--theme-color-ease),
+    --music-light var(--theme-color-ease),
+    --music-dark var(--theme-color-ease),
+    --lyric-active-primary var(--theme-color-ease),
+    --lyric-active-secondary var(--theme-color-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    transition: none;
+  }
 }
 
 /* 深色模式 - 通过系统偏好或 .dark 类控制 */
