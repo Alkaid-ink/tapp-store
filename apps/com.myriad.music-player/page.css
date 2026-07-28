@@ -96,7 +96,7 @@
   --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-spring: 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  --theme-color-ease: 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+  --theme-color-ease: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 
   /* 封面主题色 / 歌词高亮色：渐变到新色（需 @property） */
   transition:
@@ -429,8 +429,8 @@ html, body {
     0 20px 60px color-mix(in srgb, var(--music-primary) 30%, transparent),
     0 8px 20px rgba(0, 0, 0, 0.2);
   /* 恢复播放 = 弹簧回弹（带过冲）；will-change 提升为合成层 */
-  transition: transform 0.55s cubic-bezier(0.34, 1.45, 0.5, 1),
-              box-shadow 0.55s cubic-bezier(0.33, 1, 0.68, 1);
+  transition: transform 0.55s cubic-bezier(0.34, 1.45, 0.5, 1);
+  /* box-shadow 含 --music-primary：勿单独 transition，避免描边/光晕慢于主题色 */
   will-change: transform;
   /* 🎯 WebKit 兼容性：移除 contain，确保触摸事件可以正常工作 */
 }
@@ -441,8 +441,7 @@ html, body {
   box-shadow:
     0 10px 30px color-mix(in srgb, var(--music-primary) 16%, transparent),
     0 3px 10px rgba(0, 0, 0, 0.14);
-  transition: transform 0.45s cubic-bezier(0.33, 1, 0.68, 1),
-              box-shadow 0.45s cubic-bezier(0.33, 1, 0.68, 1);
+  transition: transform 0.45s cubic-bezier(0.33, 1, 0.68, 1);
 }
 
 .artwork-wrapper:hover {
@@ -1050,9 +1049,8 @@ html, body {
   border-radius: var(--radius-md);
   background: rgba(120, 120, 128, 0.10);
   border: 1.5px solid transparent;
-  transition: background var(--transition-fast),
-    border-color var(--transition-fast),
-    box-shadow var(--transition-fast);
+  /* border/background 颜色来自 --music-*，只过渡结构态；颜色随 @property 同步 */
+  transition: box-shadow var(--transition-fast);
 }
 
 .input-field:focus-within {
@@ -2429,10 +2427,8 @@ html.mp-empty .artwork-container {
     0 0 0 1px color-mix(in srgb, var(--music-primary, #8e8e93) 35%, transparent);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  transition:
-    transform 0.15s ease,
-    background 0.15s ease,
-    box-shadow 0.15s ease;
+  transition: transform 0.15s ease;
+  /* 背景/描边阴影跟 --music-*，不额外 transition 颜色通道 */
 }
 
 .jump-current-btn:hover,
