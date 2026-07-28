@@ -4,6 +4,10 @@
 
 ## Changelog
 
+### 1.1.19
+
+- 修复无词→有词后歌词挤在顶部（0 高测量拒绝 + empty→ready 硬重测）
+
 ### 1.1.18
 
 - 修复 progress 热路径反复 loadLyrics 拖慢封面同步

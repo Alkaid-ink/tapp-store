@@ -707,11 +707,18 @@ function measureLyricLayout() {
   void container.offsetHeight;
   var showingTrans = container.classList.contains('show-trans');
   var y = 0;
+  var anyH = false;
   for (var k = 0; k < lyricFx.items.length; k++) {
     var it = lyricFx.items[k];
+    // 未布局时 offsetHeight 为 0 → 全部 y=0 会「挤在顶部」；视为测量失败
     it.h = it.el.offsetHeight || 0;
+    if (it.h > 0) anyH = true;
     it.y = y;
     y += it.h;
+  }
+  if (!anyH) {
+    lyricFx.measured = false;
+    return false;
   }
   lyricFx.total = y;
   lyricFx.viewH = h;
@@ -1661,7 +1668,7 @@ function applyLyricsVerdict(lyrics, opts) {
   var pos = st.position || (st.progress ? st.progress.current : 0) || 0;
   var idx = updateLyricIndex(pos, lyrics || pageState.lyrics || []);
   pageState.currentLyricIndex = idx;
-  // render 内会 set ready（数据已确认 usable）
+  // render 内会 set ready（数据已确认 usable）；无词→有词时已硬重测
   renderLyrics(lyrics || pageState.lyrics, idx, { confirmed: true });
 
   if (lyricsTabOn && pageState.lyricsLoadState === 'ready') {
@@ -1674,7 +1681,9 @@ function applyLyricsVerdict(lyrics, opts) {
       }
     }
     syncNoLyricsLayout();
-    forceLyricsPanelRelayout(true);
+    // 侧栏刚展开：硬重测，避免仍挤在顶部
+    if (!lyricFx.measured) forceLyricsPanelRelayout(false);
+    else forceLyricsPanelRelayout(true);
   }
 }
 
@@ -1770,7 +1779,20 @@ function renderLyrics(lyrics, currentIndex, opts) {
     return;
   }
 
+  // 无词/空壳 → 有词：侧栏从 0 宽展开，必须整表重建 + 延后硬重测，否则行高全 0 挤在顶部
+  var comingFromEmpty = pageState.lyricsLoadState === 'empty' ||
+    !lyricFx.inner ||
+    !container.querySelector('.lyrics-inner');
+
   setLyricsUiMode('ready');
+  // 立刻刷开侧栏几何，避免本帧仍按 0 宽测
+  if (comingFromEmpty) {
+    var prFlush = $('player-right');
+    var caFlush = document.querySelector('.content-area');
+    if (prFlush) void prFlush.offsetWidth;
+    if (caFlush) void caFlush.offsetWidth;
+    void container.offsetWidth;
+  }
 
   // 逐字模式：verbatim 与 lyrics 行数一致时启用卡拉OK字级填充
   var isKaraoke = pageState.verbatimLyrics.length > 0 &&
@@ -1779,7 +1801,7 @@ function renderLyrics(lyrics, currentIndex, opts) {
 
   // 检查是否需要重新渲染整个列表
   var existingLines = container.querySelectorAll('.lyric-line');
-  var needsFullRender = existingLines.length !== lyrics.length || !lyricFx.inner;
+  var needsFullRender = existingLines.length !== lyrics.length || !lyricFx.inner || comingFromEmpty;
   // 关键：逐行<->逐字切换时行数可能相同，必须按 word span 是否存在强制重建
   var hasWordSpans = container.querySelector('.lyric-word') !== null;
   if (isKaraoke !== hasWordSpans) needsFullRender = true;
@@ -1827,8 +1849,11 @@ function renderLyrics(lyrics, currentIndex, opts) {
     }
   }
 
-  // 焦点跟随：波浪滚动到当前行（ensureLyricLayoutReady 保证翻译显隐与测量一致）
-  if (pageState.autoScrollEnabled && currentIndex >= 0) {
+  // 无词→有词 / 首测失败：硬重测（立刻 + settle），避免挤在顶部
+  if (comingFromEmpty || !lyricFx.measured) {
+    forceLyricsPanelRelayout(false);
+  } else if (pageState.autoScrollEnabled && currentIndex >= 0) {
+    // 焦点跟随：波浪滚动到当前行
     focusLyricLine(currentIndex);
   }
 }
@@ -1919,10 +1944,26 @@ function buildLyricDom(container, lyrics, currentIndex, isKaraoke) {
     var k = findLyricItemK(currentIndex >= 0 ? currentIndex : 0);
     if (k < 0) k = 0;
     focusLyricItemK(k, true);
+  } else {
+    // 侧栏刚从无词 0 宽展开：本帧测不到，下一帧硬重测
+    requestAnimationFrame(function() {
+      if (lyricFx.items.length === 0) return;
+      if (measureLyricLayout()) {
+        var k2 = findLyricItemK(currentIndex >= 0 ? currentIndex : 0);
+        if (k2 < 0) k2 = 0;
+        focusLyricItemK(k2, true);
+      }
+    });
   }
-  // 始终延迟再测：侧栏展开过渡 / 字体换行 / show-trans 首帧 offsetHeight 常偏小；
-  // 0 宽时首测失败也靠这次在可见后补上
-  scheduleLyricLayoutRemeasure(container.clientWidth > 0 ? 0 : 480);
+  // 双 rAF + 过渡结束再测：覆盖「无词→有词」侧栏展开全过程
+  scheduleLyricLayoutRemeasure(0);
+  if (lyricFx._settleTimer) clearTimeout(lyricFx._settleTimer);
+  var genBuild = lyricFx.layoutGen;
+  var songBuild = pageState.lyricsSongId;
+  lyricFx._settleTimer = setTimeout(function() {
+    lyricFx._settleTimer = null;
+    applyLyricLayoutRemeasure(genBuild, songBuild);
+  }, getSideLayoutSettleMs());
   bindLyricContainerResizeObserver();
 }
 
