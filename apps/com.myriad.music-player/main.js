@@ -1,4 +1,10 @@
-// Music Player Tapp v1.0.4
+// Music Player Tapp v1.0.6
+
+var MP_DEBUG = false;
+function mpDebug() {
+  if (!MP_DEBUG || !console || !console.debug) return;
+  try { console.debug.apply(console, arguments); } catch (e) {}
+}
 
 // ========================================
 // 国际化
@@ -437,19 +443,20 @@ function updateEmptyAndLoadingUI(status) {
     if (!hasTrack) emptyEl.textContent = t('emptyHint');
   }
 
+  // 封面不再盖加载层；状态条仅用于错误（避免切歌时横幅刷屏）
   if (status && status.lastError) {
     showStatusBanner(t('statusError'), 3200);
-  } else if (loading && hasTrack) {
-    showStatusBanner(t('loadingTrack'), 0);
   } else if (
     pageState.statusBanner === t('loadingTrack') ||
-    pageState.statusBanner === t('buffering')
+    pageState.statusBanner === t('buffering') ||
+    pageState.statusBanner === t('statusError')
   ) {
-    showStatusBanner('');
+    // 错误消失 / 切到新曲后收起（lastError 清空时）
+    if (!(status && status.lastError)) showStatusBanner('');
   }
 }
 
-/** 中性主题色（无取色结果 / 切歌瞬间），避免残留上一首鲜艳色 */
+/** 仅首屏无任何主题时使用；切歌中绝不刷回默认，避免闪色 */
 var NEUTRAL_THEME = {
   primary: '#8e8e93',
   secondary: '#aeaeb2',
@@ -458,35 +465,45 @@ var NEUTRAL_THEME = {
   dark: '#3a3a3c'
 };
 
+function isFallbackThemeColor(c) {
+  if (!c) return true;
+  var s = String(c).toLowerCase();
+  return s === '#ef4444' || s === '#fc3c44' || s === '#8e8e93';
+}
+
+/**
+ * 应用主题色。
+ * - 宿主默认红 / 空色 / forceNeutral：若已有 lastColors 则跳过（保留上一首）
+ * - 仅真实取色结果才覆盖
+ */
 function applyThemeColors(status, forceNeutral) {
   var root = document.documentElement;
-  var primary = forceNeutral
-    ? NEUTRAL_THEME.primary
-    : (status && status.primaryColor) || NEUTRAL_THEME.primary;
-  // 宿主默认红 #ef4444 / #fc3c44 在无真实取色时当中性处理
-  var isFallback =
-    !status ||
-    !status.primaryColor ||
-    status.primaryColor === '#ef4444' ||
-    status.primaryColor === '#fc3c44';
-  if (!forceNeutral && isFallback && !(status && status.musicColors)) {
-    // 仍可能有 secondary；若只有 fallback primary 且 colors 空，用中性
-    if (!status.secondaryColor || status.secondaryColor === status.primaryColor) {
-      primary = NEUTRAL_THEME.primary;
-    }
+  var incoming = status && status.primaryColor;
+  var isFallback = forceNeutral || isFallbackThemeColor(incoming) ||
+    (status && status.secondaryColor && isFallbackThemeColor(status.secondaryColor) &&
+     status.secondaryColor === status.primaryColor);
+
+  // 已有主题且新状态不是可靠新色 → 保持上一首，杜绝闪默认色
+  if (isFallback && lastColors.primary) {
+    return;
   }
-  var secondary = forceNeutral
-    ? NEUTRAL_THEME.secondary
-    : (status && status.secondaryColor) || primary;
-  var accent = forceNeutral
-    ? NEUTRAL_THEME.accent
-    : (status && status.accentColor) || secondary;
-  var light = forceNeutral
-    ? NEUTRAL_THEME.light
-    : (status && status.lightColor) || NEUTRAL_THEME.light;
-  var dark = forceNeutral
-    ? NEUTRAL_THEME.dark
-    : (status && status.darkColor) || NEUTRAL_THEME.dark;
+
+  var primary = (!isFallback && incoming) ? incoming : (lastColors.primary || NEUTRAL_THEME.primary);
+  if (isFallback && !lastColors.primary) {
+    primary = NEUTRAL_THEME.primary;
+  }
+  var secondary = (!isFallback && status && status.secondaryColor)
+    ? status.secondaryColor
+    : (lastColors.secondary || primary);
+  var accent = (!isFallback && status && status.accentColor)
+    ? status.accentColor
+    : (lastColors.accent || secondary);
+  var light = (!isFallback && status && status.lightColor)
+    ? status.lightColor
+    : (lastColors.light || NEUTRAL_THEME.light);
+  var dark = (!isFallback && status && status.darkColor)
+    ? status.darkColor
+    : (lastColors.dark || NEUTRAL_THEME.dark);
 
   var did = false;
   if (primary !== lastColors.primary) {
@@ -2056,7 +2073,7 @@ function loadLyricsForTrack(track) {
   var trackId = track.id;
 
   Tapp.media.getLyrics({ songId: track.id, source: track.source }).then(function(res) {
-    try { console.debug('[music-player] getLyrics', track.id, 'verbatim=', res && res.verbatim ? res.verbatim.length : 0, 'lines=', res && res.lines ? res.lines.length : 0); } catch (e) {}
+    try { mpDebug('[music-player] getLyrics', track.id, 'verbatim=', res && res.verbatim ? res.verbatim.length : 0, 'lines=', res && res.lines ? res.lines.length : 0); } catch (e) {}
     // 过期请求 / 当前曲已不是目标曲：丢弃
     if (requestGen !== pageState.lyricsRequestGen) return;
     var currentId = pageState.status && pageState.status.currentTrack
@@ -3075,6 +3092,12 @@ function updateProgressOnly(status) {
   
   if (progressElements.bar) {
     progressElements.bar.value = position;
+    try {
+      var durA = track ? (track.duration || 0) : 0;
+      progressElements.bar.setAttribute('aria-valuenow', String(Math.floor(position)));
+      progressElements.bar.setAttribute('aria-valuemin', '0');
+      if (durA > 0) progressElements.bar.setAttribute('aria-valuemax', String(Math.floor(durA)));
+    } catch (_e) {}
   }
   if (progressElements.fill) {
     var percent = duration > 0 ? (position / duration) * 100 : 0;
@@ -3105,9 +3128,8 @@ function updatePlayerUI(status) {
     lastCoverUrl = coverUrl;
   }
 
-  // 主题色：无真实取色时用中性色，避免残留上一首
-  var forceNeutral = !track || !status.primaryColor;
-  applyThemeColors(status, forceNeutral);
+  // 主题色：无真实取色时保留上一首（不 force 中性/默认红）
+  applyThemeColors(status, !track);
 
   // 封面 crossfade + track 归属（快速切歌丢弃过期 onload）
   var coverEl = $('album-cover');
@@ -4730,7 +4752,7 @@ function rhythmTick(bands, ts) {
       ts - rhythm.lastSweep > 4000) {
     rhythm.lastSweep = ts;
     var shiftStrength = Math.min(1, Math.max(jumpRel * 0.9, distRel * 0.6));
-    try { console.debug('[music-player] shift! jumpRel=', jumpRel.toFixed(2), 'distRel=', distRel.toFixed(2)); } catch (e) {}
+    try { mpDebug('[music-player] shift! jumpRel=', jumpRel.toFixed(2), 'distRel=', distRel.toFixed(2)); } catch (e) {}
     fireRipple(shiftStrength, 'shift');
   }
 }
@@ -4767,7 +4789,7 @@ function loadBeatGridForTrack(track) {
         for (var ai = 0; ai < g.accents.length; ai++) acc[g.accents[ai]] = 1;
         beatGrid.accents = acc;
       }
-      try { console.debug('[music-player] beat grid:', g.bpm, 'BPM,', g.beats.length, 'beats,', (g.accents || []).length, 'accents, conf', g.confidence.toFixed(2)); } catch (e) {}
+      try { mpDebug('[music-player] beat grid:', g.bpm, 'BPM,', g.beats.length, 'beats,', (g.accents || []).length, 'accents, conf', g.confidence.toFixed(2)); } catch (e) {}
     }
   }).catch(function() {
     // 失败撤销标记，下一次状态事件自动重试

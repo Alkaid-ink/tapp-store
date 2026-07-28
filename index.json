@@ -1,10 +1,10 @@
 {
   "$schema": "https://myriad.you/schemas/tapp-store-v1.json",
   "name": "Myriad Official Tapp Store",
-  "version": "1.8.41",
+  "version": "1.8.42",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-07-28T06:51:00Z",
+  "updated_at": "2026-07-28T06:54:52Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.you",
@@ -14,9 +14,9 @@
     {
       "id": "com.myriad.music-player",
       "name": "音乐播放器",
-      "version": "1.0.5",
+      "version": "1.0.6",
       "description": "控制系统音乐播放，查看歌词与播放列表",
-      "long_description": "1.0.5: 移除封面加载遮罩与 spinner。\n\n1.0.4: 播放失败状态条；空列表引导；搜索无结果 i18n；[/] 快进退 5s；音量快捷键与滑条一致。\n\n1.0.3: 曲目 generation 硬绑定防串态；缓冲/空态/状态条；封面 crossfade；键盘快捷键；默认面板持久化；定位当前曲；移动端左右滑切换歌词/列表。\n\n1.0.2: 切歌时主题色及时同步（识别 primaryColor 变化）、封面高优先级解码、邻曲封面预取；Windows/触控布局与 Aurora 频谱更稳健。\n\n对接系统播放器，显示封面、进度与播放控制；支持同步歌词、列表搜索，以及顺序、循环、单曲和随机模式。",
+      "long_description": "1.0.6: 切歌保留上一首主题色，不再闪默认/中性色。\n\n1.0.5: 移除封面加载遮罩与 spinner。\n\n1.0.4: 播放失败状态条；空列表引导；搜索无结果 i18n；[/] 快进退 5s；音量快捷键与滑条一致。\n\n1.0.3: 曲目 generation 硬绑定防串态；缓冲/空态/状态条；封面 crossfade；键盘快捷键；默认面板持久化；定位当前曲；移动端左右滑切换歌词/列表。\n\n1.0.2: 切歌时主题色及时同步（识别 primaryColor 变化）、封面高优先级解码、邻曲封面预取；Windows/触控布局与 Aurora 频谱更稳健。\n\n对接系统播放器，显示封面、进度与播放控制；支持同步歌词、列表搜索，以及顺序、循环、单曲和随机模式。",
       "locales": {
         "en-US": {
           "name": "Music Player",
@@ -60,13 +60,13 @@
         "page_styles": "apps/com.myriad.music-player/page.css",
         "page_template": "apps/com.myriad.music-player/page.html"
       },
-      "size": 266986,
+      "size": 267996,
       "downloads": 0,
       "rating": 0,
       "featured": true,
       "verified": true,
       "created_at": "2025-12-10T00:00:00Z",
-      "updated_at": "2026-07-28T06:51:00Z"
+      "updated_at": "2026-07-28T06:54:52Z"
     },
     {
       "id": "com.myriad.quick-notes",
