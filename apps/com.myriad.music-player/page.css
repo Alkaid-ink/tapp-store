@@ -2339,35 +2339,13 @@ html, body {
   background: rgba(127, 127, 127, 0.12);
 }
 
-.track-loading-indicator {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  background: rgba(0, 0, 0, 0.18);
-  border-radius: inherit;
-}
 
-.track-loading-spinner {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 2.5px solid rgba(255, 255, 255, 0.25);
-  border-top-color: var(--music-primary, #fff);
-  animation: spin 0.75s linear infinite;
-}
 
 .artwork-image.cover-fading {
   opacity: 0.35;
   transition: opacity 0.18s ease;
 }
 
-html.mp-loading .artwork-wrapper {
-  filter: saturate(0.92);
-}
 
 html.mp-empty .artwork-container {
   opacity: 0.88;
@@ -2424,12 +2402,28 @@ html.mp-empty .artwork-container {
 
 @media (prefers-reduced-motion: reduce) {
   .status-banner,
-  .artwork-image.cover-fading,
-  .track-loading-spinner {
+  .artwork-image.cover-fading {
     transition: none !important;
     animation: none !important;
   }
   .artwork-image.cover-fading {
     opacity: 1;
   }
+}
+
+/* 1.0.4 */
+.playlist-empty-hint {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  opacity: 0.75;
+  line-height: 1.4;
+  font-weight: 400;
+}
+
+.status-banner.visible {
+  /* error 态略偏红，由 JS 可选加 class；默认仍主题色 */
+}
+html.mp-has-error .status-banner.visible {
+  background: color-mix(in srgb, #ff453a 40%, rgba(0, 0, 0, 0.55));
 }

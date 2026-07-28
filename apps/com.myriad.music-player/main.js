@@ -1,4 +1,4 @@
-// Music Player Tapp v1.0.3
+// Music Player Tapp v1.0.4
 
 // ========================================
 // 国际化
@@ -41,6 +41,8 @@ var i18n = {
     jumpToCurrent: '定位当前',
     statusError: '播放异常，已尝试跳过',
     keyboardHint: '空格播放 · ←→ 切歌 · ↑↓ 音量',
+    noSearchResults: '未找到匹配歌曲',
+    seeking: '跳转中…',
   },
   'en-US': {
     title: 'Music Player',
@@ -78,6 +80,8 @@ var i18n = {
     jumpToCurrent: 'Jump to current',
     statusError: 'Playback error, skipping…',
     keyboardHint: 'Space play · ←→ tracks · ↑↓ volume',
+    noSearchResults: 'No matching songs',
+    seeking: 'Seeking…',
   },
   'ja-JP': {
     title: '音楽プレーヤー',
@@ -115,6 +119,8 @@ var i18n = {
     jumpToCurrent: '再生中へ',
     statusError: '再生エラー、スキップします',
     keyboardHint: 'Space再生 · ←→曲 · ↑↓音量',
+    noSearchResults: '一致する曲がありません',
+    seeking: 'シーク中…',
   },
 };
 
@@ -422,8 +428,8 @@ function updateEmptyAndLoadingUI(status) {
   var hasTrack = !!(status && status.currentTrack);
   var loading = !!(status && (status.isLoading || status.isAudioLoading));
   root.classList.toggle('mp-has-track', hasTrack);
-  root.classList.toggle('mp-loading', loading && hasTrack);
   root.classList.toggle('mp-empty', !hasTrack);
+  root.classList.toggle('mp-has-error', !!(status && status.lastError));
 
   var emptyEl = $('player-empty-hint');
   if (emptyEl) {
@@ -431,15 +437,14 @@ function updateEmptyAndLoadingUI(status) {
     if (!hasTrack) emptyEl.textContent = t('emptyHint');
   }
 
-  var loadEl = $('track-loading-indicator');
-  if (loadEl) {
-    loadEl.hidden = !(loading && hasTrack);
-    loadEl.setAttribute('aria-hidden', loading && hasTrack ? 'false' : 'true');
-  }
-
-  if (loading && hasTrack) {
+  if (status && status.lastError) {
+    showStatusBanner(t('statusError'), 3200);
+  } else if (loading && hasTrack) {
     showStatusBanner(t('loadingTrack'), 0);
-  } else if (pageState.statusBanner === t('loadingTrack') || pageState.statusBanner === t('buffering')) {
+  } else if (
+    pageState.statusBanner === t('loadingTrack') ||
+    pageState.statusBanner === t('buffering')
+  ) {
     showStatusBanner('');
   }
 }
@@ -2617,8 +2622,10 @@ function renderPlaylist(playlist, currentTrack, searchQuery) {
     virtualList.visibleEnd = -1;
     virtualList.lastTotalHeight = 0;
     
-    container.innerHTML = '<div class="playlist-empty">' + 
-      (searchQuery ? '未找到匹配歌曲' : t('noPlaylist')) + '</div>';
+    container.innerHTML = '<div class="playlist-empty">' +
+      (searchQuery ? t('noSearchResults') : t('noPlaylist')) +
+      (!searchQuery ? '<div class="playlist-empty-hint">' + t('emptyHint') + '</div>' : '') +
+      '</div>';
     return;
   }
   
@@ -3304,7 +3311,8 @@ var lastStateSnapshot = {
   primaryColor: null,
   secondaryColor: null,
   generation: null,
-  isLoading: null
+  isLoading: null,
+  lastError: null
 };
 
 // 检查状态是否有关键变化
@@ -3333,7 +3341,8 @@ function hasSignificantChange(state) {
       (state.primaryColor || null) !== lastStateSnapshot.primaryColor ||
       (state.secondaryColor || null) !== lastStateSnapshot.secondaryColor ||
       gen !== lastStateSnapshot.generation ||
-      loading !== lastStateSnapshot.isLoading) {
+      loading !== lastStateSnapshot.isLoading ||
+      (state.lastError || null) !== lastStateSnapshot.lastError) {
     return true;
   }
 
@@ -3362,6 +3371,7 @@ function updateStateSnapshot(state) {
   lastStateSnapshot.generation =
     typeof state.generation === 'number' ? state.generation : null;
   lastStateSnapshot.isLoading = !!(state.isLoading || state.isAudioLoading);
+  lastStateSnapshot.lastError = state.lastError || null;
 }
 
 // 初始化页面
@@ -3928,18 +3938,33 @@ function bindControls() {
       e.preventDefault();
       var volUp = ((pageState.status && pageState.status.volume) || 70) + 5;
       if (volUp > 100) volUp = 100;
-      Tapp.media.setVolume(volUp / 100);
+      // 宿主接受 0-100 或 0-1；与滑条一致传 0-100
+      Tapp.media.setVolume(volUp);
     } else if (key === 'ArrowDown') {
       e.preventDefault();
       var volDn = ((pageState.status && pageState.status.volume) || 70) - 5;
       if (volDn < 0) volDn = 0;
-      Tapp.media.setVolume(volDn / 100);
+      Tapp.media.setVolume(volDn);
     } else if (key === 'l' || key === 'L') {
       var lt = document.getElementById('tab-lyrics');
       if (lt) handleTabClick(lt);
     } else if (key === 'p' || key === 'P') {
       var pt = document.getElementById('tab-playlist');
       if (pt) handleTabClick(pt);
+    } else if (key === '[' || key === 'PageDown') {
+      e.preventDefault();
+      var pos = (pageState.status && (pageState.status.position || 0)) || 0;
+      Tapp.media.seek(Math.max(0, pos - 5));
+    } else if (key === ']' || key === 'PageUp') {
+      e.preventDefault();
+      var pos2 = (pageState.status && (pageState.status.position || 0)) || 0;
+      var dur = 0;
+      if (pageState.status && pageState.status.currentTrack) {
+        dur = pageState.status.currentTrack.duration || 0;
+      }
+      var nextPos = pos2 + 5;
+      if (dur > 0 && nextPos > dur) nextPos = dur;
+      Tapp.media.seek(nextPos);
     }
   });
 
