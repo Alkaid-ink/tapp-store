@@ -250,12 +250,14 @@ html, body {
    ======================================== */
 .content-area {
   display: grid;
-  /* minmax(0,…) 允许列收缩到小于内容，避免长标题把左列撑破导致溢出 */
-  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
-  gap: 16px;
+  /* 默认单列（都不选）；打开侧栏时 JS 挂 mp-side-*，列宽与歌词/列表完全一致 */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0fr);
+  column-gap: 16px;
   min-height: 0;
-  /* 子项默认 min-width:auto 会按文字内容撑破列 */
   min-width: 0;
+  /* 列宽切换：封面↔侧栏同节奏 */
+  transition: grid-template-columns 0.42s cubic-bezier(0.32, 0.72, 0, 1),
+    column-gap 0.42s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .content-area > .player-left,
@@ -280,6 +282,12 @@ html, body {
   min-width: 0;
   box-sizing: border-box;
   overflow: hidden; /* 跑马灯/长标题硬裁剪边界 */
+  /* 开/关侧栏时 hero 作为整体缓动 */
+  transition:
+    width 0.42s cubic-bezier(0.32, 0.72, 0, 1),
+    max-width 0.42s cubic-bezier(0.32, 0.72, 0, 1),
+    margin 0.42s cubic-bezier(0.32, 0.72, 0, 1),
+    transform 0.42s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 /* 封面与标题同宽、同对齐，随 hero 一起伸缩 */
@@ -636,14 +644,6 @@ html, body {
     cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
 }
 
-/* 双栏时左列 hero 再收一档，避免贴歌词 */
-@media (min-width: 769px) {
-  html.mp-side-lyrics .player-hero,
-  html.mp-side-playlist .player-hero {
-    max-width: min(100%, 300px);
-  }
-}
-
 @keyframes marquee-scroll {
   0%, 12% {
     transform: translateX(0);
@@ -654,31 +654,51 @@ html, body {
 }
 
 /* ========================================
-   右侧面板 - 歌词和播放列表
+   右侧面板 - 歌词和播放列表（同占地、可叠层切换）
    ======================================== */
 .player-right {
-  display: flex;
-  flex-direction: column;
+  /* 叠放歌词/列表，保证两者占用同一网格区域 */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
   min-height: 0;
   min-width: 0;
 }
 
 /* ========================================
-   面板 - 歌词和播放列表
+   面板 - 歌词和播放列表（同尺寸叠层，淡入切换）
    ======================================== */
 .panel {
-  display: none;
+  grid-area: 1 / 1;
+  display: flex;
   flex-direction: column;
-  flex: 1;
   overflow: hidden;
   min-height: 0;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(10px) scale(0.985);
+  transition:
+    opacity 0.3s cubic-bezier(0.32, 0.72, 0, 1),
+    transform 0.36s cubic-bezier(0.32, 0.72, 0, 1),
+    visibility 0s linear 0.32s;
 }
 
 .panel.active {
-  display: flex;
-  /* 面板切换：淡入 + 轻微上滑（display 切换时 animation 会重新触发） */
-  animation: panelIn 0.38s cubic-bezier(0.33, 1, 0.68, 1);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+  transition:
+    opacity 0.32s cubic-bezier(0.32, 0.72, 0, 1),
+    transform 0.36s cubic-bezier(0.32, 0.72, 0, 1),
+    visibility 0s linear 0s;
+  /* 取消旧 panelIn animation，避免与 transition 叠两层 */
+  animation: none;
 }
 
 @keyframes panelIn {
@@ -2105,7 +2125,7 @@ html, body {
     font-size: 15px;
   }
   
-  /* 右侧面板默认隐藏 */
+  /* 右侧面板默认隐藏；打开后歌词/列表同盒叠层切换 */
   .player-right {
     display: none;
     position: fixed;
@@ -2120,26 +2140,29 @@ html, body {
     padding: 6px;
     padding-top: 50px;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    animation: slideUp 0.3s ease;
+    /* 重置桌面侧栏的 opacity/transform，避免 fixed 层透明 */
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    pointer-events: auto;
+    animation: slideUp 0.34s cubic-bezier(0.32, 0.72, 0, 1);
   }
   
-  /* 移动端面板显示时 */
+  /* 移动端面板显示：grid 叠层，歌词与列表占地相同 */
   .player-right.mobile-visible {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
   }
 
   .player-right.mobile-visible .panel {
-    flex: 1;
-    display: none;
-    border-radius: 0;
-    /* flex 子项高度链：确保 lyrics-scroll/playlist-scroll 拿到确定高度 */
-    min-height: 0;
-  }
-
-  .player-right.mobile-visible .panel.active {
+    grid-area: 1 / 1;
     display: flex;
     flex-direction: column;
+    border-radius: 0;
+    min-height: 0;
+    width: 100%;
+    height: 100%;
   }
 
   /* 移动端：VIP 开关只留图标（皇冠已足够表意），给搜索框腾空间 */
@@ -2557,64 +2580,9 @@ html.mp-has-error .status-banner.visible {
   background: color-mix(in srgb, #ff453a 40%, rgba(0, 0, 0, 0.55));
 }
 
-/* ========================================
-   无歌词模式（html.mp-no-lyrics / mp-lyrics-loading / mp-has-lyrics）
-   ======================================== */
-
-/* 桌面：无歌词时扩大封面列，弱化右侧空歌词区 */
-@media (min-width: 769px) {
-  html.mp-no-lyrics-layout .content-area {
-    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
-    transition: grid-template-columns 0.45s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  html.mp-no-lyrics-layout .player-left {
-    align-items: center;
-    padding-left: 10%;
-    padding-right: 10%;
-  }
-
-  html.mp-no-lyrics-layout .artwork-wrapper,
-  html.mp-no-lyrics-layout .artwork-aurora {
-    max-width: min(360px, 100%);
-    width: 100%;
-  }
-
-  html.mp-no-lyrics-layout .player-hero,
-  html.mp-no-lyrics-layout .track-info {
-    align-items: center;
-    text-align: center;
-    width: 100%;
-  }
-
-  html.mp-no-lyrics-layout .track-title-row {
-    justify-content: center;
-  }
-
-  /* 歌词面板激活且无词：右侧展示精致空态，列表面板不受影响 */
-  html.mp-no-lyrics .panel-lyrics.active {
-    justify-content: center;
-  }
-}
-
-/* 有歌词时恢复默认左对齐标题感 */
-html.mp-has-lyrics .player-left {
-  /* 保持默认 .player-left 规则 */
-}
-
-/* 丰富空态 */
+/* 空态占位（已不再使用，保留隐藏兜底） */
 .lyrics-empty.lyrics-empty-rich {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  min-height: 180px;
-  gap: 10px;
-  padding: 24px 20px;
-  text-align: center;
-  opacity: 1;
-  color: var(--text-secondary);
+  display: none !important;
 }
 
 
@@ -2697,102 +2665,111 @@ html.mp-no-lyrics #lyric-trans-btn {
 
 /* ========================================
    侧栏三态：none | lyrics | playlist
-   none = 都不选，仅封面+标题
+   歌词与列表打开时占地完全一致（同 grid、同 hero 宽）
    ======================================== */
 @media (min-width: 769px) {
-  /* 默认 / 都不选：隐藏右侧，封面区居中占满 */
-  html.mp-side-none .content-area,
-  html.mp-no-lyrics-layout .content-area {
-    grid-template-columns: minmax(0, 1fr);
+  /* 默认 / 都不选：右列折叠为 0，封面居中 */
+  html.mp-side-none .content-area {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0fr);
+    column-gap: 0;
   }
 
-  html.mp-side-none .player-right,
-  html.mp-no-lyrics-layout.mp-side-none .player-right {
-    display: none;
-  }
-
-  /* 打开歌词或列表：双栏 */
+  /* 歌词 / 列表：同一套双栏比例，占地相同 */
   html.mp-side-lyrics .content-area,
   html.mp-side-playlist .content-area {
     grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    column-gap: 16px;
   }
 
-  html.mp-side-lyrics .player-right,
-  html.mp-side-playlist .player-right {
-    display: flex;
+  /* 桌面侧栏：不 display:none，用透明+位移可过渡 */
+  .player-right {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateX(16px);
+    transition:
+      opacity 0.34s cubic-bezier(0.32, 0.72, 0, 1),
+      transform 0.42s cubic-bezier(0.32, 0.72, 0, 1),
+      visibility 0s linear 0.4s;
   }
 
-  html.mp-side-none .player-left,
-  html.mp-no-lyrics-layout .player-left {
+  .player-right.side-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: none;
+    transition:
+      opacity 0.36s cubic-bezier(0.32, 0.72, 0, 1),
+      transform 0.42s cubic-bezier(0.32, 0.72, 0, 1),
+      visibility 0s linear 0s;
+  }
+
+  /* none：hero 居中整体 */
+  html.mp-side-none .player-left {
     align-items: center;
     justify-content: center;
     padding-left: 8%;
     padding-right: 8%;
   }
 
-  html.mp-side-none .player-hero,
-  html.mp-no-lyrics-layout .player-hero {
+  html.mp-side-none .player-hero {
     align-items: center;
     margin-inline: auto;
-    width: min(100%, 380px);
+    width: min(100%, 360px);
+    max-width: min(100%, 360px);
   }
 
-  html.mp-side-none .player-hero .artwork-container,
-  html.mp-side-none .player-hero .track-info,
-  html.mp-no-lyrics-layout .player-hero .artwork-container,
-  html.mp-no-lyrics-layout .player-hero .track-info {
-    width: 100%;
-  }
-
-  html.mp-side-none .player-hero .track-info,
-  html.mp-no-lyrics-layout .player-hero .track-info {
+  html.mp-side-none .player-hero .track-info {
     align-items: center;
     text-align: center;
   }
 
-  html.mp-side-none .track-title-row,
-  html.mp-no-lyrics-layout .track-title-row {
+  html.mp-side-none .track-title-row {
     justify-content: center;
   }
 
-  html.mp-side-none .artwork-wrapper,
-  html.mp-side-none .artwork-aurora,
-  html.mp-no-lyrics-layout .artwork-wrapper,
-  html.mp-no-lyrics-layout .artwork-aurora {
-    max-width: min(360px, 100%);
-    width: 100%;
-  }
-
-  /* 有歌词且打开歌词 tab：左侧恢复略偏左的阅读布局 */
-  html.mp-has-lyrics.mp-side-lyrics .player-left {
+  /* 歌词 / 列表打开：左侧布局完全一致（禁止按「有没有词」改占地） */
+  html.mp-side-lyrics .player-left,
+  html.mp-side-playlist .player-left {
     align-items: flex-start;
-    padding-left: 15%;
-    padding-right: 24px;
+    justify-content: center;
+    padding-left: 10%;
+    padding-right: 12px;
   }
 
-  html.mp-has-lyrics.mp-side-lyrics .player-hero {
+  html.mp-side-lyrics .player-hero,
+  html.mp-side-playlist .player-hero {
     align-items: flex-start;
     margin-inline: 0;
     width: 100%;
+    max-width: min(100%, 300px);
   }
 
-  html.mp-has-lyrics.mp-side-lyrics .track-info {
+  html.mp-side-lyrics .player-hero .track-info,
+  html.mp-side-playlist .player-hero .track-info {
     align-items: flex-start;
     text-align: left;
   }
 
-  html.mp-has-lyrics.mp-side-lyrics .track-title-row {
+  html.mp-side-lyrics .track-title-row,
+  html.mp-side-playlist .track-title-row {
     justify-content: flex-start;
+  }
+
+  /* 右侧面板盒模型一致 */
+  html.mp-side-lyrics .player-right,
+  html.mp-side-playlist .player-right {
+    min-height: 0;
   }
 }
 
-/* player-right 未打开时桌面也隐藏（.side-open 由 JS 挂） */
-@media (min-width: 769px) {
-  .player-right:not(.side-open) {
-    display: none;
-  }
-  .player-right.side-open {
-    display: flex;
+@media (prefers-reduced-motion: reduce) {
+  .content-area,
+  .player-hero,
+  .player-right,
+  .panel,
+  .panel.active {
+    transition: none !important;
   }
 }
 

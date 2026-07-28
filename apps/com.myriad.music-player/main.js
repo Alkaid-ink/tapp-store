@@ -1,4 +1,4 @@
-// Music Player Tapp v1.1.4
+// Music Player Tapp v1.1.5
 
 var MP_DEBUG = false;
 function mpDebug() {
