@@ -439,11 +439,14 @@ function isStatusCurrent(status) {
 function bindTrackFromStatus(status) {
   var track = status && status.currentTrack;
   var tid = track ? String(track.id) : null;
-  var gen = typeof status.generation === 'number' ? status.generation : 0;
+  var gen = (status && typeof status.generation === 'number') ? status.generation : 0;
+  // 必须先取旧值再赋值：原来先写 boundTrackId 再比较，else if 恒为 false，
+  // 宿主不下发 generation 时世代永远停在 0，isStatusCurrent 的世代校验形同虚设
+  var prevId = pageState.boundTrackId;
   pageState.boundTrackId = tid;
   if (gen > 0) {
     pageState.boundGeneration = gen;
-  } else if (tid && String(pageState.boundTrackId) !== tid) {
+  } else if (tid && String(prevId) !== tid) {
     pageState.boundGeneration = (pageState.boundGeneration || 0) + 1;
   }
 }
@@ -645,6 +648,8 @@ var lyricFx = {
   songId: null,       // 当前 lyricFx 对应的歌词歌曲 id
   remeasureRaf: null, // 双 rAF 延迟重测句柄
   remeasureTimer: null, // 侧栏展开过渡结束后的兜底重测
+  ro: null,           // 容器 ResizeObserver（cleanup 时断开）
+  roTimer: null,      // RO 防抖句柄
 };
 var lyricResumeTimer = null;
 
@@ -652,6 +657,14 @@ var LYRIC_FOCAL = 0.45;          // 焦点位：容器高度上部 45%（略高�
 var LYRIC_SCALE_INACTIVE = 0.62; // 非激活行缩放（40px × 0.62 ≈ 25px 视觉，激活 40px，对比 1.6×）
 var LYRIC_WAVE_DELAY = 42;       // 波浪每行错峰 ms
 var LYRIC_WAVE_SPAN = 7;         // 波浪最多错峰的行数
+// 顺序推进（含跳过一两句短行）走波浪；超过这个跨度算 seek，瞬移到位
+var LYRIC_SEEK_JUMP_LINES = 3;
+
+// 焦点跨度是否属于「seek 级跳转」：首次定位、倒退、大跨度都算
+function isLyricSeekJump(prevIdx, nextIdx) {
+  if (typeof prevIdx !== 'number' || prevIdx < 0 || nextIdx < 0) return true;
+  return Math.abs(nextIdx - prevIdx) > LYRIC_SEEK_JUMP_LINES;
+}
 
 function stopLyricWave() {
   if (lyricFx.raf) {
@@ -920,18 +933,19 @@ function bindLyricContainerResizeObserver() {
   if (!container || typeof ResizeObserver === 'undefined') return;
   if (container._lyricRoBound) return;
   container._lyricRoBound = true;
-  var roTimer = null;
   var ro = new ResizeObserver(function() {
     if (lyricFx.items.length === 0) return;
     // 宽度从窄变宽是关键路径：立刻排队重测（仍 debounce 合并过渡帧）
-    if (roTimer) clearTimeout(roTimer);
-    roTimer = setTimeout(function() {
-      roTimer = null;
+    if (lyricFx.roTimer) clearTimeout(lyricFx.roTimer);
+    lyricFx.roTimer = setTimeout(function() {
+      lyricFx.roTimer = null;
       if (lyricFx.items.length === 0) return;
       relayoutLyricsIfNeeded(true, true);
     }, 50);
   });
   ro.observe(container);
+  // 存句柄供 cleanup 断开（原来是闭包局部变量，销毁后仍在观察）
+  lyricFx.ro = ro;
 }
 
 // ========================================
@@ -1107,10 +1121,23 @@ function lyricWaveTickBody(now) {
   var KS = 240;
   var CS = 2 * Math.sqrt(KS);         // 缩放弹簧：临界阻尼
 
+  // 视口外剔除：目标位与当前位都在可视区外一屏以上的行直接吸附——
+  // 弹簧过程本来就看不见，省掉长歌单每帧几百次 transform 写入
+  // （这正是当初把切行改成瞬移的性能顾虑，剔除后波浪可以放心开回来）
+  var vh = lyricFx.viewH || 0;
+  var cullAbove = vh >= LYRIC_MIN_VIEW_H ? -vh : -Infinity;
+  var cullBelow = vh >= LYRIC_MIN_VIEW_H ? vh * 2 : Infinity;
+
   for (var k = 0; k < lyricFx.items.length; k++) {
     var it = lyricFx.items[k];
     var ty = it.y - lyricFx.targetS;
-    if (now >= it.delayUntil) {
+    if ((ty < cullAbove && it.pos < cullAbove) || (ty > cullBelow && it.pos > cullBelow)) {
+      // 远处行：吸附即可（写入去重会让稳态帧零 DOM 操作），不参与 moving 判定
+      it.pos = ty;
+      it.v = 0;
+      it.scale = it.targetScale;
+      it.scaleV = 0;
+    } else if (now >= it.delayUntil) {
       var a = K * (ty - it.pos) - Cc * it.v;
       it.v += a * dt;
       it.pos += it.v * dt;
@@ -1157,17 +1184,34 @@ function retargetLyricItemsNow() {
 
 // 手动滚动后恢复自动跟焦的等待（原 3s 过长，回焦体感慢）
 var LYRIC_RESUME_MS = 1100;
+// 回焦距离在这么多屏以内走波浪；翻得更远就瞬移——长途弹簧只会糊成一片
+var LYRIC_RESUME_WAVE_SCREENS = 1.5;
 
-// 用户手动滚动：暂停自动跟随，稍后立刻 snap 回当前行（不用慢波浪）
+/** 某行处于焦点位时应有的虚拟滚动位；布局没就绪返回 null */
+function desiredLyricS(lineIdx) {
+  var k = findLyricItemK(lineIdx);
+  if (k < 0) return null;
+  if (!ensureLyricLayoutReady()) return null;
+  var it = lyricFx.items[k];
+  return it.y - lyricFx.viewH * LYRIC_FOCAL + it.h / 2;
+}
+
+// 用户手动滚动：暂停自动跟随，稍后回焦当前行（近距离走波浪，远距离瞬移）
 function userLyricScrollBegin() {
   pageState.autoScrollEnabled = false;
   if (lyricResumeTimer) clearTimeout(lyricResumeTimer);
   lyricResumeTimer = setTimeout(function() {
     lyricResumeTimer = null;
     pageState.autoScrollEnabled = true;
-    lyricFx.focusK = -1; // 强制重新聚焦
+    lyricFx.focusK = -1;   // 强制重新聚焦
+    // 掐掉残余甩动惯性：否则它会一路把 targetS 拽偏，回焦追不回来
+    // （原先走 instant 时由 stopLyricWave 顺手清零，改波浪后必须显式清）
+    lyricFx.momentumV = 0;
     if (pageState.currentLyricIndex >= 0) {
-      focusLyricLine(pageState.currentLyricIndex, true);
+      var want = desiredLyricS(pageState.currentLyricIndex);
+      var far = want === null ||
+        Math.abs(want - lyricFx.targetS) > lyricFx.viewH * LYRIC_RESUME_WAVE_SCREENS;
+      focusLyricLine(pageState.currentLyricIndex, far);
     }
   }, LYRIC_RESUME_MS);
 }
@@ -1976,7 +2020,8 @@ function handleLyricClick(e) {
   if (target) {
     var time = parseFloat(target.getAttribute('data-time'));
     if (!isNaN(time) && time >= 0) {
-      // 跳转到对应时间
+      // 跳转到对应时间（先记跳转意图：宿主落位前的陈旧 progress 不得打断波浪）
+      noteSeekIntent(time);
       Tapp.media.seek(time);
       // Apple Music 行为：点按的行成为当前行后立即弹簧吸附到焦点位
       // （清掉滚轮打断的暂停状态，让 seek 后的渲染立刻跟随）
@@ -2139,7 +2184,8 @@ function fillVerbatimLine(el, index) {
       var span = document.createElement('span');
       span.className = cls;
       span.setAttribute('data-w', k);
-      span.textContent = txt;
+      // 脏歌词的词可能没有 text；直接赋 undefined 会把 "undefined" 写进歌词
+      span.textContent = txt == null ? '' : txt;
       target.appendChild(span);
       spanCount++;
     }
@@ -2198,6 +2244,34 @@ function setLyricClock(position, playing) {
   lyricClock.playing = !!playing;
   lyricClock.drift = 0;
 }
+// 跳转意图：宿主 seek 落位有延迟，期间 progress 还在推**旧位置**。
+// 若直接拿这些陈旧 position 推歌词，会先把刚起步的波浪打回上一句，
+// 再在落位那帧硬跳到目标句——观感上就是「点歌词完全没有动画」。
+// 记下意图位置，在宿主追上（或超时）之前用它推进歌词。
+var SEEK_INTENT_TIMEOUT_MS = 1500; // 兜底：宿主始终没追上就放弃意图
+var SEEK_INTENT_TOLERANCE = 1.2;   // 秒：宿主位置进到这个范围内即视为已落位
+var seekIntent = null;             // { time, at }
+
+function noteSeekIntent(time) {
+  if (typeof time !== 'number' || !isFinite(time)) return;
+  seekIntent = { time: time, at: nowMs() };
+}
+
+/**
+ * UI 该用的位置：跳转未落位时用意图值，其余原样返回。
+ * 歌词与进度条共用——否则拖动进度条时宿主回推的旧 position 会把滑块
+ * 从手指下拽回去（回弹），时间显示也会来回跳。
+ */
+function resolveSeekPosition(position) {
+  if (!seekIntent) return position;
+  if (nowMs() - seekIntent.at > SEEK_INTENT_TIMEOUT_MS ||
+      Math.abs(position - seekIntent.time) <= SEEK_INTENT_TOLERANCE) {
+    seekIntent = null;
+    return position;
+  }
+  return seekIntent.time;
+}
+
 function getLyricPosition() {
   if (!lyricClock.playing) return lyricClock.base;
   // 每帧吸收 6% 残余偏差（60fps 下约 0.25s 半衰期），肉眼不可见
@@ -2693,7 +2767,10 @@ function loadLyricsForTrack(track) {
     syncLyricTransUI();
     pageState.lyricsSongId = trackId;
     // 确认：有占位则按行数判；无则 empty
-    renderLyrics(pageState.lyrics || [], pageState.currentLyricIndex || -1, { confirmed: true });
+    // 不能用 `|| -1`：索引 0（第一句）是合法值会被吞掉，失败回退时首句高亮丢失
+    var failIdx = typeof pageState.currentLyricIndex === 'number'
+      ? pageState.currentLyricIndex : -1;
+    renderLyrics(pageState.lyrics || [], failIdx, { confirmed: true });
   });
 }
 
@@ -3166,8 +3243,17 @@ function revealPlaylist() {
 var playlistCache = {
   lastQuery: null,
   lastResult: null,
-  lastPlaylistLen: 0
+  lastPlaylistLen: 0,
+  lastPlaylistSig: null // 首尾曲 id：换成等长的另一张歌单时也能失效
 };
+
+// 列表身份签名：长度相同但内容不同（导入等长外部歌单）时也要重新过滤
+function playlistSignature(list) {
+  if (!list || list.length === 0) return '';
+  var first = list[0] && list[0].id;
+  var last = list[list.length - 1] && list[list.length - 1].id;
+  return String(first) + '|' + String(last);
+}
 
 // 渲染播放列表（使用虚拟滚动）
 function renderPlaylist(playlist, currentTrack, searchQuery) {
@@ -3178,7 +3264,10 @@ function renderPlaylist(playlist, currentTrack, searchQuery) {
   var query = searchQuery ? searchQuery.toLowerCase() : '';
   
   // 使用缓存避免重复过滤
-  if (query === playlistCache.lastQuery && playlist.length === playlistCache.lastPlaylistLen) {
+  var sig = playlistSignature(playlist);
+  if (query === playlistCache.lastQuery &&
+      playlist.length === playlistCache.lastPlaylistLen &&
+      sig === playlistCache.lastPlaylistSig) {
     filteredList = playlistCache.lastResult;
   } else {
     if (query) {
@@ -3197,6 +3286,7 @@ function renderPlaylist(playlist, currentTrack, searchQuery) {
     playlistCache.lastQuery = query;
     playlistCache.lastResult = filteredList;
     playlistCache.lastPlaylistLen = playlist.length;
+    playlistCache.lastPlaylistSig = sig;
   }
 
   if (filteredList.length === 0) {
@@ -3662,8 +3752,11 @@ function updateProgressOnly(status) {
   
   var track = status.currentTrack;
   var duration = track ? (track.duration || 0) : 0;
-  var position = status.position || (status.progress ? status.progress.current : 0) || 0;
-  
+  // 跳转未落位时用意图位置，避免宿主旧 position 把滑块从手指下拽回去
+  var position = resolveSeekPosition(
+    status.position || (status.progress ? status.progress.current : 0) || 0
+  );
+
   if (progressElements.bar) {
     progressElements.bar.value = position;
     try {
@@ -3826,8 +3919,10 @@ function updatePlayerUI(status) {
   // 进度条 - 使用缓存的 DOM 引用
   initProgressElements();
   var duration = track ? (track.duration || 0) : 0;
-  var position = status.position || (status.progress ? status.progress.current : 0) || 0;
-  
+  var position = resolveSeekPosition(
+    status.position || (status.progress ? status.progress.current : 0) || 0
+  );
+
   if (progressElements.bar) {
     progressElements.bar.max = duration || 100;
     progressElements.bar.value = position;
@@ -4179,7 +4274,9 @@ async function initPage() {
     }
 
     // 位置 + 插值时钟（供逐字高亮平滑推进）
-    var position = state.position || (state.progress ? state.progress.current : 0) || 0;
+    var position = resolveSeekPosition(
+      state.position || (state.progress ? state.progress.current : 0) || 0
+    );
     setLyricClock(position, state.isPlaying);
 
     // EQ 循环：内部幂等，极廉价
@@ -4223,11 +4320,16 @@ async function initPage() {
       // （不 render，避免无意义 DOM 抖动）
     } else if (lyricsBelongToCurrent && pageState.verbatimLyrics.length > 0) {
       // 逐字模式：行渲染沿用 pageState.lyrics，仅在行切换时重渲染，字级填充走 rAF
+      var vPrev = pageState.currentLyricIndex;
       var vIdx = updateLyricIndex(position, pageState.lyrics);
-      if (vIdx !== pageState.currentLyricIndex) {
+      if (vIdx !== vPrev) {
         pageState.currentLyricIndex = vIdx;
-        // 切行：增量类名 + instant 焦点（避免波浪抢主线程导致色/封面滞后）
-        renderLyrics(pageState.lyrics, vIdx, { confirmed: true, focusInstant: true });
+        // 切行：增量类名 + 波浪跟焦。顺序推进必须走弹簧（这就是波浪引擎的主战场），
+        // 只有 seek 级大跨度才瞬移——长距离弹簧既没观感又扫全表
+        renderLyrics(pageState.lyrics, vIdx, {
+          confirmed: true,
+          focusInstant: isLyricSeekJump(vPrev, vIdx)
+        });
       }
       updateWordHighlight(getLyricPosition());
       ensureLyricWordLoop();
@@ -4251,10 +4353,11 @@ async function initPage() {
           var hostConfirmed = pageState.lyricsLoadState === 'ready' && lyricsBelongToCurrent;
           renderLyrics(lyrics, currentLyricIdx, { confirmed: hostConfirmed });
         } else if (currentLyricIdx !== pageState.currentLyricIndex) {
+          var linePrev = pageState.currentLyricIndex;
           pageState.currentLyricIndex = currentLyricIdx;
           renderLyrics(lyrics, currentLyricIdx, {
             confirmed: pageState.lyricsLoadState === 'ready',
-            focusInstant: true
+            focusInstant: isLyricSeekJump(linePrev, currentLyricIdx)
           });
         }
       }
@@ -4346,11 +4449,13 @@ function bindControls() {
   var mobilePanelTitle = document.getElementById('mobile-panel-title');
   var panels = document.querySelectorAll('.panel');
   
-  // 面板标题映射
-  var panelTitles = {
-    'lyrics': '歌词',
-    'playlist': '播放列表'
-  };
+  // 面板标题：必须在点击时取，不能在绑定时固化——
+  // bindControls 只跑一次，写死中文会让 en-US / ja-JP 一直显示中文标题
+  function panelTitleFor(tab) {
+    if (tab === 'lyrics') return t('lyrics');
+    if (tab === 'playlist') return t('playlist');
+    return tab;
+  }
   
   // 移动端面板两段式关闭：先播下滑动画，结束后再 display:none。
   // 关闭中途重新打开时取消关闭，避免面板闪没。
@@ -4457,7 +4562,7 @@ function bindControls() {
         cancelPanelClose();
         playerRight.classList.add('mobile-visible');
         if (mobilePanelTitle) {
-          mobilePanelTitle.textContent = panelTitles[tab] || tab;
+          mobilePanelTitle.textContent = panelTitleFor(tab);
         }
       }
     }
@@ -4654,6 +4759,7 @@ function bindControls() {
     } else if (key === '[' || key === 'PageDown') {
       e.preventDefault();
       var pos = (pageState.status && (pageState.status.position || 0)) || 0;
+      noteSeekIntent(Math.max(0, pos - 5));
       Tapp.media.seek(Math.max(0, pos - 5));
     } else if (key === ']' || key === 'PageUp') {
       e.preventDefault();
@@ -4664,6 +4770,7 @@ function bindControls() {
       }
       var nextPos = pos2 + 5;
       if (dur > 0 && nextPos > dur) nextPos = dur;
+      noteSeekIntent(nextPos);
       Tapp.media.seek(nextPos);
     }
   });
@@ -4706,6 +4813,7 @@ function bindControls() {
     
     var flushSeek = function() {
       if (pendingSeekValue !== null) {
+        noteSeekIntent(pendingSeekValue);
         Tapp.media.seek(pendingSeekValue);
         pendingSeekValue = null;
       }
@@ -4723,6 +4831,7 @@ function bindControls() {
       var now = Date.now();
       if (now - lastSeekTime >= 100) {
         lastSeekTime = now;
+        noteSeekIntent(value);
         Tapp.media.seek(value);
         pendingSeekValue = null;
       } else {
@@ -4741,6 +4850,7 @@ function bindControls() {
         clearTimeout(seekTimeout);
         seekTimeout = null;
       }
+      noteSeekIntent(value);
       Tapp.media.seek(value);
       pendingSeekValue = null;
     });
@@ -5787,6 +5897,36 @@ function cleanup() {
     clearTimeout(lyricResumeTimer);
     lyricResumeTimer = null;
   }
+  // 歌词布局的延迟重测 / 容器观察者（原先只活在闭包里，销毁后仍会触发）
+  if (lyricFx.remeasureRaf) {
+    cancelAnimationFrame(lyricFx.remeasureRaf);
+    lyricFx.remeasureRaf = null;
+  }
+  if (lyricFx.remeasureTimer) {
+    clearTimeout(lyricFx.remeasureTimer);
+    lyricFx.remeasureTimer = null;
+  }
+  if (lyricFx.roTimer) {
+    clearTimeout(lyricFx.roTimer);
+    lyricFx.roTimer = null;
+  }
+  if (lyricFx.ro) {
+    try { lyricFx.ro.disconnect(); } catch (e) { /* ignore */ }
+    lyricFx.ro = null;
+  }
+  var lc = $('lyrics-container');
+  if (lc) lc._lyricRoBound = false; // 允许重新挂载时再绑
+  // 跑马灯重测 / 播放列表手势判定的挂起定时器
+  if (syncNoLyricsLayout._marqueeTimer) {
+    clearTimeout(syncNoLyricsLayout._marqueeTimer);
+    syncNoLyricsLayout._marqueeTimer = null;
+  }
+  if (virtualList.userScrollTimer) {
+    clearTimeout(virtualList.userScrollTimer);
+    virtualList.userScrollTimer = null;
+    virtualList.userScrolling = false;
+  }
+  seekIntent = null;
   // 清理背景漂移意图
   stopBackgroundAnimation();
   document.documentElement.classList.remove('fx-compositing');
