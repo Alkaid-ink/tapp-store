@@ -661,14 +661,13 @@ function stopLyricWave() {
   lyricFx.momentumV = 0;
 }
 
-// 作废测量缓存（切歌/重建/翻译开关），防止沿用上一首歌的 y/h/targetS
+// 作废测量缓存（切歌/重建/翻译开关）
 function resetLyricFxLayoutCache(opts) {
   opts = opts || {};
   lyricFx.measured = false;
   lyricFx.measuredWithTrans = false;
   lyricFx.focusK = -1;
   lyricFx.momentumV = 0;
-  lyricFx._retryCount = 0;
   if (opts.clearScroll !== false) {
     lyricFx.targetS = 0;
     lyricFx.minS = 0;
@@ -677,9 +676,7 @@ function resetLyricFxLayoutCache(opts) {
     lyricFx.viewH = 0;
     lyricFx.viewW = 0;
   }
-  if (opts.bumpGen !== false) {
-    lyricFx.layoutGen++;
-  }
+  if (opts.bumpGen !== false) lyricFx.layoutGen++;
   if (lyricFx.remeasureRaf) {
     cancelAnimationFrame(lyricFx.remeasureRaf);
     lyricFx.remeasureRaf = null;
@@ -688,73 +685,36 @@ function resetLyricFxLayoutCache(opts) {
     clearTimeout(lyricFx.remeasureTimer);
     lyricFx.remeasureTimer = null;
   }
-  if (lyricFx._settleTimer) {
-    clearTimeout(lyricFx._settleTimer);
-    lyricFx._settleTimer = null;
-  }
-  if (lyricFx._midSettleTimer) {
-    clearTimeout(lyricFx._midSettleTimer);
-    lyricFx._midSettleTimer = null;
-  }
-  if (lyricFx._retryTimer) {
-    clearTimeout(lyricFx._retryTimer);
-    lyricFx._retryTimer = null;
-  }
 }
 
-// 测量行高并建立静态布局（行高与激活态无关——scale 不改布局；
-// 但翻译副行 display 会改变行高，故 must 与 show-trans 状态一致后测）
-// 关键：侧栏 0fr / 展开过渡中宽度为 0 时，pre-wrap 行会按逐字换行 → offsetHeight 爆炸，
-// 必须同时要求 clientWidth > 0，否则拒绝测量并等面板可见后再测。
-// 可见性门槛：侧栏 0fr / display:none 时 w/h≈0。
-// 过严（如 48）会在 Sheet 半开时拒测；过松会吃到 0 宽炸高行。
-var LYRIC_MEASURE_MIN_W = 24;
-var LYRIC_MEASURE_MIN_H = 24;
-
+/**
+ * 测行高并建立 y 布局。
+ * 规则尽量少：
+ *  - w/h 必须 > 0（侧栏折叠 / display:none 时拒测）
+ *  - offsetHeight 为 0 的行跳过累计失败
+ *  - scale 是 transform，不改 offsetHeight，无需清 transform
+ */
 function measureLyricLayout() {
   var container = $('lyrics-container');
   if (!container || !lyricFx.inner || lyricFx.items.length === 0) return false;
-  // getBoundingClientRect 比 clientHeight 更稳（部分 WebView flex 链下 client 滞后）
-  var crect = container.getBoundingClientRect();
-  var h = Math.round(crect.height) || container.clientHeight || 0;
-  var w = Math.round(crect.width) || container.clientWidth || 0;
-  if (h < LYRIC_MEASURE_MIN_H || w < LYRIC_MEASURE_MIN_W) return false;
+  var h = container.clientHeight;
+  var w = container.clientWidth;
+  if (h <= 0 || w <= 0) return false;
 
-  // 测高前清掉 transform：已 snap 的 scale(0.62) 在部分引擎会污染
-  // offsetHeight / 行盒，导致 y 累计错乱 → 自动跟焦与手动滚动全歪。
-  var k;
-  for (k = 0; k < lyricFx.items.length; k++) {
-    lyricFx.items[k].el.style.transform = 'none';
-  }
-  // 强制样式刷盘：show-trans display + 清 transform 后的真实行高
+  // show-trans 显隐会影响行高
   void container.offsetHeight;
-
   var showingTrans = container.classList.contains('show-trans');
   var y = 0;
   var anyH = false;
-  var maxH = 0;
-  for (k = 0; k < lyricFx.items.length; k++) {
+  for (var k = 0; k < lyricFx.items.length; k++) {
     var it = lyricFx.items[k];
-    var eh = it.el.offsetHeight || 0;
-    if (eh === 0) {
-      // 兜底：仍为 0 时用 rect（无 transform 后与 layout 一致）
-      eh = Math.round(it.el.getBoundingClientRect().height) || 0;
-    }
-    it.h = eh;
-    if (eh > 0) anyH = true;
-    if (eh > maxH) maxH = eh;
+    it.h = it.el.offsetHeight || 0;
+    if (it.h > 0) anyH = true;
     it.y = y;
-    y += eh;
+    y += it.h;
   }
   if (!anyH) {
     lyricFx.measured = false;
-    restoreLyricItemTransforms(); // 测失败也要还原，否则全行叠在 top:0
-    return false;
-  }
-  // 仅在极窄宽时拒绝「单行高度离谱」（0 宽 pre-wrap 炸高）
-  if (w < 40 && maxH > Math.max(h * 3, 400)) {
-    lyricFx.measured = false;
-    restoreLyricItemTransforms();
     return false;
   }
 
@@ -765,46 +725,25 @@ function measureLyricLayout() {
   var last = lyricFx.items[lyricFx.items.length - 1];
   var minS = first.y - h * LYRIC_FOCAL + first.h / 2;
   var maxS = last.y - h * LYRIC_FOCAL + last.h / 2;
-  // 内容比视口矮时 minS 可能 > maxS → clamp 会锁死滚动
-  if (minS > maxS) {
+  if (minS > maxS) { // 内容比视口矮
     var mid = (minS + maxS) / 2;
-    minS = mid;
-    maxS = mid;
+    minS = maxS = mid;
   }
   lyricFx.minS = minS;
   lyricFx.maxS = maxS;
   lyricFx.measured = true;
   lyricFx.measuredWithTrans = showingTrans;
-  // 测高完成：先按旧 targetS 归位，调用方 focus 会再精修
-  restoreLyricItemTransforms();
   return true;
 }
 
-/** 把 items 的 pos/scale 写回 DOM transform（measure 中会短暂清空） */
-function restoreLyricItemTransforms() {
-  for (var k = 0; k < lyricFx.items.length; k++) {
-    var it = lyricFx.items[k];
-    if (!it || !it.el) continue;
-    // 若尚无 y 布局，pos 可能全 0——仍写 scale，避免裸叠
-    var pos = typeof it.pos === 'number' ? it.pos : 0;
-    var sc = typeof it.scale === 'number' ? it.scale : LYRIC_SCALE_INACTIVE;
-    it._wy = Math.round(pos * 100);
-    it._ws = Math.round(sc * 10000);
-    it.el.style.transform =
-      'translate3d(0,' + pos.toFixed(2) + 'px,0) scale(' + sc.toFixed(4) + ')';
-  }
-}
-
-// 测量是否与当前 show-trans / 容器宽高一致；不一致则重测。
-// 连续切歌时若 show-trans 在「无翻译清空 → 新歌有翻译」之间翻转，旧 y/h 会整体错位。
-// 宽度变化（侧栏 0→展开、resize）同样必须重测，否则沿用 0 宽时的炸高行距。
+/** 尺寸 / show-trans 变了就重测；否则直接 true */
 function ensureLyricLayoutReady() {
   if (lyricFx.items.length === 0 || !lyricFx.inner) return false;
   var container = $('lyrics-container');
   if (!container) return false;
   var h = container.clientHeight;
   var w = container.clientWidth;
-  if (h < LYRIC_MEASURE_MIN_H || w < LYRIC_MEASURE_MIN_W) return false;
+  if (h <= 0 || w <= 0) return false;
   var showingTrans = container.classList.contains('show-trans');
   if (lyricFx.measured &&
       lyricFx.measuredWithTrans === showingTrans &&
@@ -816,26 +755,13 @@ function ensureLyricLayoutReady() {
   return measureLyricLayout();
 }
 
-// 应用一次重测结果并回焦（供 rAF / timeout 共用）
+/** 测完后回焦（或保持手动滚动位置） */
 function applyLyricLayoutRemeasure(gen, songId) {
   if (gen !== lyricFx.layoutGen) return false;
   if (songId != null && String(pageState.lyricsSongId) !== String(songId)) return false;
   if (lyricFx.items.length === 0) return false;
   lyricFx.measured = false;
-  if (!measureLyricLayout()) {
-    // 侧栏/Sheet 仍在过渡：短延迟再试一次（限次，避免死循环）
-    if (!lyricFx._retryCount) lyricFx._retryCount = 0;
-    if (lyricFx._retryCount < 6) {
-      lyricFx._retryCount++;
-      if (lyricFx._retryTimer) clearTimeout(lyricFx._retryTimer);
-      lyricFx._retryTimer = setTimeout(function() {
-        lyricFx._retryTimer = null;
-        applyLyricLayoutRemeasure(gen, songId);
-      }, 80);
-    }
-    return false;
-  }
-  lyricFx._retryCount = 0;
+  if (!measureLyricLayout()) return false;
   lyricFx.focusK = -1;
   if (pageState.autoScrollEnabled) {
     var idx = pageState.currentLyricIndex >= 0 ? pageState.currentLyricIndex : 0;
@@ -847,9 +773,10 @@ function applyLyricLayoutRemeasure(gen, songId) {
   return true;
 }
 
-// 布局稳定后再测一次（字体/换行/show-trans 首帧偶发未就绪；侧栏展开过渡中宽度在变）。
-// 用 layoutGen + lyricsSongId 丢弃过期回调，避免快切污染当前布局。
-// afterMs：侧栏 grid 过渡约 0.42s，打开歌词 Tab 时再补一次终态重测。
+/**
+ * 布局未稳时延迟重测。
+ * afterMs：侧栏 grid / sheet 过渡结束后再测一次（可选）。
+ */
 function scheduleLyricLayoutRemeasure(afterMs) {
   if (lyricFx.items.length === 0) return;
   var gen = lyricFx.layoutGen;
@@ -877,24 +804,8 @@ function scheduleLyricLayoutRemeasure(afterMs) {
 }
 
 function clampLyricS(s) {
-  var lo = lyricFx.minS;
-  var hi = lyricFx.maxS;
-  if (lo > hi) {
-    var m = (lo + hi) / 2;
-    return m;
-  }
-  return Math.max(lo, Math.min(hi, s));
-}
-
-/** 规范化 wheel 增量（像素）：兼容 deltaMode 行/页 */
-function normalizeWheelDeltaY(e, viewH) {
-  var dy = e.deltaY;
-  if (e.deltaMode === 1) dy *= 16; // DOM_DELTA_LINE
-  else if (e.deltaMode === 2) dy *= (viewH || 400); // DOM_DELTA_PAGE
-  // 部分触控板一次给很大值，限幅避免跳页
-  if (dy > 240) dy = 240;
-  if (dy < -240) dy = -240;
-  return dy;
+  if (lyricFx.minS > lyricFx.maxS) return (lyricFx.minS + lyricFx.maxS) / 2;
+  return Math.max(lyricFx.minS, Math.min(lyricFx.maxS, s));
 }
 
 function findLyricItemK(lineIdx) {
@@ -904,7 +815,6 @@ function findLyricItemK(lineIdx) {
   return -1;
 }
 
-// 全部立即就位（初次渲染 / 无动画模式）
 function snapLyricItems() {
   for (var k = 0; k < lyricFx.items.length; k++) {
     var it = lyricFx.items[k];
@@ -914,20 +824,16 @@ function snapLyricItems() {
     it.scaleV = 0;
     it._wy = Math.round(it.pos * 100);
     it._ws = Math.round(it.scale * 10000);
-    it.el.style.transform = 'translate3d(0,' + it.pos.toFixed(2) + 'px,0) scale(' + it.scale.toFixed(4) + ')';
+    it.el.style.transform =
+      'translate3d(0,' + it.pos.toFixed(2) + 'px,0) scale(' + it.scale.toFixed(4) + ')';
   }
 }
 
-// 聚焦某个 item：设定虚拟滚动目标 + 波浪错峰 + scale 目标（以 active 类为准）
-// 注意：即使目标位置未变（如预聚焦后句子才激活），scale 目标也必须刷新——
-// 否则「先聚焦、后激活」的句子会卡在非激活缩放（歌曲第一句/间奏后第一句）。
 function focusLyricItemK(k, instant) {
   if (k < 0 || k >= lyricFx.items.length) return;
-  // 翻译显隐/容器高度变化时必须用最新行高，否则 focus 位置偏高/偏低
   if (!ensureLyricLayoutReady()) return;
   var it = lyricFx.items[k];
   var desiredS = it.y - lyricFx.viewH * LYRIC_FOCAL + it.h / 2;
-  // 已聚焦且位置未变：只跳过波浪错峰重置，scale 目标仍要刷新
   var samePos = !instant && lyricFx.focusK === k && Math.abs(desiredS - lyricFx.targetS) < 1;
 
   var now = performance.now();
@@ -936,7 +842,6 @@ function focusLyricItemK(k, instant) {
     var o = lyricFx.items[j];
     if (!samePos) {
       var d = j - k;
-      // 焦点行及以上立即启动；下方按行距错峰 → 波浪向下铺开
       o.delayUntil = d > 0 ? now + Math.min(d, LYRIC_WAVE_SPAN) * LYRIC_WAVE_DELAY : now;
     }
     var ts = (o.type === 'line' && o.el.classList.contains('active'))
@@ -963,11 +868,7 @@ function focusLyricLine(lineIdx, instant) {
   if (k >= 0) focusLyricItemK(k, instant);
 }
 
-// 布局自愈：容器宽高 / show-trans 与上次测量不一致（入场时机早于布局稳定/iframe
-// 尺寸变化/横竖屏/侧栏 0fr→展开/切歌后翻译类翻转）就重测并回焦。
-// measured 一旦锁定不会自动失效，没有这层守卫，入场早测的错误布局会一直持续。
-// allowUnmeasured=true 时对「从未测量成功」（如面板此前隐藏）也重测——tab 切换路径用。
-// force=true：打开歌词 Tab 时无条件重测（侧栏刚展开，宽高可能仍在过渡）。
+/** 容器尺寸或 show-trans 变化时重测并回焦 */
 function relayoutLyricsIfNeeded(allowUnmeasured, force) {
   if (lyricFx.items.length === 0) return;
   if (!lyricFx.measured && !allowUnmeasured && !force) return;
@@ -975,11 +876,9 @@ function relayoutLyricsIfNeeded(allowUnmeasured, force) {
   if (!c) return;
   var h = c.clientHeight;
   var w = c.clientWidth;
-  if (h < LYRIC_MEASURE_MIN_H || w < LYRIC_MEASURE_MIN_W) return;
+  if (h <= 0 || w <= 0) return;
   var showingTrans = c.classList.contains('show-trans');
-  var need =
-    force ||
-    !lyricFx.measured ||
+  var need = force || !lyricFx.measured ||
     Math.abs(h - lyricFx.viewH) > 4 ||
     Math.abs(w - lyricFx.viewW) > 4 ||
     lyricFx.measuredWithTrans !== showingTrans;
@@ -992,73 +891,24 @@ function relayoutLyricsIfNeeded(allowUnmeasured, force) {
   }
 }
 
-// 侧栏/sheet 布局过渡时长（与 page.css grid / slideUp 对齐）
 function getSideLayoutSettleMs() {
   try {
     if (typeof checkIsMobile === 'function' && checkIsMobile()) return 400;
   } catch (e) { /* ignore */ }
-  return 500;
+  return 480;
 }
 
 /**
- * 打开歌词面板 / 侧栏展开后的布局测量 + 焦点恢复。
- * soft=true：先立刻 snap 当前行（体感快），尺寸精修放双 rAF / settle，避免过渡狂重排。
- * soft=false：立刻 force 测 + settle 再测。
+ * 打开歌词面板后的测量入口。
+ * 立刻测一次（能测就定位），再在过渡结束后测一次。
+ * soft 参数保留兼容，行为相同——不再搞多 timer 叠重试。
  */
-function forceLyricsPanelRelayout(soft) {
+function forceLyricsPanelRelayout(/* soft */) {
   if (lyricFx.items.length === 0) return;
-  var settle = getSideLayoutSettleMs();
-  var gen = lyricFx.layoutGen;
-  var songId = pageState.lyricsSongId;
-
-  function tryNow() {
-    relayoutLyricsIfNeeded(true, true);
-    if (!snapFocusCurrentLyricIfPossible()) {
-      // 测到了但 focus 失败：至少把行按当前 targetS snap 出去
-      if (lyricFx.measured) snapLyricItems();
-    }
-  }
-
-  if (soft === false) {
-    tryNow();
-  } else {
-    var c = $('lyrics-container');
-    var needNow = !lyricFx.measured;
-    if (c && lyricFx.measured) {
-      var w = c.clientWidth;
-      var h = c.clientHeight;
-      if (w > 0 && h > 0 &&
-          (Math.abs(w - lyricFx.viewW) > 24 || Math.abs(h - lyricFx.viewH) > 24)) {
-        needNow = true;
-      }
-    }
-    if (needNow && c &&
-        c.clientWidth >= LYRIC_MEASURE_MIN_W &&
-        c.clientHeight >= LYRIC_MEASURE_MIN_H) {
-      tryNow();
-    } else if (!snapFocusCurrentLyricIfPossible()) {
-      requestAnimationFrame(function() {
-        if (gen !== lyricFx.layoutGen) return;
-        snapFocusCurrentLyricIfPossible();
-      });
-    }
-  }
-
-  // 双 rAF + 中途 + 过渡终态（各自独立 timer，互不覆盖）
-  scheduleLyricLayoutRemeasure(0);
-  if (lyricFx._midSettleTimer) clearTimeout(lyricFx._midSettleTimer);
-  lyricFx._midSettleTimer = setTimeout(function() {
-    lyricFx._midSettleTimer = null;
-    applyLyricLayoutRemeasure(gen, songId);
-  }, Math.min(180, settle));
-  if (lyricFx._settleTimer) clearTimeout(lyricFx._settleTimer);
-  lyricFx._settleTimer = setTimeout(function() {
-    lyricFx._settleTimer = null;
-    applyLyricLayoutRemeasure(gen, songId);
-  }, settle);
+  relayoutLyricsIfNeeded(true, true);
+  scheduleLyricLayoutRemeasure(getSideLayoutSettleMs());
 }
 
-// 监听歌词容器尺寸：防抖，避免侧栏 grid 过渡逐帧触发全量重排
 function bindLyricContainerResizeObserver() {
   var container = $('lyrics-container');
   if (!container || typeof ResizeObserver === 'undefined') return;
@@ -1068,12 +918,11 @@ function bindLyricContainerResizeObserver() {
   var ro = new ResizeObserver(function() {
     if (lyricFx.items.length === 0) return;
     if (roTimer) clearTimeout(roTimer);
-    // 合并过渡中的连续 resize；稳定后再测
     roTimer = setTimeout(function() {
       roTimer = null;
       if (lyricFx.items.length === 0) return;
       relayoutLyricsIfNeeded(true);
-    }, 120);
+    }, 100);
   });
   ro.observe(container);
 }
@@ -1316,20 +1165,9 @@ function userLyricScrollBegin() {
   }, LYRIC_RESUME_MS);
 }
 
-/** 容器已有尺寸时立刻把当前行 snap 到焦点（不重测也能先回位） */
 function snapFocusCurrentLyricIfPossible() {
   if (lyricFx.items.length === 0 || !lyricFx.inner) return false;
-  var c = $('lyrics-container');
-  if (!c ||
-      c.clientWidth < LYRIC_MEASURE_MIN_W ||
-      c.clientHeight < LYRIC_MEASURE_MIN_H) {
-    return false;
-  }
-  if (!lyricFx.measured) {
-    if (!measureLyricLayout()) return false;
-  } else if (!ensureLyricLayoutReady()) {
-    return false;
-  }
+  if (!ensureLyricLayoutReady()) return false;
   var idx = pageState.currentLyricIndex >= 0 ? pageState.currentLyricIndex : 0;
   focusLyricLine(idx, true);
   return true;
@@ -1339,58 +1177,33 @@ function bindLyricManualScroll(container) {
   if (lyricFx.manualBound) return;
   lyricFx.manualBound = true;
 
-  function applyManualScrollDelta(dy) {
-    if (!ensureLyricLayoutReady()) {
-      if (!measureLyricLayout()) {
-        scheduleLyricLayoutRemeasure(0);
-        return false;
-      }
-      // 刚测成功：先 snap 再滚，否则 pos 全 0
-      if (pageState.autoScrollEnabled && pageState.currentLyricIndex >= 0) {
-        focusLyricLine(pageState.currentLyricIndex, true);
-      } else {
-        snapLyricItems();
-      }
-    }
+  container.addEventListener('wheel', function(e) {
+    if (!ensureLyricLayoutReady()) return;
+    e.preventDefault();
     userLyricScrollBegin();
     lyricFx.momentumV = 0;
+    var dy = e.deltaY;
+    if (e.deltaMode === 1) dy *= 16;
+    else if (e.deltaMode === 2) dy *= (lyricFx.viewH || 400);
     lyricFx.targetS = clampLyricS(lyricFx.targetS + dy);
     retargetLyricItemsNow();
     startLyricWave();
-    return true;
-  }
-
-  container.addEventListener('wheel', function(e) {
-    // 未测到也 preventDefault，避免把滚动交给外层页面
-    e.preventDefault();
-    e.stopPropagation();
-    var dy = normalizeWheelDeltaY(e, lyricFx.viewH || container.clientHeight);
-    applyManualScrollDelta(dy);
   }, { passive: false });
 
   container.addEventListener('touchstart', function(e) {
     if (!e.touches || e.touches.length === 0) return;
-    // 打开 Sheet 后若尚未测到高度，触摸时补测一次
-    if (!lyricFx.measured) {
-      if (measureLyricLayout()) {
-        if (pageState.currentLyricIndex >= 0) {
-          focusLyricLine(pageState.currentLyricIndex, true);
-        } else {
-          snapLyricItems();
-        }
-      }
-    }
+    if (!lyricFx.measured) ensureLyricLayoutReady();
     lyricFx.touchY = e.touches[0].clientY;
     lyricFx.touchT = performance.now();
     lyricFx.touchV = 0;
     lyricFx.momentumV = 0;
   }, { passive: true });
 
-  // 必须 non-passive：阻止页面/Sheet 抢滚动
+  // non-passive：移动端必须 preventDefault，否则页面/Sheet 抢走滑动
   container.addEventListener('touchmove', function(e) {
     if (lyricFx.touchY === null) return;
+    if (!ensureLyricLayoutReady()) return;
     e.preventDefault();
-    e.stopPropagation();
     var yNow = e.touches[0].clientY;
     var dy = lyricFx.touchY - yNow;
     lyricFx.touchY = yNow;
@@ -1398,17 +1211,18 @@ function bindLyricManualScroll(container) {
     var dtm = Math.max(1, tNow - lyricFx.touchT);
     lyricFx.touchT = tNow;
     lyricFx.touchV = (dy / dtm) * 1000;
-    applyManualScrollDelta(dy);
+    userLyricScrollBegin();
+    lyricFx.targetS = clampLyricS(lyricFx.targetS + dy);
+    retargetLyricItemsNow();
+    startLyricWave();
   }, { passive: false });
 
   container.addEventListener('touchend', function() {
     if (lyricFx.touchY === null) return;
     lyricFx.touchY = null;
-    // 甩动惯性
     if (Math.abs(lyricFx.touchV) > 60 && shouldAnimate()) {
       lyricFx.momentumV = lyricFx.touchV;
       lyricFx.touchV = 0;
-      if (!lyricFx.measured) measureLyricLayout();
       startLyricWave();
     }
   }, { passive: true });
@@ -1418,21 +1232,11 @@ function bindLyricManualScroll(container) {
     lyricFx.touchV = 0;
   }, { passive: true });
 
-  // 尺寸变化时重测布局并复位焦点
   var resizeTimer = null;
   window.addEventListener('resize', function() {
     if (resizeTimer) clearTimeout(resizeTimer);
     resizeTimer = setTimeout(function() {
-      lyricFx.measured = false;
-      lyricFx.measuredWithTrans = false;
-      if (measureLyricLayout()) {
-        lyricFx.focusK = -1;
-        if (pageState.currentLyricIndex >= 0) {
-          focusLyricLine(pageState.currentLyricIndex, true);
-        } else {
-          snapLyricItems();
-        }
-      }
+      relayoutLyricsIfNeeded(true, true);
     }, 200);
   });
 }
@@ -2108,31 +1912,13 @@ function buildLyricDom(container, lyrics, currentIndex, isKaraoke) {
   bindLyricClickEvents(container);
   bindLyricManualScroll(container);
 
-  // 初次渲染：直接就位（不做波浪），之后的切行才有波浪
+  // 立刻测；侧栏未展开则等 settle / ResizeObserver
   if (measureLyricLayout()) {
     var k = findLyricItemK(currentIndex >= 0 ? currentIndex : 0);
     if (k < 0) k = 0;
     focusLyricItemK(k, true);
-  } else {
-    // 侧栏刚从无词 0 宽展开：本帧测不到，下一帧硬重测
-    requestAnimationFrame(function() {
-      if (lyricFx.items.length === 0) return;
-      if (measureLyricLayout()) {
-        var k2 = findLyricItemK(currentIndex >= 0 ? currentIndex : 0);
-        if (k2 < 0) k2 = 0;
-        focusLyricItemK(k2, true);
-      }
-    });
   }
-  // 双 rAF + 过渡结束再测：覆盖「无词→有词」侧栏展开全过程
-  scheduleLyricLayoutRemeasure(0);
-  if (lyricFx._settleTimer) clearTimeout(lyricFx._settleTimer);
-  var genBuild = lyricFx.layoutGen;
-  var songBuild = pageState.lyricsSongId;
-  lyricFx._settleTimer = setTimeout(function() {
-    lyricFx._settleTimer = null;
-    applyLyricLayoutRemeasure(genBuild, songBuild);
-  }, getSideLayoutSettleMs());
+  scheduleLyricLayoutRemeasure(getSideLayoutSettleMs());
   bindLyricContainerResizeObserver();
 }
 
@@ -4662,13 +4448,8 @@ function bindControls() {
         setLyricsUiMode('loading');
       }
       revalidateLyricsContentMode({ fromTabOpen: true });
-      // 全端硬重测：桌面/平板侧栏 0fr→展开、移动端 Sheet display 切换，
-      // 都可能在首帧 w/h 不足；仅 mobile 重测会导致桌面/平板锁死错误布局。
-      requestAnimationFrame(function() {
-        requestAnimationFrame(function() {
-          forceLyricsPanelRelayout(false);
-        });
-      });
+      // 打开后测一次 + settle 再测（forceLyricsPanelRelayout 内部处理）
+      forceLyricsPanelRelayout();
     } else {
       syncNoLyricsLayout();
     }

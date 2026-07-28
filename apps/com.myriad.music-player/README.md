@@ -4,6 +4,12 @@
 
 ## Changelog
 
+### 1.1.34
+
+- 歌词滚动逻辑收敛：删除多层重试/清 transform/多 settle timer
+- 测量只保留 w/h>0 + offsetHeight；打开面板立刻测 + 过渡结束再测
+- 保留桌面绝对铺满高度与 touch-action:none（布局层，不搞复杂状态机）
+
 ### 1.1.33
 
 - 全端歌词滚动：测高前清 scale transform，避免行距累计错乱
