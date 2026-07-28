@@ -887,19 +887,45 @@ function relayoutLyricsIfNeeded(allowUnmeasured, force) {
   }
 }
 
-// 打开歌词面板 / 侧栏展开：立刻测 + 双 rAF + 过渡结束后再兜底
-// 桌面：grid 列宽约 0.46s；移动端：sheet slideUp 约 0.38s，且从 display:none 起量
-function forceLyricsPanelRelayout() {
-  if (lyricFx.items.length === 0) return;
-  relayoutLyricsIfNeeded(true, true);
-  var afterMs = 480;
+// 侧栏/sheet 布局过渡时长（与 page.css grid / slideUp 对齐）
+function getSideLayoutSettleMs() {
   try {
-    if (typeof checkIsMobile === 'function' && checkIsMobile()) afterMs = 400;
+    if (typeof checkIsMobile === 'function' && checkIsMobile()) return 400;
   } catch (e) { /* ignore */ }
-  scheduleLyricLayoutRemeasure(afterMs);
+  return 500;
 }
 
-// 监听歌词容器尺寸：侧栏展开/resize/面板切换时立即重测，避免 0 宽炸高后锁死
+/**
+ * 打开歌词面板 / 侧栏展开后的布局测量。
+ * soft=true（默认）：过渡中不立刻 force 重排，只在 settle 后测一次，避免「莫名重排」。
+ * soft=false：立刻测 + settle 再测（首屏无测量 / 0 宽恢复时用）。
+ */
+function forceLyricsPanelRelayout(soft) {
+  if (lyricFx.items.length === 0) return;
+  var settle = getSideLayoutSettleMs();
+  if (soft === false) {
+    relayoutLyricsIfNeeded(true, true);
+    scheduleLyricLayoutRemeasure(settle);
+    return;
+  }
+  // 已有测量：仅在宽高明显不对或未测时才立刻补一刀，否则等过渡结束
+  var c = $('lyrics-container');
+  var needNow = !lyricFx.measured;
+  if (c && lyricFx.measured) {
+    var w = c.clientWidth;
+    var h = c.clientHeight;
+    if (w > 0 && h > 0 &&
+        (Math.abs(w - lyricFx.viewW) > 24 || Math.abs(h - lyricFx.viewH) > 24)) {
+      needNow = true;
+    }
+  }
+  if (needNow && c && c.clientWidth > 0 && c.clientHeight > 0) {
+    relayoutLyricsIfNeeded(true, true);
+  }
+  scheduleLyricLayoutRemeasure(settle);
+}
+
+// 监听歌词容器尺寸：防抖，避免侧栏 grid 过渡逐帧触发全量重排
 function bindLyricContainerResizeObserver() {
   var container = $('lyrics-container');
   if (!container || typeof ResizeObserver === 'undefined') return;
@@ -908,12 +934,13 @@ function bindLyricContainerResizeObserver() {
   var roTimer = null;
   var ro = new ResizeObserver(function() {
     if (lyricFx.items.length === 0) return;
-    // 合并同帧多次回调；首帧立刻测（无 debounce）减少打开延迟
-    if (roTimer) return;
-    roTimer = requestAnimationFrame(function() {
+    if (roTimer) clearTimeout(roTimer);
+    // 合并过渡中的连续 resize；稳定后再测
+    roTimer = setTimeout(function() {
       roTimer = null;
+      if (lyricFx.items.length === 0) return;
       relayoutLyricsIfNeeded(true);
-    });
+    }, 120);
   });
   ro.observe(container);
 }
@@ -1451,13 +1478,17 @@ function syncNoLyricsLayout() {
     }
   }
 
-  // 列宽变化后必须重测跑马灯，否则仍按旧宽度溢出到歌词区
-  requestAnimationFrame(function() {
+  // 列宽过渡结束后再重测跑马灯，避免开侧栏过程中反复改 --marquee 造成标题跳一下
+  if (syncNoLyricsLayout._marqueeTimer) {
+    clearTimeout(syncNoLyricsLayout._marqueeTimer);
+  }
+  syncNoLyricsLayout._marqueeTimer = setTimeout(function() {
+    syncNoLyricsLayout._marqueeTimer = null;
     if (typeof remeasureScrollingText === 'function') {
       remeasureScrollingText($('song-name'));
       remeasureScrollingText($('song-artist'));
     }
-  });
+  }, getSideLayoutSettleMs());
 }
 
 /** 同步无歌词 / 有歌词 / 加载中状态，并刷新布局 */
@@ -1524,14 +1555,16 @@ function shouldApplyNoLyricsMode() {
 
 /**
  * 按当前歌词刷新 ready/empty（仅无词或过短）。
- * 有足够行数 → ready 并重渲染；过短/无词 → empty 并清视觉（保留数据可恢复）。
+ * 有足够行数 → ready；过短/无词 → empty。
+ * 已 ready 且 DOM 在时：只同步侧栏 class，不强制全量 relayout（避免进歌词模式莫名重排）。
  */
-function revalidateLyricsContentMode() {
+function revalidateLyricsContentMode(opts) {
+  opts = opts || {};
+  var fromTabOpen = !!opts.fromTabOpen;
+
   if (!shouldApplyNoLyricsMode()) {
-    // 列表态：只同步 has/no class 的 ready 语义，不强行改面板内容
     var okList = areLyricsUsable(pageState.lyrics);
     if (okList && pageState.lyricsLoadState !== 'ready') {
-      // 有词但在列表：标记 ready，切回歌词时直接可用
       setLyricsUiMode('ready');
     } else if (!okList && pageState.lyricsLoadState === 'ready') {
       setLyricsUiMode('empty');
@@ -1555,38 +1588,50 @@ function revalidateLyricsContentMode() {
     return;
   }
 
-  // 有足够歌词：自动恢复有词布局 + 若歌词 Tab 开着则展开侧栏
-  if (pageState.lyricsLoadState !== 'ready' || !lyricFx.inner) {
-    var st = pageState.status || {};
-    var pos = st.position || (st.progress ? st.progress.current : 0) || 0;
-    var idx = updateLyricIndex(pos, pageState.lyrics);
-    pageState.currentLyricIndex = idx;
-    renderLyrics(pageState.lyrics, idx);
-  } else {
-    setLyricsUiMode('ready');
-  }
-
-  // 歌词 Tab 仍选中时：有词恢复后重新打开侧栏/sheet
-  var focus = typeof getSidePanelFocus === 'function' ? getSidePanelFocus() : 'none';
-  // getSidePanelFocus 在 mobile 未 visible 时返回 none；用 preferredTab / active tab
   var lyricsTabOn = false;
   try {
     var lyBtn = document.querySelector('.tab-btn[data-tab="lyrics"]');
     lyricsTabOn = !!(lyBtn && lyBtn.classList.contains('active'));
   } catch (e) { lyricsTabOn = false; }
-  if (lyricsTabOn && pageState.lyricsLoadState === 'ready') {
-    var pr = $('player-right');
-    if (pr) {
-      pr.classList.add('side-open');
-      if (typeof checkIsMobile === 'function' && checkIsMobile()) {
-        pr.classList.add('mobile-visible');
-        pr.classList.remove('mobile-closing');
+
+  // 已有完整歌词 DOM：进歌词 Tab 只同步布局类，不 render / 不 force 重排
+  if (pageState.lyricsLoadState === 'ready' && lyricFx.inner && lyricFx.items.length > 0) {
+    if (lyricsTabOn) {
+      var pr = $('player-right');
+      if (pr) {
+        pr.classList.add('side-open');
+        if (typeof checkIsMobile === 'function' && checkIsMobile()) {
+          pr.classList.add('mobile-visible');
+          pr.classList.remove('mobile-closing');
+        }
       }
     }
     syncNoLyricsLayout();
-    requestAnimationFrame(function() {
-      forceLyricsPanelRelayout();
-    });
+    // 仅 Tab 打开：过渡结束后 soft 重测；中途不 snap 全表
+    if (fromTabOpen) {
+      forceLyricsPanelRelayout(true);
+    }
+    return;
+  }
+
+  // 无 DOM / 非 ready：构建或恢复
+  var st = pageState.status || {};
+  var pos = st.position || (st.progress ? st.progress.current : 0) || 0;
+  var idx = updateLyricIndex(pos, pageState.lyrics);
+  pageState.currentLyricIndex = idx;
+  renderLyrics(pageState.lyrics, idx);
+
+  if (lyricsTabOn && pageState.lyricsLoadState === 'ready') {
+    var pr2 = $('player-right');
+    if (pr2) {
+      pr2.classList.add('side-open');
+      if (typeof checkIsMobile === 'function' && checkIsMobile()) {
+        pr2.classList.add('mobile-visible');
+        pr2.classList.remove('mobile-closing');
+      }
+    }
+    syncNoLyricsLayout();
+    forceLyricsPanelRelayout(true);
   }
 }
 
@@ -4190,23 +4235,15 @@ function bindControls() {
       }
     }
 
-    // 打开歌词时立刻按无词/过短重判（进入无词模式或保持有词）
+    // 打开歌词：无词/过短 → 无词模式；有词 → 只同步侧栏，过渡后再测（禁止连打 force 重排）
     if (tab === 'lyrics') {
-      revalidateLyricsContentMode();
+      revalidateLyricsContentMode({ fromTabOpen: true });
     } else {
       syncNoLyricsLayout();
     }
 
     if (tab === 'playlist') {
       requestAnimationFrame(revealPlaylist);
-    }
-    if (tab === 'lyrics' && pageState.lyricsLoadState === 'ready') {
-      // 有词：等 layout 出非 0 宽后再测
-      requestAnimationFrame(function() {
-        requestAnimationFrame(function() {
-          forceLyricsPanelRelayout();
-        });
-      });
     }
   }
 
