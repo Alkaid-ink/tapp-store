@@ -76,7 +76,7 @@
       <span class="mobile-panel-title" id="mobile-panel-title">歌词</span>
       
       <!-- 歌词面板 -->
-      <section class="panel panel-lyrics active" id="panel-lyrics">
+      <section class="panel panel-lyrics" id="panel-lyrics">
         <div class="lyrics-scroll" id="lyrics-container">
           <div class="lyrics-empty" id="lyrics-empty">暂无歌词</div>
         </div>
@@ -221,12 +221,12 @@
     
     <!-- 右侧控制组：歌词、播放列表、播放模式 -->
     <div class="right-controls">
-      <button class="tab-btn active" data-tab="lyrics" id="tab-lyrics" aria-label="歌词">
+      <button class="tab-btn" data-tab="lyrics" id="tab-lyrics" aria-pressed="false" aria-label="歌词">
         <svg viewBox="0 0 20 20" fill="currentColor">
           <path d="M18 13V5a2 2 0 00-2-2H4a2 2 0 00-2 2v8a2 2 0 002 2h3l3 3 3-3h3a2 2 0 002-2zM5 7a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1zm1 3a1 1 0 100 2h3a1 1 0 100-2H6z" />
         </svg>
       </button>
-      <button class="tab-btn" data-tab="playlist" id="tab-playlist" aria-label="播放列表">
+      <button class="tab-btn" data-tab="playlist" id="tab-playlist" aria-pressed="false" aria-label="播放列表">
         <svg viewBox="0 0 24 24" fill="currentColor">
           <path d="M4 10h12v2H4zm0-4h12v2H4zm0 8h8v2H4zm10 0v6l5-3z"/>
         </svg>

@@ -259,6 +259,18 @@ html, body {
 /* ========================================
    左侧面板 - 封面 + 歌曲信息
    ======================================== */
+
+/* 封面 + 标题整体 */
+.player-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
 .player-left {
   display: flex;
   flex-direction: column;
@@ -2629,4 +2641,113 @@ html.mp-no-lyrics #lyric-trans-btn {
 }
 
 @media (prefers-reduced-motion: reduce) {
+}
+
+
+/* ========================================
+   侧栏三态：none | lyrics | playlist
+   none = 都不选，仅封面+标题
+   ======================================== */
+@media (min-width: 769px) {
+  /* 默认 / 都不选：隐藏右侧，封面区居中占满 */
+  html.mp-side-none .content-area,
+  html.mp-no-lyrics-layout .content-area {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  html.mp-side-none .player-right,
+  html.mp-no-lyrics-layout.mp-side-none .player-right {
+    display: none;
+  }
+
+  /* 打开歌词或列表：双栏 */
+  html.mp-side-lyrics .content-area,
+  html.mp-side-playlist .content-area {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  }
+
+  html.mp-side-lyrics .player-right,
+  html.mp-side-playlist .player-right {
+    display: flex;
+  }
+
+  html.mp-side-none .player-left,
+  html.mp-no-lyrics-layout .player-left {
+    align-items: center;
+    justify-content: center;
+    padding-left: 8%;
+    padding-right: 8%;
+  }
+
+  html.mp-side-none .player-hero,
+  html.mp-no-lyrics-layout .player-hero {
+    align-items: center;
+    margin-inline: auto;
+    width: min(100%, 380px);
+  }
+
+  html.mp-side-none .player-hero .artwork-container,
+  html.mp-side-none .player-hero .track-info,
+  html.mp-no-lyrics-layout .player-hero .artwork-container,
+  html.mp-no-lyrics-layout .player-hero .track-info {
+    width: 100%;
+  }
+
+  html.mp-side-none .player-hero .track-info,
+  html.mp-no-lyrics-layout .player-hero .track-info {
+    align-items: center;
+    text-align: center;
+  }
+
+  html.mp-side-none .track-title-row,
+  html.mp-no-lyrics-layout .track-title-row {
+    justify-content: center;
+  }
+
+  html.mp-side-none .artwork-wrapper,
+  html.mp-side-none .artwork-aurora,
+  html.mp-no-lyrics-layout .artwork-wrapper,
+  html.mp-no-lyrics-layout .artwork-aurora {
+    max-width: min(360px, 100%);
+    width: 100%;
+  }
+
+  /* 有歌词且打开歌词 tab：左侧恢复略偏左的阅读布局 */
+  html.mp-has-lyrics.mp-side-lyrics .player-left {
+    align-items: flex-start;
+    padding-left: 15%;
+    padding-right: 24px;
+  }
+
+  html.mp-has-lyrics.mp-side-lyrics .player-hero {
+    align-items: flex-start;
+    margin-inline: 0;
+    width: 100%;
+  }
+
+  html.mp-has-lyrics.mp-side-lyrics .track-info {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  html.mp-has-lyrics.mp-side-lyrics .track-title-row {
+    justify-content: flex-start;
+  }
+}
+
+/* player-right 未打开时桌面也隐藏（.side-open 由 JS 挂） */
+@media (min-width: 769px) {
+  .player-right:not(.side-open) {
+    display: none;
+  }
+  .player-right.side-open {
+    display: flex;
+  }
+}
+
+
+/* 无歌词占位已移除：空容器不占视觉 */
+.lyrics-empty,
+.lyrics-empty-rich {
+  display: none !important;
 }
