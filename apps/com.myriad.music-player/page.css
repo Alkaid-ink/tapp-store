@@ -2079,23 +2079,23 @@ html.mp-has-lyrics .track-title {
 }
 
 /* ========================================
-   移动端布局重构（≤768）
-   结构：居中 hero → 底栏（进度 / 传输 / 工具）→ 全屏 Sheet
+   移动端布局创新（≤768）— 「舞台卡」
+   - 封面为主舞台，曲目信息玻璃卡叠在封面下沿
+   - 控制坞悬浮圆角胶囊，不贴边传统底栏
+   - Sheet 仍全宽沉浸（滚动逻辑不改）
    ======================================== */
 @media (max-width: 768px) {
   :root {
     --lyric-fs: clamp(30px, 6.8vw, 40px);
-    --m-pad-x: max(16px, env(safe-area-inset-left, 0px));
-    --m-pad-r: max(16px, env(safe-area-inset-right, 0px));
+    --m-pad-x: max(18px, env(safe-area-inset-left, 0px));
+    --m-pad-r: max(18px, env(safe-area-inset-right, 0px));
+    --m-stage: min(86vw, min(340px, 52vh));
   }
 
   #tapp-content {
     grid-template-rows: minmax(0, 1fr) auto;
     gap: 0;
-    padding-left: 0;
-    padding-right: 0;
-    /* 底栏自带 safe-area */
-    padding-bottom: 0;
+    padding: 0;
   }
 
   .content-area {
@@ -2103,29 +2103,37 @@ html.mp-has-lyrics .track-title {
     flex-direction: column;
     margin: 0;
     padding:
-      max(12px, env(safe-area-inset-top, 0px))
+      max(16px, env(safe-area-inset-top, 0px))
       var(--m-pad-r)
-      8px
+      12px
       var(--m-pad-x);
     min-height: 0;
     flex: 1;
   }
 
-  /* —— Hero：垂直居中，封面更大，文案居中 —— */
+  /* —— 舞台区：居中，上下留白像展览 —— */
   .player-left {
     flex: 1;
     min-height: 0;
-    padding: 0;
+    padding: 0 0 8px;
     gap: 0;
     justify-content: center;
     align-items: center;
   }
 
   .player-hero {
-    gap: 16px;
-    width: min(72vw, 280px);
-    max-width: min(72vw, 280px);
-    align-items: center;
+    position: relative;
+    width: var(--m-stage);
+    max-width: var(--m-stage);
+    gap: 0;
+    align-items: stretch;
+    overflow: visible; /* 允许信息卡叠出封面 */
+  }
+
+  .player-hero .artwork-container {
+    width: 100%;
+    position: relative;
+    z-index: 0;
   }
 
   .player-hero .artwork-wrapper,
@@ -2137,18 +2145,22 @@ html.mp-has-lyrics .track-title {
   .artwork-wrapper {
     max-width: none;
     width: 100%;
-    border-radius: 14px;
+    border-radius: 22px;
     box-shadow:
-      0 16px 48px color-mix(in srgb, var(--music-primary) 28%, transparent),
-      0 4px 14px rgba(0, 0, 0, 0.18);
+      0 28px 64px color-mix(in srgb, var(--music-primary) 32%, transparent),
+      0 8px 24px rgba(0, 0, 0, 0.22);
   }
 
   .artwork-wrapper:hover {
     transform: none;
   }
 
+  .artwork-wrapper.paused {
+    transform: scale(0.94);
+  }
+
   .artwork-wrapper.paused:hover {
-    transform: scale(0.8);
+    transform: scale(0.94);
   }
 
   .artwork-aurora {
@@ -2157,14 +2169,47 @@ html.mp-has-lyrics .track-title {
   }
 
   .aurora-blob {
-    filter: blur(32px);
+    filter: blur(36px);
   }
 
+  /* 曲目信息：玻璃卡叠在封面下沿（布局创新核心） */
   .player-hero .track-info {
-    width: 100%;
+    position: relative;
+    z-index: 2;
+    width: auto;
+    margin: -36px 14px 0;
+    padding: 14px 16px 12px;
+    gap: 4px;
     text-align: center;
     align-items: center;
-    gap: 4px;
+    border-radius: 18px;
+    background:
+      linear-gradient(
+        165deg,
+        color-mix(in srgb, var(--music-primary) 18%, rgba(255, 255, 255, 0.72)),
+        color-mix(in srgb, var(--music-secondary) 12%, rgba(255, 255, 255, 0.58))
+      );
+    -webkit-backdrop-filter: blur(28px) saturate(1.6);
+    backdrop-filter: blur(28px) saturate(1.6);
+    box-shadow:
+      0 12px 36px rgba(0, 0, 0, 0.16),
+      inset 0 1px 0 rgba(255, 255, 255, 0.45);
+    border: 1px solid color-mix(in srgb, #fff 55%, transparent);
+    overflow: hidden;
+  }
+
+  :root.dark .player-hero .track-info,
+  :root:not(.light) .player-hero .track-info {
+    background:
+      linear-gradient(
+        165deg,
+        color-mix(in srgb, var(--music-primary) 28%, rgba(20, 20, 24, 0.78)),
+        color-mix(in srgb, var(--music-secondary) 16%, rgba(12, 12, 16, 0.72))
+      );
+    border-color: color-mix(in srgb, #fff 12%, transparent);
+    box-shadow:
+      0 14px 40px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
   }
 
   .track-title-row {
@@ -2173,37 +2218,46 @@ html.mp-has-lyrics .track-title {
   }
 
   .track-title {
-    font-size: 20px;
+    font-size: 18px;
     line-height: 1.25;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.025em;
     text-align: center;
+    font-weight: 700;
   }
 
   html.mp-has-lyrics .track-title {
-    font-size: 19px;
+    font-size: 17px;
   }
 
   .track-artist {
-    font-size: 14px;
+    font-size: 13px;
     text-align: center;
-    opacity: 0.85;
+    opacity: 0.88;
   }
 
-  /* —— 底栏：进度 → 传输居中 → 工具两端对齐 —— */
+  /* —— 悬浮控制坞（胶囊，不贴底成传统栏） —— */
   .controls-bar {
     flex-direction: column;
     align-items: stretch;
-    gap: 10px;
-    margin: 0;
-    padding:
-      10px var(--m-pad-r)
+    gap: 12px;
+    margin:
+      0 max(12px, env(safe-area-inset-right, 0px))
       calc(10px + env(safe-area-inset-bottom, 0px))
-      var(--m-pad-x);
-    border-radius: 0;
-    background: color-mix(in srgb, var(--glass-bg, rgba(20, 20, 22, 0.55)) 88%, transparent);
-    -webkit-backdrop-filter: blur(20px) saturate(1.4);
-    backdrop-filter: blur(20px) saturate(1.4);
-    border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+      max(12px, env(safe-area-inset-left, 0px));
+    padding: 14px 16px 12px;
+    border-radius: 28px;
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--glass-bg, rgba(28, 28, 32, 0.55)) 92%, transparent),
+        color-mix(in srgb, var(--glass-bg, rgba(18, 18, 22, 0.72)) 96%, transparent)
+      );
+    -webkit-backdrop-filter: blur(28px) saturate(1.55);
+    backdrop-filter: blur(28px) saturate(1.55);
+    border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
+    box-shadow:
+      0 16px 48px rgba(0, 0, 0, 0.2),
+      inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent);
   }
 
   .progress-section {
@@ -2221,6 +2275,7 @@ html.mp-has-lyrics .track-title {
     font-size: 11px;
     min-width: 36px;
     opacity: 0.7;
+    font-variant-numeric: tabular-nums;
   }
 
   .controls-group {
@@ -2228,9 +2283,9 @@ html.mp-has-lyrics .track-title {
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 28px;
+    gap: 32px;
     width: 100%;
-    padding: 2px 0 4px;
+    padding: 4px 0 2px;
   }
 
   .right-controls {
@@ -2239,9 +2294,10 @@ html.mp-has-lyrics .track-title {
     justify-content: space-between;
     align-items: center;
     width: 100%;
-    max-width: 280px;
+    max-width: 260px;
     margin: 0 auto;
     gap: 8px;
+    padding-top: 2px;
   }
 
   .volume-section {
@@ -2249,8 +2305,8 @@ html.mp-has-lyrics .track-title {
   }
 
   .control-play {
-    width: 64px;
-    height: 64px;
+    width: 66px;
+    height: 66px;
   }
 
   .control-play svg {
@@ -2274,6 +2330,7 @@ html.mp-has-lyrics .track-title {
     min-width: 46px;
     min-height: 46px;
     z-index: 20;
+    border-radius: 14px;
   }
 
   .tab-btn svg {
@@ -2285,6 +2342,7 @@ html.mp-has-lyrics .track-title {
   .control-secondary {
     width: 42px;
     height: 42px;
+    border-radius: 14px;
   }
 
   .control-secondary svg {
@@ -2460,8 +2518,12 @@ html.mp-has-lyrics .track-title {
     height: 46px;
   }
 
-  /* 横屏矮屏：压封面、压底栏，保证可控 */
+  /* 横屏矮屏：舞台缩小，信息卡少叠，控制坞压扁 */
   @media (max-height: 480px) {
+    :root {
+      --m-stage: min(34vh, 140px);
+    }
+
     .content-area {
       padding-top: 6px;
       padding-bottom: 4px;
@@ -2471,28 +2533,26 @@ html.mp-has-lyrics .track-title {
       justify-content: flex-start;
     }
 
-    .player-hero {
-      width: min(28vh, 120px);
-      max-width: min(28vh, 120px);
-      gap: 8px;
+    .player-hero .track-info {
+      margin-top: -20px;
+      padding: 8px 12px;
+      border-radius: 12px;
     }
 
-    .track-title {
-      font-size: 15px;
-    }
-
+    .track-title,
     html.mp-has-lyrics .track-title {
-      font-size: 15px;
+      font-size: 14px;
     }
 
     .track-artist {
-      font-size: 12px;
+      font-size: 11px;
     }
 
     .controls-bar {
       gap: 6px;
-      padding-top: 6px;
-      padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+      margin-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+      padding: 8px 12px;
+      border-radius: 20px;
     }
 
     .controls-group {
@@ -2922,16 +2982,17 @@ html.mp-no-lyrics #lyric-trans-btn {
   display: none !important;
 }
 
-/* 移动端兜底：全态统一居中 hero（与上方主移动块一致，避免二次覆盖） */
+/* 移动端兜底：全态统一舞台卡，避免其它 class 把信息卡拆回传统堆叠 */
 @media (max-width: 768px) {
   .player-left {
     align-items: center;
   }
 
   html.mp-no-lyrics-layout .player-hero,
-  html.mp-side-none .player-hero {
-    width: min(72vw, 280px);
-    max-width: min(72vw, 280px);
+  html.mp-side-none .player-hero,
+  html.mp-has-lyrics .player-hero {
+    width: var(--m-stage);
+    max-width: var(--m-stage);
   }
 
   .player-hero .track-info {
