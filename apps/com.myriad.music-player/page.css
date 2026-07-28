@@ -2079,17 +2079,16 @@ html.mp-has-lyrics .track-title {
 }
 
 /* ========================================
-   移动端布局创新（≤768）— 「舞台卡」
-   - 封面为主舞台，曲目信息玻璃卡叠在封面下沿
-   - 控制坞悬浮圆角胶囊，不贴边传统底栏
-   - Sheet 仍全宽沉浸（滚动逻辑不改）
+   移动端布局（≤768）— 标题写在封面上
+   - 封面为舞台；歌名/歌手叠在封面底部渐变上（不要玻璃岛）
+   - 控制坞悬浮胶囊
    ======================================== */
 @media (max-width: 768px) {
   :root {
     --lyric-fs: clamp(30px, 6.8vw, 40px);
     --m-pad-x: max(18px, env(safe-area-inset-left, 0px));
     --m-pad-r: max(18px, env(safe-area-inset-right, 0px));
-    --m-stage: min(86vw, min(340px, 52vh));
+    --m-stage: min(86vw, min(340px, 54vh));
   }
 
   #tapp-content {
@@ -2111,7 +2110,6 @@ html.mp-has-lyrics .track-title {
     flex: 1;
   }
 
-  /* —— 舞台区：居中，上下留白像展览 —— */
   .player-left {
     flex: 1;
     min-height: 0;
@@ -2121,13 +2119,14 @@ html.mp-has-lyrics .track-title {
     align-items: center;
   }
 
+  /* hero 只包封面一块；信息绝对叠在封面上 */
   .player-hero {
     position: relative;
     width: var(--m-stage);
     max-width: var(--m-stage);
     gap: 0;
     align-items: stretch;
-    overflow: visible; /* 允许信息卡叠出封面 */
+    overflow: visible;
   }
 
   .player-hero .artwork-container {
@@ -2145,7 +2144,7 @@ html.mp-has-lyrics .track-title {
   .artwork-wrapper {
     max-width: none;
     width: 100%;
-    border-radius: 22px;
+    border-radius: 20px;
     box-shadow:
       0 28px 64px color-mix(in srgb, var(--music-primary) 32%, transparent),
       0 8px 24px rgba(0, 0, 0, 0.22);
@@ -2172,67 +2171,84 @@ html.mp-has-lyrics .track-title {
     filter: blur(36px);
   }
 
-  /* 曲目信息：玻璃卡叠在封面下沿（布局创新核心） */
+  /* 标题直接写在封面底部：压在 artwork 上，无独立岛卡片 */
   .player-hero .track-info {
-    position: relative;
-    z-index: 2;
-    width: auto;
-    margin: -36px 14px 0;
-    padding: 14px 16px 12px;
-    gap: 4px;
-    text-align: center;
-    align-items: center;
-    border-radius: 18px;
-    background:
-      linear-gradient(
-        165deg,
-        color-mix(in srgb, var(--music-primary) 18%, rgba(255, 255, 255, 0.72)),
-        color-mix(in srgb, var(--music-secondary) 12%, rgba(255, 255, 255, 0.58))
-      );
-    -webkit-backdrop-filter: blur(28px) saturate(1.6);
-    backdrop-filter: blur(28px) saturate(1.6);
-    box-shadow:
-      0 12px 36px rgba(0, 0, 0, 0.16),
-      inset 0 1px 0 rgba(255, 255, 255, 0.45);
-    border: 1px solid color-mix(in srgb, #fff 55%, transparent);
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 3;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    padding: 48px 16px 16px;
+    gap: 3px;
+    text-align: left;
+    align-items: flex-start;
+    border-radius: 0 0 20px 20px;
+    /* 仅底部渐变 scrim，不是浮岛 */
+    background: linear-gradient(
+      to top,
+      rgba(0, 0, 0, 0.72) 0%,
+      rgba(0, 0, 0, 0.45) 42%,
+      rgba(0, 0, 0, 0) 100%
+    );
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+    border: none;
     overflow: hidden;
+    box-sizing: border-box;
+    pointer-events: none; /* 不挡封面点击/手势；文字纯展示 */
   }
 
-  :root.dark .player-hero .track-info,
-  :root:not(.light) .player-hero .track-info {
-    background:
-      linear-gradient(
-        165deg,
-        color-mix(in srgb, var(--music-primary) 28%, rgba(20, 20, 24, 0.78)),
-        color-mix(in srgb, var(--music-secondary) 16%, rgba(12, 12, 16, 0.72))
-      );
-    border-color: color-mix(in srgb, #fff 12%, transparent);
-    box-shadow:
-      0 14px 40px rgba(0, 0, 0, 0.4),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  .player-hero .track-info .track-title-row,
+  .player-hero .track-info .track-title,
+  .player-hero .track-info .track-artist,
+  .player-hero .track-info .badge-vip {
+    pointer-events: auto;
   }
 
   .track-title-row {
-    justify-content: center;
+    justify-content: flex-start;
     width: 100%;
   }
 
   .track-title {
-    font-size: 18px;
-    line-height: 1.25;
-    letter-spacing: -0.025em;
-    text-align: center;
+    font-size: 20px;
+    line-height: 1.22;
+    letter-spacing: -0.02em;
+    text-align: left;
     font-weight: 700;
+    color: #fff;
+    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.35);
+  }
+
+  .track-title .marquee-inner {
+    color: #fff;
+    -webkit-text-fill-color: #fff;
   }
 
   html.mp-has-lyrics .track-title {
-    font-size: 17px;
+    font-size: 19px;
   }
 
   .track-artist {
     font-size: 13px;
-    text-align: center;
-    opacity: 0.88;
+    text-align: left;
+    opacity: 0.92;
+    color: rgba(255, 255, 255, 0.88);
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+  }
+
+  .track-artist .marquee-inner {
+    color: rgba(255, 255, 255, 0.9);
+    -webkit-text-fill-color: rgba(255, 255, 255, 0.9);
+    background: none;
+  }
+
+  .badge-vip {
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   }
 
   /* —— 悬浮控制坞（胶囊，不贴底成传统栏） —— */
@@ -2518,10 +2534,10 @@ html.mp-has-lyrics .track-title {
     height: 46px;
   }
 
-  /* 横屏矮屏：舞台缩小，信息卡少叠，控制坞压扁 */
+  /* 横屏矮屏：舞台缩小，封面内文案压矮，控制坞压扁 */
   @media (max-height: 480px) {
     :root {
-      --m-stage: min(34vh, 140px);
+      --m-stage: min(36vh, 148px);
     }
 
     .content-area {
@@ -2534,9 +2550,8 @@ html.mp-has-lyrics .track-title {
     }
 
     .player-hero .track-info {
-      margin-top: -20px;
-      padding: 8px 12px;
-      border-radius: 12px;
+      padding: 28px 12px 10px;
+      border-radius: 0 0 16px 16px;
     }
 
     .track-title,
@@ -2982,7 +2997,7 @@ html.mp-no-lyrics #lyric-trans-btn {
   display: none !important;
 }
 
-/* 移动端兜底：全态统一舞台卡，避免其它 class 把信息卡拆回传统堆叠 */
+/* 移动端兜底：标题始终压在封面上，禁止被其它 class 拆回岛/堆叠 */
 @media (max-width: 768px) {
   .player-left {
     align-items: center;
@@ -2996,12 +3011,12 @@ html.mp-no-lyrics #lyric-trans-btn {
   }
 
   .player-hero .track-info {
-    text-align: center;
-    align-items: center;
+    text-align: left;
+    align-items: flex-start;
   }
 
   .track-title-row {
-    justify-content: center;
+    justify-content: flex-start;
   }
 }
 
