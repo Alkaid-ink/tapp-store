@@ -1750,7 +1750,7 @@ function applyLyricsVerdict(lyrics, opts) {
       lyricFx.dotsItems = [];
       resetLyricFxLayoutCache();
       stopLyricWave();
-      container.innerHTML = buildLyricsEmptyHtml();
+      clearLyricsContainer(container);
       container.classList.remove('karaoke');
     }
     return;
@@ -1855,18 +1855,11 @@ function revalidateLyricsContentMode(opts) {
   });
 }
 
-function buildLyricsEmptyHtml() {
-  // 仅静态空态，无 spinner / 加载动画
-  var icon = '<svg class="lyrics-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
-    + '<path d="M9 18V5l12-2v13"/>'
-    + '<circle cx="6" cy="18" r="3"/>'
-    + '<circle cx="18" cy="16" r="3"/>'
-    + '</svg>';
-  return '<div class="lyrics-empty lyrics-empty-rich">'
-    + '<div class="lyrics-empty-visual">' + icon + '</div>'
-    + '<div class="lyrics-empty-title">' + t('noLyrics') + '</div>'
-    + '<div class="lyrics-empty-hint">' + t('noLyricsHint') + '</div>'
-    + '</div>';
+// 无词态不再在歌词面板里放占位：布局改成封面优先的 hero（html.mp-no-lyrics-layout），
+// 面板本身会收起。占位 DOM 曾被 `.lyrics-empty { display:none !important }` 永久隐藏，
+// 却仍在每次空态渲染时连内联 SVG 一起重建——直接清空即可。
+function clearLyricsContainer(container) {
+  container.textContent = '';
 }
 
 // 渲染歌词 - Apple Music 式：DOM/类名在此维护，位置与缩放由波浪引擎接管
@@ -1902,7 +1895,7 @@ function renderLyrics(lyrics, currentIndex, opts) {
       // 尚未终判：先按有词（loading）
       if (pageState.lyricsLoadState !== 'loading') setLyricsUiMode('loading');
     }
-    container.innerHTML = buildLyricsEmptyHtml();
+    clearLyricsContainer(container);
     container.classList.remove('karaoke');
     return;
   }
@@ -4177,9 +4170,7 @@ function updateStateSnapshot(state) {
 async function initPage() {
   // 尽早同步移动/平板 class，避免首帧走错布局（Sheet vs 桌面侧栏）
   try { checkIsMobile(); } catch (e) { /* ignore */ }
-  // 设置标题
-  var titleEl = document.getElementById('page-title');
-  if (titleEl) titleEl.textContent = t('title');
+  // 页面标题由宿主窗口栏显示，本页没有 #page-title 元素（原来那两行是空跑）
 
   // 翻译 UI 随 locale 刷新（按钮文案/可用性；locale 切走时收起副行并重测布局）
   setLyricTransOn(pageState.transOn);

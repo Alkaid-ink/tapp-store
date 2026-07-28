@@ -796,18 +796,6 @@ html.mp-has-lyrics .track-title {
   );
 }
 
-.lyrics-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  gap: 8px;
-  color: var(--text-tertiary);
-  font-size: 14px;
-  opacity: 0.6;
-}
-
 /* 歌词行：绝对定位，位置(translateY)与视觉大小(scale)全部由 JS 波浪引擎驱动。
    统一字号 + 统一字重：激活态只变 scale/颜色/模糊，零重排（Apple Music 的做法） */
 .lyrics-inner {
@@ -2402,7 +2390,9 @@ html.mp-has-lyrics .track-title {
   .player-right {
     display: none;
     position: fixed;
-    top: max(12%, env(safe-area-inset-top, 0px) + 40px);
+    /* 顶部留白：手机上留出一截封面，Sheet 不贴顶。
+       env() 在 tapp 的 iframe 里恒为 0，所以真正兜底的是那个像素下限。 */
+    top: max(12%, env(safe-area-inset-top, 0px) + 56px);
     left: 0;
     right: 0;
     bottom: 0;
@@ -2422,6 +2412,15 @@ html.mp-has-lyrics .track-title {
     overflow: hidden;
     /* 不用 grid 叠 panel+标题：flex 列更稳，歌词区高度可测 */
     flex-direction: column;
+  }
+
+  /* 抵消桌面双栏的 height:100%。fixed 元素同时拿到 top / bottom / height 会过约束，
+     结果被拉回视口顶端占满全屏——手机上「弹窗直接贴顶」就是这么来的。
+     ⚠️ 必须用 `.content-area > .player-right`(0,2,0) 这个同等特异性的选择器：
+     媒体查询**不增加特异性**，块内的 `.player-right`(0,1,0) 压不过外面那条。
+     平板块用的是 html.mp-is-mobile .player-right(0,2,0)，所以那边一直是好的。 */
+  .content-area > .player-right {
+    height: auto;
   }
 
   /* 顶部拖动手柄 */
@@ -2992,54 +2991,6 @@ html.mp-has-error .status-banner.visible {
   background: color-mix(in srgb, #ff453a 40%, rgba(0, 0, 0, 0.55));
 }
 
-/* 空态占位（已不再使用，保留隐藏兜底） */
-.lyrics-empty.lyrics-empty-rich {
-  display: none !important;
-}
-
-
-.lyrics-empty-visual {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 4px;
-  background:
-    radial-gradient(circle at 35% 30%,
-      color-mix(in srgb, var(--music-primary) 28%, transparent),
-      transparent 62%),
-    color-mix(in srgb, var(--music-primary) 10%, rgba(120, 120, 128, 0.12));
-  box-shadow:
-    0 8px 28px color-mix(in srgb, var(--music-primary) 18%, transparent),
-    inset 0 0 0 1px color-mix(in srgb, var(--music-primary) 22%, transparent);
-}
-
-.lyrics-empty-icon {
-  width: 32px;
-  height: 32px;
-  color: var(--music-primary);
-  opacity: 0.92;
-}
-
-
-.lyrics-empty-title {
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  color: var(--text-primary);
-}
-
-.lyrics-empty-hint {
-  font-size: 13px;
-  line-height: 1.45;
-  max-width: 220px;
-  color: var(--text-tertiary);
-  opacity: 0.9;
-}
-
-
 /* 无歌词时隐藏歌词角按钮中的翻译（无意义）——动效钮桌面仍可点 */
 html.mp-no-lyrics #lyric-trans-btn {
   display: none !important;
@@ -3218,12 +3169,6 @@ html.mp-no-lyrics #lyric-trans-btn {
 }
 
 
-/* 无歌词占位已移除：空容器不占视觉 */
-.lyrics-empty,
-.lyrics-empty-rich {
-  display: none !important;
-}
-
 /* ========================================
    触控平板 769–900：与 checkIsMobile 对齐
    JS 挂 html.mp-is-mobile；纯 @media (max-width:768) 盖不到，
@@ -3305,7 +3250,8 @@ html.mp-no-lyrics #lyric-trans-btn {
   html.mp-is-mobile .player-right {
     display: none;
     position: fixed;
-    top: max(12%, env(safe-area-inset-top, 0px) + 40px);
+    /* 与手机块保持同一留白下限 */
+    top: max(12%, env(safe-area-inset-top, 0px) + 56px);
     left: 0;
     right: 0;
     bottom: 0;

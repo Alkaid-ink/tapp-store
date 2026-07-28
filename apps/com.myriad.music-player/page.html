@@ -77,9 +77,8 @@
       
       <!-- 歌词面板 -->
       <section class="panel panel-lyrics" id="panel-lyrics">
-        <div class="lyrics-scroll" id="lyrics-container">
-          <div class="lyrics-empty" id="lyrics-empty">暂无歌词</div>
-        </div>
+        <!-- 内容全部由波浪引擎在 JS 里构建；无词态改由封面优先布局表达，不放占位 -->
+        <div class="lyrics-scroll" id="lyrics-container"></div>
         <!-- 通用 Fab 组：动效（桌面）+ 翻译 -->
         <div class="fab-host fab-host--br" id="lyrics-fabs" data-fab-group="lyrics">
           <button type="button" class="fab-btn fab-btn--desktop-only active" id="visual-fx-btn" aria-label="动效" aria-pressed="true" title="动效">

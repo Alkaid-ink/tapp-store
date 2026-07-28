@@ -4,6 +4,40 @@
 
 ## Changelog
 
+### 1.1.41
+
+**手机上歌词/列表弹窗直接贴顶。** 手机块本来就写了
+`top: max(12%, env(safe-area-inset-top,0) + 40px)`，计算值也确实是 101px，
+但渲染出来是 `top=0` 且占满全屏。两层原因叠在一起：
+
+1. `.player-right` 与 `.content-area > .player-right` 各设了一次
+   `height: 100%`（桌面双栏需要）。fixed 元素同时拿到 top / bottom / height
+   会过约束，结果被拉回视口顶端
+2. **媒体查询不增加特异性**：手机块里的 `.player-right`(0,1,0) 压不过外层的
+   `.content-area > .player-right`(0,2,0)，所以直接在块内写 `height: auto` 无效，
+   必须用同等特异性的选择器覆盖。平板块用的是
+   `html.mp-is-mobile .player-right`(0,2,0)，所以平板一直是好的——这也是为什么
+   只有手机端出问题
+
+顺带把顶部留白下限从 40px 提到 56px（`env()` 在 tapp 的 iframe 里恒为 0，
+真正兜底的是这个像素值）。
+
+实测（iframe 内真实 390×844 视口，同时也复现了 iframe 里 `env()` 为 0 的实际环境）：
+
+| | 1.1.39 | 1.1.41 |
+| --- | --- | --- |
+| 顶部留白 | **0px / 0%** | **101px / 12.0%** |
+| Sheet 高度 | 844（占满） | 743 |
+
+Sheet 变矮后歌词引擎回归正常：容器 679px 被正确测到、行高/总高/可滚动均正确、
+30 行只绘制 12 行（屏外剔除仍生效）、无运行时异常。
+
+**清理无词占位死代码。** `buildLyricsEmptyHtml()` 每次空态渲染都构建含内联 SVG
+的整块 DOM，随后被 `.lyrics-empty { display:none !important }` 无条件隐藏；
+无词态早已改由封面优先布局表达。移除 JS 构建器、`page.html` 里的占位 div、
+以及约 60 行永不可见的 CSS（`.lyrics-empty` / `-rich` / `-visual` / `-icon` /
+`-title` / `-hint`）。另删掉 `initPage` 里对不存在的 `#page-title` 的赋值。
+
 ### 1.1.40
 
 **减弱动效档位一直被忽略。** 宿主的档位词表是 `'exlight' | 'light' | 'standard'`
