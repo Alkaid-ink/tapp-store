@@ -4,6 +4,10 @@
 
 ## Changelog
 
+### 1.1.9
+
+- 有歌词模式标题降 1px；歌曲信息 gap 统一 5px
+
 ### 1.1.8
 
 - 修复回无词/关侧栏时 hero 闪现：统一列内居中，只过渡 max-width/padding

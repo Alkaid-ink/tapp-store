@@ -311,7 +311,7 @@ html, body {
 .player-hero .track-info {
   display: flex;
   flex-direction: column;
-  gap: 2px; /* 标题/歌手行距收紧；不再叠 margin */
+  gap: 5px; /* 标题/歌手统一 5px */
 }
 
 .player-left {
@@ -563,7 +563,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
+  gap: 5px; /* 与 track-info 一致 */
   width: 100%;
   min-width: 0;
   max-width: 100%;
@@ -585,7 +585,7 @@ html, body {
 }
 
 .track-title {
-  font-size: 22px; /* 整体大 1 号 */
+  font-size: 22px; /* 无词/默认 */
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.28;
@@ -595,6 +595,11 @@ html, body {
   flex: 1 1 0%;
   max-width: 100%;
   overflow: hidden;
+}
+
+/* 有歌词模式（非「非歌词」）：标题降 1px，侧栏态更紧凑 */
+html.mp-has-lyrics .track-title {
+  font-size: 21px;
 }
 
 .badge-vip {
@@ -2155,6 +2160,10 @@ html, body {
     font-size: 19px;
     line-height: 1.28;
   }
+
+  html.mp-has-lyrics .track-title {
+    font-size: 18px;
+  }
   
   .track-artist {
     font-size: 15px;
@@ -2486,6 +2495,10 @@ html, body {
 
   .track-title {
     font-size: 20px;
+  }
+
+  html.mp-has-lyrics .track-title {
+    font-size: 19px;
   }
 
   .track-artist {
