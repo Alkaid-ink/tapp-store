@@ -22,15 +22,23 @@
 
 <!-- 主内容 - 上面6/7内容区 + 底部1/7控制区 -->
 <div id="tapp-content">
+
+  <!-- 轻量状态条：缓冲 / 切歌 / 错误 -->
+  <div id="status-banner" class="status-banner" hidden role="status" aria-live="polite"></div>
   
   <!-- 内容区 - 左2/5封面信息 + 右3/5歌词列表 -->
   <div class="content-area">
     
     <!-- 左侧：封面 + 歌曲信息 -->
     <div class="player-left">
+
+      <p id="player-empty-hint" class="player-empty-hint" hidden></p>
       
       <!-- 封面 -->
       <div class="artwork-container">
+        <div id="track-loading-indicator" class="track-loading-indicator" hidden aria-hidden="true">
+          <span class="track-loading-spinner"></span>
+        </div>
         <!-- Aurora 环境光：三团主题色光斑，分别由低/中/高频驱动 -->
         <div class="artwork-aurora" id="artwork-aurora" aria-hidden="true">
           <span class="aurora-blob aurora-bass"></span>
@@ -146,6 +154,14 @@
             </button>
           </div>
           <p class="playlist-id-hint" id="playlist-id-hint"></p>
+        </div>
+        <div class="playlist-toolbar-extra">
+          <button type="button" id="jump-current-btn" class="jump-current-btn" aria-label="定位当前">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0 0 13 3.06V1h-2v2.06A8.994 8.994 0 0 0 3.06 11H1v2h2.06A8.994 8.994 0 0 0 11 20.94V23h2v-2.06A8.994 8.994 0 0 0 20.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/>
+            </svg>
+            <span class="jump-current-label">定位当前</span>
+          </button>
         </div>
         <div class="playlist-scroll" id="playlist-container">
           <div class="playlist-empty" id="playlist-empty">播放列表为空</div>
