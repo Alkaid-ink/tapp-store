@@ -4,6 +4,11 @@
 
 ## Changelog
 
+### 1.1.8
+
+- 修复回无词/关侧栏时 hero 闪现：统一列内居中，只过渡 max-width/padding
+- 去掉 align/text-align/margin:auto 硬切；封面随 hero 宽缩放
+
 ### 1.1.7
 
 - 移动端：封面+信息同宽 hero；安全区；Sheet 开合与歌词重测时序

@@ -271,25 +271,23 @@ html, body {
    左侧面板 - 封面 + 歌曲信息
    ======================================== */
 
-/* 封面 + 标题：唯一布局单元（尺寸/对齐/位移只改这里，禁止拆开动） */
+/* 封面 + 标题：唯一布局单元（尺寸/对齐/位移只改这里，禁止拆开动）
+   侧栏开合只动 max-width + 父级 padding；禁止 width%/margin:auto/align 硬切（会闪） */
 .player-hero {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: stretch; /* 封面与信息始终同宽；文本相对封面左缘 */
   /* 封面↔信息：适度收紧，避免松散 */
   gap: 16px;
   width: 100%;
-  max-width: 100%; /* 永远不超过左列，禁止顶进歌词区 */
+  max-width: 300px; /* 数值可插值；开合态只改这个 */
   min-width: 0;
   box-sizing: border-box;
   overflow: hidden; /* 跑马灯/长标题硬裁剪边界 */
-  /* 开/关侧栏时 hero 作为整体缓动 */
+  margin-inline: 0; /* 居中交给 .player-left align-items，避免 margin:auto 无法过渡 */
   transition:
-    width 0.46s cubic-bezier(0.33, 0.86, 0.2, 1),
-    max-width 0.46s cubic-bezier(0.33, 0.86, 0.2, 1),
-    margin 0.46s cubic-bezier(0.33, 0.86, 0.2, 1),
-    gap 0.36s cubic-bezier(0.33, 0.86, 0.2, 1),
-    transform 0.46s cubic-bezier(0.33, 0.86, 0.2, 1);
+    max-width 0.48s cubic-bezier(0.33, 0.86, 0.2, 1),
+    gap 0.36s cubic-bezier(0.33, 0.86, 0.2, 1);
 }
 
 /* 封面与标题同宽、同对齐，随 hero 一起伸缩 */
@@ -319,7 +317,8 @@ html, body {
 .player-left {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  /* 始终在左列内水平居中 hero：开合只改变列宽/padding，避免 flex-start↔center 闪跳 */
+  align-items: center;
   justify-content: center;
   padding: 24px;
   padding-left: 12%;
@@ -330,8 +329,7 @@ html, body {
   overflow: hidden; /* 第二道保险：标题绝不画进歌词列 */
   box-sizing: border-box;
   transition:
-    padding 0.46s cubic-bezier(0.33, 0.86, 0.2, 1),
-    justify-content 0.46s cubic-bezier(0.33, 0.86, 0.2, 1);
+    padding 0.48s cubic-bezier(0.33, 0.86, 0.2, 1);
 }
 
 /* 封面容器 - 自适应大小（始终填满 hero 宽） */
@@ -349,8 +347,8 @@ html, body {
   position: absolute;
   left: 0;
   top: 50%;
-  width: min(100%, calc(100% - 20px));
-  max-width: 280px;
+  width: 100%;
+  max-width: 100%;
   aspect-ratio: 1;
   transform: translateY(-50%);
   pointer-events: none;
@@ -483,8 +481,9 @@ html, body {
 
 .artwork-wrapper {
   position: relative;
-  width: min(100%, calc(100% - 20px));
-  max-width: 280px;
+  /* 填满 hero 宽，随 hero max-width 过渡缩放；勿再单独锁 280 导致封面与标题宽脱节 */
+  width: 100%;
+  max-width: 100%;
   aspect-ratio: 1;
   border-radius: var(--radius-lg);
   overflow: hidden;
@@ -2096,21 +2095,21 @@ html, body {
     min-height: 0;
   }
   
-  /* 左侧：间距只在 hero 内；给封面+信息更多呼吸 */
+  /* 左侧：间距只在 hero 内；始终居中，sheet 开合不改对齐 */
   .player-left {
     flex: 1;
     min-height: 0;
     padding: 8px 4px 4px;
     gap: 0;
     justify-content: center;
-    align-items: flex-start;
+    align-items: center;
   }
 
-  /* hero 绑定封面与信息同宽（与桌面一致） */
+  /* hero 绑定封面与信息同宽；全态同一 max-width，避免回无词/关 sheet 闪一下 */
   .player-hero {
     gap: 12px;
-    width: min(100%, 200px);
-    max-width: min(72vw, 220px);
+    width: 100%;
+    max-width: 220px;
   }
 
   .player-hero .artwork-wrapper,
@@ -2391,9 +2390,12 @@ html, body {
     }
 
     .player-hero {
-      width: min(100%, 120px);
       max-width: min(36vw, 140px);
       gap: 8px;
+    }
+
+    html.mp-no-lyrics-layout .player-hero {
+      max-width: min(36vw, 140px);
     }
 
     .track-title {
@@ -2468,23 +2470,19 @@ html, body {
 
   html.mp-side-lyrics .player-left,
   html.mp-side-playlist .player-left {
-    padding: 28px 20px 28px 8%;
+    padding: 28px 8%;
   }
 
   html.mp-side-lyrics .player-hero,
   html.mp-side-playlist .player-hero {
-    max-width: min(100%, 220px);
+    max-width: 220px;
   }
 
   html.mp-side-none .player-hero {
-    max-width: min(100%, 300px);
-    width: min(100%, 300px);
+    max-width: 300px;
   }
 
-  .artwork-wrapper,
-  .artwork-aurora {
-    max-width: 220px;
-  }
+  /* 封面随 hero max-width，不再单独锁死 */
 
   .track-title {
     font-size: 20px;
@@ -2732,30 +2730,27 @@ html.mp-no-lyrics #lyric-trans-btn {
   display: none !important;
 }
 
-/* 移动端：无歌词 / 默认态封面+信息居中，略放大 hero */
+/* 移动端：hero 全态统一尺寸与对齐（无词/有词/sheet 开合均不跳变） */
 @media (max-width: 768px) {
-  html.mp-no-lyrics-layout .player-left,
-  html.mp-side-none .player-left {
+  .player-left {
     align-items: center;
   }
 
-  html.mp-no-lyrics-layout .player-hero,
-  html.mp-side-none .player-hero {
-    align-items: center;
-    margin-inline: auto;
-    width: min(100%, 240px);
-    max-width: min(78vw, 260px);
+  .player-hero {
+    max-width: 220px;
   }
 
-  html.mp-no-lyrics-layout .track-info,
-  html.mp-side-none .player-hero .track-info {
-    align-items: center;
-    text-align: center;
+  html.mp-no-lyrics-layout .player-hero {
+    max-width: 220px; /* 与有词一致，禁止放大闪现 */
   }
 
-  html.mp-no-lyrics-layout .track-title-row,
-  html.mp-side-none .track-title-row {
-    justify-content: center;
+  .player-hero .track-info {
+    text-align: left;
+    align-items: stretch;
+  }
+
+  .track-title-row {
+    justify-content: flex-start;
   }
 
   .lyrics-empty.lyrics-empty-rich {
@@ -2808,54 +2803,46 @@ html.mp-no-lyrics #lyric-trans-btn {
       visibility 0s linear 0s;
   }
 
-  /* none：hero 居中整体 */
-  html.mp-side-none .player-left {
+  /* 三态共用：左列内始终居中 hero，只过渡 padding + max-width
+     （禁止 align-items / text-align / margin:auto 切换 → 回无词/关侧栏不再闪） */
+  .player-left {
     align-items: center;
     justify-content: center;
-    padding: 32px 10%;
+  }
+
+  .player-hero {
+    align-items: stretch;
+    margin-inline: 0;
+    width: 100%;
+  }
+
+  .player-hero .track-info {
+    align-items: stretch;
+    text-align: left;
+  }
+
+  .track-title-row {
+    justify-content: flex-start;
+  }
+
+  /* none：列变宽后 hero 放大，整体仍在视口中心 */
+  html.mp-side-none .player-left {
+    padding: 36px 12%;
   }
 
   html.mp-side-none .player-hero {
-    align-items: center;
-    margin-inline: auto;
-    width: min(100%, 360px);
-    max-width: min(100%, 360px);
+    max-width: 360px;
   }
 
-  html.mp-side-none .player-hero .track-info {
-    align-items: center;
-    text-align: center;
-  }
-
-  html.mp-side-none .track-title-row {
-    justify-content: center;
-  }
-
-  /* 歌词 / 列表打开：左侧布局完全一致；hero 与列边距加大（更透气） */
+  /* 歌词 / 列表：左列变窄 + 内边距加大；hero 略小，仍在列内居中 */
   html.mp-side-lyrics .player-left,
   html.mp-side-playlist .player-left {
-    align-items: flex-start;
-    justify-content: center;
-    padding: 40px 28px 40px 14%;
+    padding: 40px 10% 40px 10%;
   }
 
   html.mp-side-lyrics .player-hero,
   html.mp-side-playlist .player-hero {
-    align-items: flex-start;
-    margin-inline: 0;
-    width: 100%;
-    max-width: min(100%, 280px);
-  }
-
-  html.mp-side-lyrics .player-hero .track-info,
-  html.mp-side-playlist .player-hero .track-info {
-    align-items: flex-start;
-    text-align: left;
-  }
-
-  html.mp-side-lyrics .track-title-row,
-  html.mp-side-playlist .track-title-row {
-    justify-content: flex-start;
+    max-width: 280px;
   }
 
   /* 右侧面板盒模型一致 + 内边距呼吸 */
