@@ -2251,17 +2251,17 @@ html.mp-has-lyrics .track-title {
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   }
 
-  /* —— 悬浮控制坞（胶囊，不贴底成传统栏） —— */
+  /* —— 悬浮控制坞：更紧凑的胶囊 —— */
   .controls-bar {
     flex-direction: column;
     align-items: stretch;
-    gap: 12px;
+    gap: 6px;
     margin:
-      0 max(12px, env(safe-area-inset-right, 0px))
-      calc(10px + env(safe-area-inset-bottom, 0px))
-      max(12px, env(safe-area-inset-left, 0px));
-    padding: 14px 16px 12px;
-    border-radius: 28px;
+      0 max(14px, env(safe-area-inset-right, 0px))
+      calc(8px + env(safe-area-inset-bottom, 0px))
+      max(14px, env(safe-area-inset-left, 0px));
+    padding: 8px 12px 8px;
+    border-radius: 22px;
     background:
       linear-gradient(
         180deg,
@@ -2272,25 +2272,25 @@ html.mp-has-lyrics .track-title {
     backdrop-filter: blur(28px) saturate(1.55);
     border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
     box-shadow:
-      0 16px 48px rgba(0, 0, 0, 0.2),
-      inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent);
+      0 12px 36px rgba(0, 0, 0, 0.18),
+      inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent);
   }
 
   .progress-section {
     order: 1;
     width: 100%;
     max-width: none;
-    gap: 8px;
+    gap: 6px;
   }
 
   .progress-track {
-    height: 5px;
+    height: 4px;
   }
 
   .time-display {
-    font-size: 11px;
-    min-width: 36px;
-    opacity: 0.7;
+    font-size: 10px;
+    min-width: 32px;
+    opacity: 0.65;
     font-variant-numeric: tabular-nums;
   }
 
@@ -2299,9 +2299,9 @@ html.mp-has-lyrics .track-title {
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 32px;
+    gap: 22px;
     width: 100%;
-    padding: 4px 0 2px;
+    padding: 0;
   }
 
   .right-controls {
@@ -2310,10 +2310,10 @@ html.mp-has-lyrics .track-title {
     justify-content: space-between;
     align-items: center;
     width: 100%;
-    max-width: 260px;
+    max-width: 220px;
     margin: 0 auto;
-    gap: 8px;
-    padding-top: 2px;
+    gap: 4px;
+    padding-top: 0;
   }
 
   .volume-section {
@@ -2321,49 +2321,49 @@ html.mp-has-lyrics .track-title {
   }
 
   .control-play {
-    width: 66px;
-    height: 66px;
+    width: 52px;
+    height: 52px;
   }
 
   .control-play svg {
-    width: 30px;
-    height: 30px;
+    width: 24px;
+    height: 24px;
   }
 
   .control-main {
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
   }
 
   .control-main svg {
-    width: 26px;
-    height: 26px;
+    width: 22px;
+    height: 22px;
   }
 
   .tab-btn {
-    width: 46px;
-    height: 46px;
-    min-width: 46px;
-    min-height: 46px;
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    min-height: 38px;
     z-index: 20;
-    border-radius: 14px;
+    border-radius: 12px;
   }
 
   .tab-btn svg {
-    width: 22px;
-    height: 22px;
+    width: 18px;
+    height: 18px;
     pointer-events: none;
   }
 
   .control-secondary {
-    width: 42px;
-    height: 42px;
-    border-radius: 14px;
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
   }
 
   .control-secondary svg {
-    width: 20px;
-    height: 20px;
+    width: 17px;
+    height: 17px;
   }
 
   /* —— Sheet：flex 顶栏 + 内容区，保证歌词容器有明确高度 —— */
@@ -2564,20 +2564,32 @@ html.mp-has-lyrics .track-title {
     }
 
     .controls-bar {
-      gap: 6px;
-      margin-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
-      padding: 8px 12px;
-      border-radius: 20px;
+      gap: 4px;
+      margin-bottom: calc(4px + env(safe-area-inset-bottom, 0px));
+      padding: 6px 10px;
+      border-radius: 18px;
     }
 
     .controls-group {
-      gap: 20px;
+      gap: 16px;
       padding: 0;
     }
 
     .control-play {
-      width: 48px;
-      height: 48px;
+      width: 44px;
+      height: 44px;
+    }
+
+    .control-main {
+      width: 36px;
+      height: 36px;
+    }
+
+    .tab-btn {
+      width: 34px;
+      height: 34px;
+      min-width: 34px;
+      min-height: 34px;
     }
 
     .player-right {
