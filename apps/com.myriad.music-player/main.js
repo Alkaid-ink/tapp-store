@@ -1,4 +1,4 @@
-// Music Player Tapp v1.0.6
+// Music Player Tapp v1.0.7
 
 var MP_DEBUG = false;
 function mpDebug() {
@@ -473,15 +473,20 @@ function isFallbackThemeColor(c) {
 
 /**
  * 应用主题色。
- * - 宿主默认红 / 空色 / forceNeutral：若已有 lastColors 则跳过（保留上一首）
+ * - 宿主 hasThemePalette===false / 默认红 / 空色：若已有 lastColors 则跳过
  * - 仅真实取色结果才覆盖
  */
 function applyThemeColors(status, forceNeutral) {
   var root = document.documentElement;
   var incoming = status && status.primaryColor;
-  var isFallback = forceNeutral || isFallbackThemeColor(incoming) ||
-    (status && status.secondaryColor && isFallbackThemeColor(status.secondaryColor) &&
-     status.secondaryColor === status.primaryColor);
+  var hostSaysReal = status && status.hasThemePalette === true;
+  var hostSaysPlaceholder = status && status.hasThemePalette === false;
+  var isFallback = forceNeutral || hostSaysPlaceholder ||
+    (!hostSaysReal && (
+      isFallbackThemeColor(incoming) ||
+      (status && status.secondaryColor && isFallbackThemeColor(status.secondaryColor) &&
+       status.secondaryColor === status.primaryColor)
+    ));
 
   // 已有主题且新状态不是可靠新色 → 保持上一首，杜绝闪默认色
   if (isFallback && lastColors.primary) {
