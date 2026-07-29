@@ -621,5 +621,7 @@
   "unpublishFail": "公開の取り消しに失敗しました",
   "unrepostBtn": "リポストを取り消す",
   "unrepostFail": "リポスト解除に失敗しました",
-  "updatingBtn": "更新"
+  "updatingBtn": "更新",
+  "chatMetaMore": "詳細",
+  "chatMetaLess": "閉じる"
 }

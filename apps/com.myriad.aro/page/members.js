@@ -374,20 +374,81 @@ function renderChatHeader() {
     var liveMemberCount = (state.members && state.members.length && typeof activeMemberCountFromList === 'function')
       ? activeMemberCountFromList(state.members)
       : (rm.member_count || 0);
-    var metaHtml = '<span class="meta-badge badge-room">' + liveMemberCount + ' ' + esc(lang.members) + '</span>'
-      + (rm.is_public ? '<span class="meta-badge badge-public">' + esc(lang.publicGroup || 'Public') + '</span>' : '')
-      + (roomPending ? '<span class="meta-badge badge-pending">' + esc(lang.pending || 'Pending') + '</span>' : '')
-      + (canSelfJoin ? '<span class="meta-badge badge-pending">' + esc(lang.openJoin || 'Open') + '</span>' : '')
-      + (!roomPending && rm.my_role && rm.my_role !== 'member' ? '<span class="meta-badge badge-role">' + esc(roleLabel(rm.my_role)) + '</span>' : '')
-      + e2eStatusBadgeHtml();
+
+    // Room header meta: default collapsed — only member count + critical status.
+    // Public / role / E2E-on / room id live behind a one-tap expand.
+    if (!state.chatMetaUi) state.chatMetaUi = { expanded: false, roomId: null };
+    var roomKey = String(rm.room_id || rm.id || rm.name || '');
+    if (state.chatMetaUi.roomId !== roomKey) {
+      state.chatMetaUi.roomId = roomKey;
+      state.chatMetaUi.expanded = false;
+    }
+    var metaExpanded = !!state.chatMetaUi.expanded;
+
+    var primaryBits = [];
+    primaryBits.push('<span class="meta-badge badge-room">' + liveMemberCount + ' ' + esc(lang.members) + '</span>');
+    if (roomPending) {
+      primaryBits.push('<span class="meta-badge badge-pending">' + esc(lang.pending || 'Pending') + '</span>');
+    }
+    // Keep "waiting for E2E" visible — actionable status; "encrypted" is secondary.
+    var e2eHtml = typeof e2eStatusBadgeHtml === 'function' ? e2eStatusBadgeHtml() : '';
+    var e2eIsWait = e2eHtml.indexOf('badge-e2e-wait') !== -1;
+    if (e2eIsWait) primaryBits.push(e2eHtml);
+
+    var extraBits = [];
+    if (rm.is_public) {
+      extraBits.push('<span class="meta-badge badge-public">' + esc(lang.publicGroup || 'Public') + '</span>');
+    }
+    if (canSelfJoin) {
+      extraBits.push('<span class="meta-badge badge-pending">' + esc(lang.openJoin || 'Open') + '</span>');
+    }
+    if (!roomPending && rm.my_role && rm.my_role !== 'member') {
+      extraBits.push('<span class="meta-badge badge-role">' + esc(roleLabel(rm.my_role)) + '</span>');
+    }
+    if (e2eHtml && !e2eIsWait) extraBits.push(e2eHtml);
     if (rm.is_public && rm.room_id) {
       var shareId = typeof shareableRoomId === 'function' ? shareableRoomId(rm) : rm.room_id;
-      metaHtml += '<button type="button" class="chat-room-id-btn" id="chat-room-id-btn" title="'
+      extraBits.push(
+        '<button type="button" class="chat-room-id-btn" id="chat-room-id-btn" title="'
         + esc(lang.copyRoomId || lang.copy || 'Copy') + '">'
-        + esc((lang.roomId || 'ID') + ': ' + shareId) + '</button>';
+        + esc((lang.roomId || 'ID') + ': ' + shareId) + '</button>'
+      );
     }
+
+    var hasExtra = extraBits.length > 0;
+    var moreLabel = lang.chatMetaMore || lang.more || 'More';
+    var lessLabel = lang.chatMetaLess || lang.less || 'Less';
+    var toggleLabel = metaExpanded ? lessLabel : moreLabel;
+    var metaHtml = '<div class="chat-meta-room' + (metaExpanded ? ' is-expanded' : ' is-collapsed') + '">';
+    metaHtml += '<div class="chat-meta-primary">';
+    metaHtml += primaryBits.join('');
+    if (hasExtra) {
+      metaHtml += '<button type="button" class="chat-meta-toggle" id="chat-meta-toggle"'
+        + ' aria-expanded="' + (metaExpanded ? 'true' : 'false') + '"'
+        + ' title="' + esc(toggleLabel) + '" aria-label="' + esc(toggleLabel) + '">'
+        + '<span class="chat-meta-toggle-label">' + esc(toggleLabel) + '</span>'
+        + '<svg class="chat-meta-toggle-chevron" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>'
+        + '</button>';
+    }
+    metaHtml += '</div>';
+    if (hasExtra) {
+      metaHtml += '<div class="chat-meta-extra" id="chat-meta-extra"'
+        + (metaExpanded ? '' : ' hidden') + '>';
+      metaHtml += extraBits.join('');
+      metaHtml += '</div>';
+    }
+    metaHtml += '</div>';
     metaEl.innerHTML = metaHtml;
     var menuItems = '';
+    // Fold secondary chrome (history / files) into ⋯ so the toolbar stays: members + manage.
+    if (!roomPending) {
+      menuItems += '<button type="button" class="manage-item" id="action-room-history" role="menuitem">'
+        + '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'
+        + esc(lang.historyTitle || 'Chat history') + '</button>';
+      menuItems += '<button type="button" class="manage-item" id="action-room-files" role="menuitem">'
+        + '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>'
+        + esc(lang.roomFilesTitle || 'Group files') + '</button>';
+    }
     if (!roomPending && (rm.my_role === 'owner' || rm.my_role === 'admin')) {
       menuItems += '<button type="button" class="manage-item" id="action-edit-room" role="menuitem">'
         + '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
@@ -419,21 +480,18 @@ function renderChatHeader() {
         + '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>'
         + esc(e2eMenuLabel) + '</button>';
     }
-    // History + group files when room is open; invite/join CTAs are mid-pane only.
-    var historyBtn = typeof historyHeaderButtonHtml === 'function' ? historyHeaderButtonHtml() : '';
-    var filesBtn = typeof roomFilesHeaderButtonHtml === 'function' ? roomFilesHeaderButtonHtml() : '';
+    // Compact toolbar: members + ⋯ only (history/files folded into menu).
     var memberToggleHtml = '<button type="button" class="aro-icon-btn member-toggle-btn" id="member-toggle-btn" title="' + esc(lang.members) + '" aria-label="' + esc(lang.members) + '">'
       + '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>'
       + '</button>';
-    var roomChrome = historyBtn + filesBtn + memberToggleHtml;
     if (roomPending || canSelfJoin) {
       // Header stays free of accept/reject/join; mid-pane card owns those CTAs.
       actionsEl.innerHTML = '';
     } else if (menuItems) {
-      actionsEl.innerHTML = roomChrome + '<div class="manage-wrap"><button type="button" class="aro-icon-btn manage-btn" id="manage-toggle" title="' + esc(lang.manage) + '" aria-label="' + esc(lang.manage) + '">⋯</button>'
+      actionsEl.innerHTML = memberToggleHtml + '<div class="manage-wrap"><button type="button" class="aro-icon-btn manage-btn" id="manage-toggle" title="' + esc(lang.manage) + '" aria-label="' + esc(lang.manage) + '">⋯</button>'
         + '<div class="manage-dropdown" id="manage-dropdown" role="menu">' + menuItems + '</div></div>';
     } else {
-      actionsEl.innerHTML = roomChrome;
+      actionsEl.innerHTML = memberToggleHtml;
     }
   }
 
@@ -446,6 +504,20 @@ function renderChatHeader() {
   });
   var leaveBtn = $('action-leave');
   if (leaveBtn) leaveBtn.addEventListener('click', function () { closeManageDropdown(); doLeaveRoom(); });
+  var histMenuBtn = $('action-room-history');
+  if (histMenuBtn) {
+    histMenuBtn.addEventListener('click', function () {
+      closeManageDropdown();
+      if (typeof openChatHistory === 'function') openChatHistory();
+    });
+  }
+  var filesMenuBtn = $('action-room-files');
+  if (filesMenuBtn) {
+    filesMenuBtn.addEventListener('click', function () {
+      closeManageDropdown();
+      if (typeof openRoomFiles === 'function') openRoomFiles();
+    });
+  }
   var editRoomBtn = $('action-edit-room');
   if (editRoomBtn) editRoomBtn.addEventListener('click', function () { closeManageDropdown(); showEditRoomDialog(); });
   var stickersBtn = $('action-room-stickers');
@@ -483,6 +555,16 @@ function renderChatHeader() {
   if (typeof wireHistoryHeaderButton === 'function') wireHistoryHeaderButton();
   if (typeof wireRoomFilesHeaderButton === 'function') wireRoomFilesHeaderButton();
   if (typeof renderE2eReadyBanner === 'function') renderE2eReadyBanner();
+  var metaToggle = $('chat-meta-toggle');
+  if (metaToggle) {
+    metaToggle.addEventListener('click', function (e) {
+      try { e.stopPropagation(); } catch (eSp) { /* ignore */ }
+      if (!state.chatMetaUi) state.chatMetaUi = { expanded: false, roomId: null };
+      state.chatMetaUi.expanded = !state.chatMetaUi.expanded;
+      // Re-render so aria/labels and hidden attrs stay consistent.
+      renderChatHeader();
+    });
+  }
   var roomIdBtn = $('chat-room-id-btn');
   if (roomIdBtn && state.roomDetail && state.roomDetail.room_id) {
     roomIdBtn.addEventListener('click', function () {

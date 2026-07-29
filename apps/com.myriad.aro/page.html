@@ -492,7 +492,7 @@
   </div>
 
   <!-- 关注对话框（从 feed + 菜单打开） -->
-  <div id="feed-follow-dialog" class="create-overlay" style="display:none">
+  <div id="feed-follow-dialog" class="create-overlay" style="display:none;pointer-events:none">
     <div class="create-dialog">
       <div class="create-dialog-header">
         <h3 id="feed-follow-dialog-title" class="create-dialog-title">关注</h3>
@@ -506,7 +506,7 @@
   </div>
 
   <!-- 发帖对话框（从 feed + 菜单打开；与关注弹窗同级） -->
-  <div id="feed-compose-dialog" class="create-overlay feed-compose-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="feed-compose-dialog-title">
+  <div id="feed-compose-dialog" class="create-overlay feed-compose-overlay" style="display:none;pointer-events:none" role="dialog" aria-modal="true" aria-labelledby="feed-compose-dialog-title">
     <div class="create-dialog feed-compose-dialog">
       <div class="create-dialog-header">
         <div class="feed-compose-title-row">
@@ -542,7 +542,7 @@
   </div>
 
   <!-- 引用转发对话框 -->
-  <div id="quote-repost-dialog" class="create-overlay feed-compose-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="quote-repost-title" hidden>
+  <div id="quote-repost-dialog" class="create-overlay feed-compose-overlay" style="display:none;pointer-events:none" role="dialog" aria-modal="true" aria-labelledby="quote-repost-title" hidden>
     <div class="create-dialog feed-compose-dialog quote-repost-dialog">
       <div class="create-dialog-header">
         <h3 id="quote-repost-title" class="create-dialog-title">Quote repost</h3>
@@ -562,7 +562,7 @@
   </div>
 
   <!-- 查看被引用/转发的原文（无需关注作者） -->
-  <div id="quote-view-dialog" class="create-overlay feed-compose-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="quote-view-title" hidden>
+  <div id="quote-view-dialog" class="create-overlay feed-compose-overlay" style="display:none;pointer-events:none" role="dialog" aria-modal="true" aria-labelledby="quote-view-title" hidden>
     <div class="create-dialog feed-compose-dialog quote-view-dialog">
       <div class="create-dialog-header">
         <h3 id="quote-view-title" class="create-dialog-title">Original post</h3>
@@ -580,7 +580,7 @@
   </div>
 
   <!-- Share external (compose text + optional X intent — never server-side post) -->
-  <div id="feed-share-dialog" class="create-overlay feed-compose-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="feed-share-title" hidden>
+  <div id="feed-share-dialog" class="create-overlay feed-compose-overlay" style="display:none;pointer-events:none" role="dialog" aria-modal="true" aria-labelledby="feed-share-title" hidden>
     <div class="create-dialog feed-compose-dialog feed-share-dialog">
       <div class="create-dialog-header">
         <h3 id="feed-share-title" class="create-dialog-title">Share</h3>

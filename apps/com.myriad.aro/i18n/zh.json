@@ -621,5 +621,7 @@
   "unpublishFail": "取消发布失败",
   "unrepostBtn": "取消转发",
   "unrepostFail": "取消转发失败",
-  "updatingBtn": "更新"
+  "updatingBtn": "更新",
+  "chatMetaMore": "详情",
+  "chatMetaLess": "收起"
 }

@@ -3,8 +3,20 @@
 .dark{--text-primary:rgba(255,255,255,.92);--text-secondary:rgba(255,255,255,.5);--bg-primary:#0a0a0a;color-scheme:dark}
 body.dark{background:#0a0a0a;color:rgba(255,255,255,.92)}
 
-/* ===== Tapp Content Override ===== */
-#tapp-content{display:flex!important;flex-direction:column!important;overflow:hidden!important}
+/* ===== Tapp Content Override =====
+   Host PAGE_CSS uses overflow:auto on #tapp-content; Aro owns all scrollports.
+   height/min-height keep the flex chain definite so .feed-main can scroll. */
+#tapp-content{
+  display:flex!important;
+  flex-direction:column!important;
+  overflow:hidden!important;
+  height:100%!important;
+  min-height:0!important;
+  max-height:100%!important;
+  pointer-events:auto!important;
+  touch-action:manipulation;
+  -webkit-overflow-scrolling:auto;
+}
 
 /* ===== Aro Nav ===== */
 .aro-nav{display:flex;align-items:center;gap:4px;padding:8px 12px;border-bottom:1px solid rgba(128,128,128,.08);flex-shrink:0;background:rgba(255,255,255,.78);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);position:relative;z-index:30;pointer-events:auto}
@@ -20,8 +32,8 @@ body.dark{background:#0a0a0a;color:rgba(255,255,255,.92)}
 .nav-feed-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:96px}
 
 /* ===== Aro Views ===== */
-.aro-view{display:none;flex:1;min-height:0;min-width:0;width:100%;overflow:hidden;pointer-events:none}
-.aro-view-active{display:flex;flex-direction:column;width:100%;max-width:none;pointer-events:auto}
+.aro-view{display:none;flex:1 1 0%;min-height:0;min-width:0;width:100%;overflow:hidden;pointer-events:none}
+.aro-view-active{display:flex;flex-direction:column;flex:1 1 0%;min-height:0;width:100%;max-width:none;overflow:hidden;pointer-events:auto;touch-action:manipulation}
 
 /* ===== Panel Layout (sidebar+content, for rings) ===== */
 .aro-panel-layout{display:flex;flex:1;min-height:0;overflow:hidden}
@@ -48,7 +60,7 @@ body.dark{background:#0a0a0a;color:rgba(255,255,255,.92)}
 /* ===== Feed Layout (X-style sidebar + content) =====
    Two columns only: [sidebar | main]. Main fills remaining width after sidebar
    (no border-right phantom third column). Content stretches naturally inside main. */
-.feed-layout{display:flex;flex:1 1 auto;width:100%;max-width:none;min-height:0;min-width:0;overflow:hidden}
+.feed-layout{display:flex;flex:1 1 0%;width:100%;max-width:none;min-height:0;min-width:0;height:100%;overflow:hidden;pointer-events:auto}
 /* Feed Sidebar */
 .feed-sidebar{width:232px;flex:0 0 232px;flex-shrink:0;border-right:1px solid rgba(128,128,128,.08);display:flex;flex-direction:column;padding:14px 12px;overflow:hidden}
 .feed-avatar{width:36px;height:36px;border-radius:50%;background:rgba(var(--tapp-primary-rgb,128,128,128),.1);color:var(--tapp-primary,#888);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;flex-shrink:0;overflow:hidden}
@@ -83,17 +95,42 @@ body.dark{background:#0a0a0a;color:rgba(255,255,255,.92)}
 .feed-profile-tablet-popover{display:none}
 .feed-profile-tablet-main{display:flex;align-items:center;gap:9px;min-width:0}
 .feed-profile-mobile{display:none;margin:10px 16px 0;flex-shrink:0}
-/* Feed Main — fills remaining width after sidebar (header spans full main; no third-column border) */
+/* Feed Main — primary scrollport for timeline/list (must stay height-constrained).
+   Match messenger .conv-list: min-height:0 + -webkit-overflow-scrolling + explicit PE. */
 .feed-main{
   flex:1 1 0%;
   min-width:0;
+  min-height:0;
   max-width:none!important;
   width:auto;
+  height:auto;
+  align-self:stretch;
   display:flex;
   flex-direction:column;
+  overflow-x:hidden;
   overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;
+  touch-action:pan-y;
+  pointer-events:auto;
   position:relative;
   border-right:none!important;
+  box-sizing:border-box;
+}
+.feed-main .feed-content,
+.feed-main .feed-search-bar,
+.feed-main .feed-mobile-tabs,
+.feed-main .feed-main-header,
+.feed-main .feed-profile-mobile{
+  pointer-events:auto;
+  touch-action:manipulation;
+}
+.feed-main .feed-content{
+  /* Grow with items; parent .feed-main scrolls — do not nest a second scrollport. */
+  flex:0 0 auto;
+  min-height:0;
+  width:100%;
+  max-width:none;
   box-sizing:border-box;
 }
 /* Feed header */
@@ -236,8 +273,9 @@ body.dark{background:#0a0a0a;color:rgba(255,255,255,.92)}
 /* Follow dialog form (reuses create-dialog shell) */
 .feed-follow-input,.create-form #feed-follow-input{width:100%}
 #feed-follow-btn:disabled{opacity:.5;cursor:not-allowed}
-/* Feed content / empty — fill main column naturally (host shell caps overall width) */
-.feed-content{flex:1 1 auto;min-height:0;width:100%;max-width:none;box-sizing:border-box}
+/* Feed content / empty — fill main column naturally (host shell caps overall width).
+   Scroll lives on .feed-main; .feed-content is content-sized (see .feed-main .feed-content). */
+.feed-content{flex:0 0 auto;min-height:0;width:100%;max-width:none;box-sizing:border-box;pointer-events:auto}
 .feed-empty{min-height:280px;padding:56px 24px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--text-secondary,#536471);font-size:13px;line-height:1.5;width:100%;max-width:none;box-sizing:border-box}
 .feed-main.feed-empty-visible .feed-content{display:none}
 .feed-main.feed-empty-visible .feed-empty{display:flex;flex:1;min-height:0}
@@ -1203,7 +1241,29 @@ button.is-busy{opacity:.72;cursor:wait;pointer-events:none}
 .chat-hdr-avatar img{width:100%;height:100%;object-fit:cover}
 .chat-header-info{min-width:0;flex:1}
 .chat-name{font-size:15px;font-weight:700;color:var(--text-primary,#1a1a1a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.01em}
-.chat-meta{display:flex;gap:6px;align-items:center;margin-top:3px;flex-wrap:wrap}
+.chat-meta{display:flex;gap:6px;align-items:center;margin-top:3px;flex-wrap:wrap;min-width:0;max-width:100%}
+/* Room meta: default one compact row; extras expand on demand */
+.chat-meta-room{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0;width:100%;max-width:100%}
+.chat-meta-primary{display:flex;flex-wrap:nowrap;align-items:center;gap:5px;min-width:0;max-width:100%;overflow:hidden}
+.chat-meta-primary .meta-badge{flex-shrink:0;max-width:min(40vw,140px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-meta-extra{display:none;flex-wrap:wrap;align-items:center;gap:5px;width:100%;min-width:0;padding-top:1px}
+.chat-meta-room.is-expanded .chat-meta-extra{display:flex}
+.chat-meta-extra[hidden]{display:none!important}
+.chat-meta-toggle{
+  display:inline-flex;align-items:center;gap:2px;flex-shrink:0;
+  margin:0;padding:1px 6px 1px 7px;border:none;border-radius:999px;
+  background:rgba(128,128,128,.08);color:var(--text-secondary,#536471);
+  font-size:10px;font-weight:650;font-family:inherit;line-height:1.3;cursor:pointer;
+  transition:background .12s,color .12s,transform .1s;
+  touch-action:manipulation;-webkit-tap-highlight-color:transparent;
+}
+.chat-meta-toggle:hover{background:rgba(var(--tapp-primary-rgb,99,102,241),.1);color:var(--tapp-primary,#6366f1)}
+.chat-meta-toggle:active{transform:scale(.96)}
+.chat-meta-toggle:focus-visible{outline:2px solid rgba(var(--tapp-primary-rgb,99,102,241),.4);outline-offset:1px}
+.chat-meta-toggle-chevron{flex-shrink:0;opacity:.75;transition:transform .15s ease}
+.chat-meta-room.is-expanded .chat-meta-toggle-chevron{transform:rotate(180deg)}
+.dark .chat-meta-toggle{background:rgba(255,255,255,.08);color:rgba(255,255,255,.55)}
+.dark .chat-meta-toggle:hover{background:rgba(var(--tapp-primary-rgb,99,102,241),.18);color:var(--tapp-primary,#a5b4fc)}
 .meta-badge{font-size:10px;padding:2px 8px;border-radius:999px;background:rgba(var(--tapp-primary-rgb,128,128,128),.08);color:var(--tapp-primary,#6366f1);font-weight:600}
 .badge-channel{}
 .badge-room{}
@@ -1226,7 +1286,8 @@ button.is-busy{opacity:.72;cursor:wait;pointer-events:none}
 .dark .e2e-ready-banner{color:#4ade80;background:rgba(34,197,94,.12);border-bottom-color:rgba(34,197,94,.22)}
 .e2e-ready-banner svg{flex-shrink:0}
 .e2e-ready-banner[hidden]{display:none!important}
-.chat-actions{display:flex;gap:6px;flex-shrink:0;align-items:center;flex-wrap:wrap;min-width:0;max-width:min(100%,52vw);justify-content:flex-end}
+/* Room header tools: keep slim (members + ⋯); avoid wrapping into multi-row toolbar */
+.chat-actions{display:flex;gap:4px;flex-shrink:0;align-items:center;flex-wrap:nowrap;min-width:0;max-width:min(100%,40vw);justify-content:flex-end}
 .chat-header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid rgba(128,128,128,.06);flex-shrink:0;min-width:0}
 .chat-header-info{min-width:0;flex:1;overflow:hidden}
 #history-open-btn,#room-files-open-btn,.member-toggle-btn,.manage-btn{flex-shrink:0}
@@ -1536,7 +1597,10 @@ button.is-busy{opacity:.72;cursor:wait;pointer-events:none}
 .dark .sticker-btn.sticker-btn-active{background:rgba(var(--tapp-primary-rgb,100,100,255),.18)!important;color:var(--tapp-primary,#a5b4fc)}
 .composer-locked .sticker-btn{pointer-events:none!important}
 /* Pick mine vs group when adding from a chat image */
-.sticker-target-overlay{position:fixed;inset:0;z-index:220;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.4);padding:16px;box-sizing:border-box;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+/* Default display:none + PE none — previous display:flex default could leave a full-screen click shield if a node was left in the DOM. */
+.sticker-target-overlay{position:fixed;inset:0;z-index:220;display:none;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.4);padding:16px;box-sizing:border-box;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);pointer-events:none}
+.sticker-target-overlay[style*="display: flex"],
+.sticker-target-overlay[style*="display:flex"]{pointer-events:auto}
 .sticker-target-sheet{width:100%;max-width:360px;background:var(--bg-primary,#fff);border-radius:18px;padding:16px 14px 12px;box-shadow:0 16px 48px rgba(0,0,0,.22);display:flex;flex-direction:column;gap:6px}
 .sticker-target-title{font-size:15px;font-weight:700;padding:2px 8px 12px;color:var(--text-primary,#1a1a1a);letter-spacing:-.01em}
 .sticker-target-item{border:none;background:rgba(128,128,128,.06);border-radius:12px;padding:13px 14px;text-align:left;font-size:14px;font-weight:650;cursor:pointer;color:var(--text-primary,#1a1a1a);transition:background .12s}
@@ -2562,7 +2626,7 @@ button.aro-select-trigger.create-input{
 .create-divider{height:1px;background:rgba(128,128,128,.12);margin:4px 0}
 .create-submit-secondary{background:rgba(128,128,128,.1)!important;color:var(--text-primary,#1a1a1a)!important;box-shadow:none!important}
 .meta-badge.badge-public{background:rgba(34,197,94,.12);color:#16a34a}
-.chat-room-id-btn{display:inline-flex;align-items:center;gap:4px;max-width:min(220px,42vw);margin-top:2px;padding:2px 6px;border:none;border-radius:6px;background:rgba(128,128,128,.08);color:var(--text-secondary,#666);font-size:10.5px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-room-id-btn{display:inline-flex;align-items:center;gap:4px;max-width:min(100%,280px);margin:0;padding:2px 6px;border:none;border-radius:6px;background:rgba(128,128,128,.08);color:var(--text-secondary,#666);font-size:10.5px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chat-room-id-btn:hover{background:rgba(128,128,128,.14);color:var(--text-primary,#1a1a1a)}
 .dark .edit-room-id-value,.dark .chat-room-id-btn{background:rgba(255,255,255,.06)}
 .dark .meta-badge.badge-public{background:rgba(34,197,94,.18);color:#4ade80}
@@ -2871,9 +2935,11 @@ button.aro-select-trigger.create-input{
   /* Chat header: name must yield space to action icons */
   .chat-header{gap:8px;padding:10px 10px}
   .chat-name{font-size:14px;max-width:100%}
-  .chat-actions{max-width:min(48vw,200px);gap:4px}
+  .chat-actions{max-width:min(36vw,120px);gap:2px;flex-wrap:nowrap}
   .chat-meta{gap:4px;max-width:100%}
   .meta-badge{font-size:9px;padding:2px 6px;max-width:min(42vw,140px)}
+  .chat-meta-toggle{font-size:9px;padding:1px 5px}
+  .chat-meta-toggle-label{max-width:4.5em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
   /* Bubbles: less side padding so content width is usable */
   .msg-local{padding-left:max(12px,8vw)}
@@ -2943,9 +3009,10 @@ button.aro-select-trigger.create-input{
   .msg-local{padding-left:8px}
   .msg-remote{padding-right:8px}
   .msg-bubble{max-width:92%}
-  .chat-actions{max-width:42vw}
+  .chat-actions{max-width:32vw}
   .nav-feed-name{max-width:56px}
   .feed-item-name{max-width:min(38%,120px)!important}
   .meta-badge{max-width:min(36vw,100px)}
+  .chat-meta-toggle-label{display:none} /* chevron-only on very narrow phones */
   .aro-nav-item{padding:6px 8px;font-size:10px}
 }

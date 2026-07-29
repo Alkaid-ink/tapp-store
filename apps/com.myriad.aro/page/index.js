@@ -133,6 +133,16 @@ async function init() {
   applyAdminControls();
   applyRoleControls();
 
+  // Seal any leftover fixed overlays before binding (reinstall / hot reload / partial dismiss).
+  // Prevents a full-screen click shield that blocks feed scroll + taps.
+  try {
+    if (typeof sealAroInteractionSurfaces === 'function') {
+      sealAroInteractionSurfaces({ keepChat: false, keepConfirm: true });
+    } else if (typeof dismissTransientUi === 'function') {
+      dismissTransientUi({ keepChat: false });
+    }
+  } catch (eSealBoot) { /* ignore */ }
+
   bindEvents();
   if (!state.isGuest) {
     bindRealtimeListeners();
@@ -156,6 +166,13 @@ async function init() {
   }
 
   applyDialogLabels();
+
+  // Second seal after first paint/data — openQuotedPostDetail etc. must not leave PE shields.
+  try {
+    if (typeof sealAroInteractionSurfaces === 'function') {
+      sealAroInteractionSurfaces({ keepChat: true, keepConfirm: true });
+    }
+  } catch (eSealReady) { /* ignore */ }
 
   // ARO-14: track locale subscription for destroy
   var unsubLocale = Tapp.ui.onLocaleChange(function (newLocale) {

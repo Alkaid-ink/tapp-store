@@ -1943,7 +1943,9 @@ function switchView(view) {
   });
 
   // Leaving a view: clear overlays that can pin over the whole #tapp-content (create/compose).
-  if (typeof dismissTransientUi === 'function') {
+  if (typeof sealAroInteractionSurfaces === 'function') {
+    sealAroInteractionSurfaces({ keepChat: view === 'messages', keepConfirm: true });
+  } else if (typeof dismissTransientUi === 'function') {
     dismissTransientUi({ keepChat: view === 'messages' });
   }
 

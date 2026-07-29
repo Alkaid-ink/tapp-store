@@ -494,10 +494,66 @@ function forceHideInteractive(el) {
     el.classList.remove('aro-leaving', 'aro-history-enter', 'aro-view-enter', 'aro-panel-enter', 'aro-menu-enter', 'open', 'is-open');
     el.style.pointerEvents = 'none';
     el.style.display = 'none';
-    if (el.hasAttribute && (el.hasAttribute('hidden') || el.getAttribute('aria-modal') === 'true' || el.classList.contains('history-overlay') || el.classList.contains('create-overlay') || el.classList.contains('confirm-overlay') || el.classList.contains('picker-overlay') || el.classList.contains('forward-overlay'))) {
+    if (el.hasAttribute && (el.hasAttribute('hidden') || el.getAttribute('aria-modal') === 'true' || el.classList.contains('history-overlay') || el.classList.contains('create-overlay') || el.classList.contains('confirm-overlay') || el.classList.contains('picker-overlay') || el.classList.contains('forward-overlay') || el.classList.contains('img-viewer') || el.classList.contains('sticker-target-overlay'))) {
       el.hidden = true;
     }
   } catch (eForce) { /* ignore */ }
+}
+
+/**
+ * Seal closed fixed/absolute overlays so a partial dismiss never leaves a click shield
+ * over the feed or messenger. Safe on boot and after view switches.
+ * Does not kill an open confirm dialog (would hang await confirm()).
+ * @param {{ keepChat?: boolean, keepConfirm?: boolean }} [opts]
+ */
+function sealAroInteractionSurfaces(opts) {
+  opts = opts || {};
+  try {
+    if (typeof dismissTransientUi === 'function') {
+      dismissTransientUi({ keepChat: !!opts.keepChat });
+    }
+  } catch (eDismiss) { /* ignore */ }
+
+  // PE-seal any overlay that is not visibly open (covers partial state: display:none but PE auto)
+  try {
+    var sel = '.create-overlay, .history-overlay, .picker-overlay, .forward-overlay, .img-viewer, .sticker-target-overlay';
+    if (!opts.keepConfirm) sel += ', .confirm-overlay';
+    document.querySelectorAll(sel).forEach(function (el) {
+      if (!el || !el.isConnected) return;
+      var styleDisp = '';
+      try { styleDisp = String(el.style && el.style.display || ''); } catch (eD) { /* ignore */ }
+      var computedDisp = '';
+      try {
+        computedDisp = window.getComputedStyle ? String(getComputedStyle(el).display || '') : '';
+      } catch (eC) { /* ignore */ }
+      var isHidden = !!el.hidden
+        || styleDisp === 'none'
+        || computedDisp === 'none'
+        || el.classList.contains('aro-leaving');
+      if (isHidden) {
+        try {
+          el.style.pointerEvents = 'none';
+          if (styleDisp !== 'none') el.style.display = 'none';
+        } catch (eSeal) { /* ignore */ }
+      }
+    });
+  } catch (e1) { /* ignore */ }
+
+  // Ensure feed scrollport can receive pan/click after seal
+  try {
+    var feedView = typeof $ === 'function' ? $('view-feed') : document.getElementById('view-feed');
+    if (feedView && feedView.classList.contains('aro-view-active')) {
+      feedView.style.pointerEvents = '';
+      if (feedView.style.display === 'none') feedView.style.display = '';
+    }
+    var feedMain = document.querySelector('#view-feed.aro-view-active .feed-main, .aro-view-active .feed-main');
+    if (feedMain) {
+      feedMain.style.pointerEvents = 'auto';
+      try { feedMain.style.touchAction = 'pan-y'; } catch (eTa) { /* ignore */ }
+    }
+    var content = typeof $ === 'function' ? $('feed-content') : document.getElementById('feed-content');
+    if (content) content.style.pointerEvents = 'auto';
+  } catch (e2) { /* ignore */ }
 }
 
 /**
@@ -601,6 +657,17 @@ function dismissTransientUi(opts) {
       try { el.remove(); } catch (eR) { /* ignore */ }
     });
   } catch (e6) { /* ignore */ }
+  // Closed static overlays: always PE-none even when already display:none (partial state).
+  try {
+    document.querySelectorAll('.create-overlay, .history-overlay').forEach(function (el) {
+      if (!el) return;
+      var closed = !!el.hidden || el.style.display === 'none'
+        || (window.getComputedStyle && getComputedStyle(el).display === 'none');
+      if (closed) {
+        try { el.style.pointerEvents = 'none'; } catch (ePeC) { /* ignore */ }
+      }
+    });
+  } catch (e6b) { /* ignore */ }
   // Mobile member sheet must not stick over the conv list after switch
   try {
     var panel = $('member-panel');

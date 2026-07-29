@@ -621,5 +621,7 @@
   "unpublishFail": "Couldn't unpublish",
   "unrepostBtn": "Undo repost",
   "unrepostFail": "Couldn't undo repost",
-  "updatingBtn": "Update"
+  "updatingBtn": "Update",
+  "chatMetaMore": "Details",
+  "chatMetaLess": "Less"
 }

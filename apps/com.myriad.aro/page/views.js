@@ -1143,8 +1143,16 @@ async function openQuotedPostDetail(objectId, snapshot, opts) {
     bodyEl.innerHTML = '<div class="quote-view-loading">'
       + esc(lang.loading || 'Loading…') + '</div>';
   }
-  if (dlg && typeof showAroOverlay === 'function') showAroOverlay(dlg);
-  else if (dlg) { dlg.hidden = false; dlg.style.display = ''; }
+  if (dlg && typeof showAroOverlay === 'function') {
+    showAroOverlay(dlg);
+  } else if (dlg) {
+    // Fallback open triad (must match showAroOverlay — bare display:'' reverts to CSS none)
+    try { dlg.classList.remove('aro-leaving'); } catch (eRm) { /* ignore */ }
+    dlg.hidden = false;
+    try { dlg.removeAttribute('hidden'); } catch (eH) { /* ignore */ }
+    dlg.style.pointerEvents = 'auto';
+    dlg.style.display = 'flex';
+  }
 
   var object = snapshot && typeof snapshot === 'object' ? snapshot : null;
   var actor = opts.actor || null;
