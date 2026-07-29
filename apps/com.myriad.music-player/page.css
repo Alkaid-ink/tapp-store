@@ -1744,6 +1744,17 @@ html.mp-has-lyrics .track-title {
   text-align: center;
 }
 
+/* 移动端列表图标不显示歌曲数量（桌面保留角标） */
+@media (max-width: 768px) {
+  .tab-badge {
+    display: none;
+  }
+}
+
+html.mp-is-mobile .tab-badge {
+  display: none;
+}
+
 /* 进度条区域 - 与控制元素在同一行 */
 .progress-section {
   flex: 1;
