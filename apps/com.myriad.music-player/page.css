@@ -2701,12 +2701,8 @@ html.mp-is-mobile .tab-badge {
     padding-right: max(12px, env(safe-area-inset-right, 0px));
   }
 
-  /* 侧栏打开：略让给歌词/列表 */
-  html.mp-side-lyrics .content-area,
-  html.mp-side-playlist .content-area {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.65fr);
-    column-gap: 20px;
-  }
+  /* 侧栏打开的列宽比见文件末尾「769–1080 列宽比」块——必须排在
+     @media (min-width: 769px) 之后才不会被那条旧的 2fr/3fr 压掉 */
 
   html.mp-side-none .content-area {
     column-gap: 0;
@@ -2813,14 +2809,8 @@ html.mp-is-mobile .tab-badge {
     padding-right: 4px;
   }
 
-  /* 平板竖屏偏窄：再收一点左栏 */
+  /* 平板竖屏偏窄：再收一点左栏（列宽比同样挪到文件末尾的覆盖块） */
   @media (orientation: portrait) {
-    html.mp-side-lyrics .content-area,
-    html.mp-side-playlist .content-area {
-      grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.7fr);
-      column-gap: 14px;
-    }
-
     html.mp-side-lyrics .player-hero,
     html.mp-side-playlist .player-hero {
       max-width: 200px;
@@ -3168,6 +3158,31 @@ html.mp-no-lyrics #lyric-trans-btn {
     flex: 1 1 auto;
     min-height: 0;
     height: auto;
+  }
+}
+
+/* ========================================
+   769–1080 列宽比（1.1.21 平板布局重构）
+   ⚠️ 必须排在上面的 @media (min-width: 769px) **之后**。
+   媒体查询不增加特异性，这两组选择器都是 (0,2,0)，同分时靠源码顺序决胜。
+   这几条原本写在更靠前的 769–1080 块里，一直被那个旧的 2fr/3fr 静默压掉，
+   从 1.1.21 起就没生效过——窄桌面/平板拿到的一直是宽桌面的比例。
+   ======================================== */
+@media (min-width: 769px) and (max-width: 1080px) {
+  /* 侧栏打开：略让给歌词/列表 */
+  html.mp-side-lyrics .content-area,
+  html.mp-side-playlist .content-area {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.65fr);
+    column-gap: 20px;
+  }
+
+  /* 平板竖屏偏窄：再收一点左栏 */
+  @media (orientation: portrait) {
+    html.mp-side-lyrics .content-area,
+    html.mp-side-playlist .content-area {
+      grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.7fr);
+      column-gap: 14px;
+    }
   }
 }
 
