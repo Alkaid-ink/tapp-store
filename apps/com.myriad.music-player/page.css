@@ -717,6 +717,10 @@ html.mp-has-lyrics .track-title {
   min-width: 0;
   height: 100%;
   align-self: stretch;
+  /* 开合侧栏时 padding-right 在 0 ↔ 4/8px 之间跳变（见 mp-side-* 规则），
+     而列宽是 0.46s 渐变的；不给它过渡，面板内容会在动画首尾横向弹一下。
+     与列宽同曲线同时长，两者一起收敛。 */
+  transition: padding 0.46s cubic-bezier(0.33, 0.86, 0.2, 1);
 }
 
 /* ========================================
@@ -3058,9 +3062,13 @@ html.mp-no-lyrics #lyric-trans-btn {
     visibility: hidden;
     pointer-events: none;
     transform: translateX(14px);
+    /* padding 必须列进来：这里是 transition 简写，会整条替换掉基础规则的声明。
+       侧栏的 padding-right 在 0 ↔ 8px 之间随 mp-side-* 跳变，与之相伴的列宽
+       是 0.46s 渐变的，漏掉它面板内容会在动画首尾横向弹一下。 */
     transition:
       opacity 0.32s cubic-bezier(0.33, 0.86, 0.2, 1),
       transform 0.44s cubic-bezier(0.33, 0.86, 0.2, 1),
+      padding 0.46s cubic-bezier(0.33, 0.86, 0.2, 1),
       visibility 0s linear 0.42s;
   }
 
@@ -3072,6 +3080,7 @@ html.mp-no-lyrics #lyric-trans-btn {
     transition:
       opacity 0.34s cubic-bezier(0.33, 0.86, 0.2, 1) 0.02s,
       transform 0.44s cubic-bezier(0.33, 0.86, 0.2, 1),
+      padding 0.46s cubic-bezier(0.33, 0.86, 0.2, 1),
       visibility 0s linear 0s;
   }
 

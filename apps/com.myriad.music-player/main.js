@@ -4831,14 +4831,27 @@ function bindControls() {
   }
 
   // Fab：定位当前曲（列表）
+  //
+  // ⚠️ handleTabClick 是**切换**语义：Tab 已选中时再调一次会走 wasActive 分支
+  // → clearSidePanel()，把整个侧栏关掉。这个 Fab 自 1.0.9 起就长在列表面板内部
+  // （右下角浮动按钮），只有面板打开时才点得到，也就是 tab-playlist 必然带
+  // .active —— 于是每次点击都必然命中关闭分支：列表被关掉，定位从未发生。
+  // 原写法是 1.0.3 按钮还在面板外时留下的，位置一变语义就反了。
   Fab.bind($('jump-current-btn'), function() {
     var plTab = document.getElementById('tab-playlist');
-    if (plTab) handleTabClick(plTab);
+    var alreadyOpen = !!(plTab && plTab.classList.contains('active'));
+    // 只在列表没打开时才去开它；已经打开就别碰 Tab
+    if (plTab && !alreadyOpen) handleTabClick(plTab);
     requestAnimationFrame(function() {
-      virtualList.pendingScrollToCurrent = true;
+      // force：这个按钮就是用户明确要求定位，不该被 userScrolling 判定吞掉
       virtualList.userScrolling = false;
-      if (typeof revealPlaylist === 'function') revealPlaylist();
-      else if (typeof refreshPlaylistView === 'function') refreshPlaylistView();
+      if (alreadyOpen) {
+        scrollPlaylistToCurrent({ force: true, smooth: true });
+      } else {
+        virtualList.pendingScrollToCurrent = true;
+        if (typeof revealPlaylist === 'function') revealPlaylist();
+        else if (typeof refreshPlaylistView === 'function') refreshPlaylistView();
+      }
     });
   }, addClickHandler);
 
