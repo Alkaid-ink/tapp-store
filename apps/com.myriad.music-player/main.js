@@ -157,8 +157,7 @@ function setLocale(locale) {
   Fab.setLabel($('lyric-trans-btn'), t('translate'));
   var emptyHint = $('player-empty-hint');
   if (emptyHint && !emptyHint.hidden) emptyHint.textContent = t('emptyHint');
-  var searchInput = $('playlist-search');
-  if (searchInput) searchInput.placeholder = t('searchPlaceholder');
+  applyStaticLabels();
 }
 
 function t(key) {
@@ -4522,6 +4521,36 @@ async function initPage() {
   }, { passive: true });
 }
 
+/**
+ * 静态控件的 i18n 文案（按钮标签 / 无障碍名 / 输入框占位符）。
+ *
+ * ⚠️ 这些**不能**放在 bindControls 里：那个函数有 `if (controlsBound) return` 的
+ * 幂等守卫（防重复绑事件），只会执行一次。而 locale 变化走的是
+ * onLocaleChange → setLocale + initPage，initPage 里的 bindControls 会直接返回，
+ * 于是这批文案永远停在首次加载时的语言。由 setLocale 每次调用。
+ */
+function applyStaticLabels() {
+  function setText(sel, text) {
+    var el = document.querySelector(sel);
+    if (el) el.textContent = text;
+  }
+  function setNames(id, text) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.title = text;
+    el.setAttribute('aria-label', text);
+  }
+  setText('#toggle-import-btn .ph-btn-label', t('externalPlaylist'));
+  setText('#load-playlist-btn .ph-btn-label', t('importBtn'));
+  setNames('toggle-import-btn', t('externalPlaylist'));
+  setNames('import-back-btn', t('backToSearch'));
+  setNames('load-playlist-btn', t('loadPlaylist'));
+  var search = document.getElementById('playlist-search');
+  if (search) search.placeholder = t('searchPlaceholder');
+  var pid = document.getElementById('playlist-id-input');
+  if (pid) pid.placeholder = t('playlistIdPlaceholder');
+}
+
 // 绑定控制按钮事件
 // 幂等守卫：initPage 会在 locale 变化等时机重跑，bindControls 若重复执行，
 // 每个按钮的 handler 会被绑定多次 → 单击触发两遍 →
@@ -5036,10 +5065,9 @@ function bindControls() {
     });
   }
 
-  // 搜索
+  // 搜索（占位符文案由 setLocale → applyStaticLabels 统一维护）
   var searchInput = document.getElementById('playlist-search');
   if (searchInput) {
-    searchInput.placeholder = t('searchPlaceholder');
     var debouncedSearch = debounce(function(query) {
       renderPlaylist(pageState.playlist, pageState.status?.currentTrack, query);
     }, 300);
@@ -5084,36 +5112,12 @@ function bindControls() {
   if (toggleImportBtn) addClickHandler(toggleImportBtn, function() { setHeaderMode('import'); });
   if (importBackBtn) addClickHandler(importBackBtn, function() { setHeaderMode('search'); });
 
-  // i18n：按钮文字标签 + 无障碍标题
-  function setLabel(sel, text) {
-    var el = document.querySelector(sel);
-    if (el) el.textContent = text;
-  }
-  setLabel('#toggle-import-btn .ph-btn-label', t('externalPlaylist'));
-  setLabel('#load-playlist-btn .ph-btn-label', t('importBtn'));
-  if (toggleImportBtn) {
-    toggleImportBtn.title = t('externalPlaylist');
-    toggleImportBtn.setAttribute('aria-label', t('externalPlaylist'));
-  }
-  if (importBackBtn) {
-    importBackBtn.title = t('backToSearch');
-    importBackBtn.setAttribute('aria-label', t('backToSearch'));
-  }
-  var loadBtnEl = document.getElementById('load-playlist-btn');
-  if (loadBtnEl) {
-    loadBtnEl.title = t('loadPlaylist');
-    loadBtnEl.setAttribute('aria-label', t('loadPlaylist'));
-  }
-
   // 加载网易云歌单
   var playlistIdInput = document.getElementById('playlist-id-input');
   var loadPlaylistBtn = document.getElementById('load-playlist-btn');
   var playlistIdHint = document.getElementById('playlist-id-hint');
 
-  if (playlistIdInput) {
-    playlistIdInput.placeholder = t('playlistIdPlaceholder');
-  }
-  
+
   if (loadPlaylistBtn && playlistIdInput) {
     var isLoadingPlaylist = false;
     

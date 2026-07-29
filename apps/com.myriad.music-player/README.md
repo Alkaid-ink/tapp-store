@@ -4,6 +4,32 @@
 
 ## Changelog
 
+### 1.1.42
+
+**切换语言后播放列表头部的文案不跟随。** `setLabel(...)` / `title` / `aria-label`
+那一批写在 `bindControls()` 里，而该函数有 `if (controlsBound) return` 的幂等守卫
+（防重复绑事件）只会执行一次。locale 变化走
+`onLocaleChange → setLocale + initPage`，`initPage` 里的 `bindControls` 直接返回，
+于是这批文案永远停在**首次加载时的语言**。首屏正常，切语言才暴露。
+
+抽成 `applyStaticLabels()` 并交给 `setLocale()` 每次调用——那里本来就在刷新
+Fab 标签与空态提示，是这个代码库放 locale 静态文案的地方。
+
+实测（真实 locale 变更链 `setLocale + initPage`，390×844）：
+
+| en-US / ja-JP 下 | 1.1.41 | 1.1.42 |
+| --- | --- | --- |
+| 外部歌单按钮 | **外部歌单**（中文） | External / 外部歌単 |
+| 导入按钮 | **导入**（中文） | Import / 読込 |
+| 歌单 ID 占位符 | **网易云歌单 ID 或链接** | Netease playlist ID or link |
+| `aria-label` | **外部歌单** | External / 外部歌単 |
+
+**移除未使用的 `ui:notification` 权限。** 它只 gate `ui.showNotification` 与
+`dynamicContent.*`，本 tapp 一个都没调用（页内状态条是自绘的 `.status-banner`）。
+`network:fetch` **保留**——它同时是外链图片的 CSP 开关
+（`cspExfiltration.test.ts`：需要外链图或远程媒体的 Tapp 必须声明），
+删掉会让所有封面加载失败。
+
 ### 1.1.41
 
 **手机上歌词/列表弹窗直接贴顶。** 手机块本来就写了
