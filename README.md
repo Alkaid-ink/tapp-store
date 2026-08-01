@@ -155,6 +155,7 @@ Manifest 若声明了 `pageStyles` / `pageTemplate`，索引必须提供对应 `
 | `com.myriad.config-generator` | 部署配置生成 |
 | `com.myriad.doudizhu` | 斗地主（含 assets） |
 | `com.myriad.aro` | 社交中心 |
+| `com.myriad.cdn-cache` | CDN 缓存刷新（管理员） |
 
 ## 开发者文档
 

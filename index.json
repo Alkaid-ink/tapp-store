@@ -1,10 +1,10 @@
 {
   "$schema": "https://myriad.you/schemas/tapp-store-v1.json",
   "name": "Myriad Official Tapp Store",
-  "version": "1.8.92",
+  "version": "1.8.93",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-07-29T00:23:31Z",
+  "updated_at": "2026-08-01T01:40:06Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.you",
@@ -339,7 +339,65 @@
       "verified": true,
       "created_at": "2025-12-01T00:00:00Z",
       "updated_at": "2026-07-29T00:23:31Z"
+    },
+    {
+      "id": "com.myriad.cdn-cache",
+      "name": "CDN 缓存刷新",
+      "version": "1.0.0",
+      "description": "仅管理员界面可操作的 Cloudflare、EdgeOne 与阿里云 CDN 缓存刷新工具",
+      "long_description": "面向站点管理员的 CDN 缓存刷新工具：支持 Cloudflare、腾讯云 EdgeOne 与阿里云 CDN。配置与密钥保存在当前用户私有存储，普通访客仅见提示页；可按 URL 精确刷新或清理全站缓存，并保留本地操作日志。",
+      "locales": {
+        "en-US": {
+          "name": "CDN Cache Purge",
+          "description": "Purge Cloudflare, EdgeOne, and Alibaba Cloud CDN caches"
+        },
+        "ja-JP": {
+          "name": "CDN キャッシュ更新",
+          "description": "Cloudflare、EdgeOne、Alibaba Cloud CDN のキャッシュを更新"
+        }
+      },
+      "author": {
+        "name": "我願一直向著陽光.℡",
+        "url": "https://github.com/zgzyh"
+      },
+      "license": "MIT",
+      "homepage": "https://github.com/Myriad-You/tapp-store/tree/main/apps/com.myriad.cdn-cache",
+      "repository": "https://github.com/Myriad-You/tapp-store",
+      "category": "developer",
+      "tags": [
+        "CDN",
+        "缓存",
+        "Cloudflare",
+        "EdgeOne",
+        "阿里云",
+        "运维",
+        "开发者"
+      ],
+      "permissions": [
+        "storage",
+        "ui:notification",
+        "ui:confirm",
+        "ui:theme",
+        "network:fetch"
+      ],
+      "icon_svg": "<svg viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M20 17.5A4.5 4.5 0 0017 9.64 6 6 0 005.2 8.3 4.5 4.5 0 006.5 17H20z\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"/><path d=\"M9 13h6M12 10l3 3-3 3\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>",
+      "theme_color": "#f97316",
+      "screenshots": [],
+      "download": {
+        "manifest": "apps/com.myriad.cdn-cache/manifest.json",
+        "code": "apps/com.myriad.cdn-cache/main.js",
+        "readme": "apps/com.myriad.cdn-cache/README.md",
+        "page_styles": "apps/com.myriad.cdn-cache/page.css",
+        "page_template": "apps/com.myriad.cdn-cache/page.html"
+      },
+      "size": 36288,
+      "downloads": 0,
+      "rating": 0,
+      "featured": true,
+      "verified": true,
+      "created_at": "2026-08-01T00:00:00Z",
+      "updated_at": "2026-08-01T01:40:06Z"
     }
   ],
-  "last_updated": "2026-07-28T02:12:00.227Z"
+  "last_updated": "2026-08-01T01:40:06Z"
 }

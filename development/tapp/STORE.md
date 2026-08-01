@@ -72,7 +72,7 @@ flowchart TB
 
 前端降级常量 `OFFICIAL_STORE`（`RemoteStoreService`）在 API 不可用时仍指向同一 URL。
 
-当前官方应用目录示例（以仓库 `index.json` 为准）：`com.myriad.music-player`、`com.myriad.quick-notes`、`com.myriad.config-generator`、`com.myriad.doudizhu`、`com.myriad.aro`。内置演示仅 `helloWorld`；完整应用经商店安装，不随 Myriad 前端打包。
+当前官方应用目录示例（以仓库 `index.json` 为准）：`com.myriad.music-player`、`com.myriad.quick-notes`、`com.myriad.config-generator`、`com.myriad.doudizhu`、`com.myriad.aro`、`com.myriad.cdn-cache`。内置演示仅 `helloWorld`；完整应用经商店安装，不随 Myriad 前端打包。
 
 ---
 
