@@ -1,0 +1,62 @@
+<!doctype html>
+<html class="dark">
+<body>
+  <div id="tapp-background">
+    <div class="ddz-bg" aria-hidden="true">
+      <div class="ddz-bg-scene"></div><div class="ddz-bg-felt"></div><div class="ddz-bg-vignette"></div>
+    </div>
+  </div>
+
+  <div id="tapp-content" class="ddz-root" data-phase="playing">
+    <header class="ddz-header glass">
+      <div class="ddz-brand"><div class="ddz-logo">♠</div><div class="ddz-brand-text"><h1 class="ddz-title">斗地主</h1><p class="ddz-status">单机练习 · 对局进行中</p></div></div>
+      <div class="ddz-meta"><span class="ddz-chip ddz-chip-phase">出牌阶段</span><span class="ddz-chip ddz-chip-muted">练习桌 07</span><span class="ddz-chip ddz-chip-bid">叫分 3</span></div>
+    </header>
+
+    <section class="ddz-table glass" aria-label="牌桌">
+      <div class="ddz-table-status"><div class="ddz-turn-hint">轮到你出牌 · 上家打出一对 9</div><div class="ddz-auction-score">地主倍数 <strong>3</strong></div></div>
+
+      <div class="ddz-opponents">
+        <div class="ddz-seat ddz-seat-left">
+          <div class="ddz-seat-head"><div class="ddz-avatar">林</div><div class="ddz-seat-meta"><div class="ddz-seat-name-row"><div class="ddz-seat-name">林间客</div></div><div class="ddz-seat-info"><span class="ddz-count-pill">12 张</span><span class="ddz-role-badge is-farmer">农民</span></div></div></div>
+          <div class="ddz-played"><div class="ddz-card back"></div><div class="ddz-card back"></div><div class="ddz-card back"></div><div class="ddz-card back"></div><div class="ddz-card back"></div><div class="ddz-card back"></div></div>
+          <div class="ddz-seat-action"><div class="ddz-action-label">不要</div></div>
+        </div>
+
+        <div class="ddz-center">
+          <div class="ddz-bottom-wrap"><div class="ddz-zone-label">底牌</div><div class="ddz-bottom">
+            <div class="ddz-card mini red"><span class="ddz-card-rank">A</span><span class="ddz-card-suit is-H">♥</span></div>
+            <div class="ddz-card mini black"><span class="ddz-card-rank">8</span><span class="ddz-card-suit is-S">♠</span></div>
+            <div class="ddz-card mini red"><span class="ddz-card-rank">3</span><span class="ddz-card-suit is-D">♦</span></div>
+          </div></div>
+          <div class="ddz-last-wrap"><div class="ddz-zone-label">上家牌型 <span class="ddz-last-meta">对子</span></div><div class="ddz-last">
+            <div class="ddz-card mini red"><span class="ddz-card-rank">9</span><span class="ddz-card-suit is-H">♥</span></div>
+            <div class="ddz-card mini black"><span class="ddz-card-rank">9</span><span class="ddz-card-suit is-C">♣</span></div>
+          </div></div>
+        </div>
+
+        <div class="ddz-seat ddz-seat-right is-alarm">
+          <div class="ddz-seat-head"><div class="ddz-avatar">岚</div><div class="ddz-seat-meta"><div class="ddz-seat-name-row"><div class="ddz-seat-name">山岚</div><span class="ddz-alarm">报牌</span></div><div class="ddz-seat-info"><span class="ddz-count-pill">2 张</span><span class="ddz-role-badge is-farmer">农民</span></div></div></div>
+          <div class="ddz-played"><div class="ddz-card back"></div><div class="ddz-card back"></div></div>
+          <div class="ddz-seat-action"><div class="ddz-action-label">对 9</div><div class="ddz-action-cards"><div class="ddz-card mini red"><span class="ddz-card-rank">9</span><span class="ddz-card-suit is-D">♦</span></div><div class="ddz-card mini black"><span class="ddz-card-rank">9</span><span class="ddz-card-suit is-S">♠</span></div></div></div>
+        </div>
+      </div>
+
+      <div class="ddz-me is-turn">
+        <div class="ddz-me-head"><div class="ddz-seat-head"><div class="ddz-avatar ddz-avatar-me">我</div><div class="ddz-seat-meta"><div class="ddz-seat-name-row"><div class="ddz-seat-name">当前玩家</div></div><div class="ddz-seat-info"><span class="ddz-role-badge is-landlord">地主</span><span class="ddz-count-pill">手牌 14</span></div></div></div><div class="ddz-seat-action ddz-seat-action-me"><div class="ddz-action-label">等待出牌</div></div></div>
+        <div class="ddz-hand" role="listbox">
+          <div class="ddz-card joker"><span class="ddz-card-rank">大王</span></div><div class="ddz-card joker is-sj"><span class="ddz-card-rank">小王</span></div>
+          <div class="ddz-card red"><span class="ddz-card-rank">2</span><span class="ddz-card-suit is-H">♥</span></div><div class="ddz-card black"><span class="ddz-card-rank">2</span><span class="ddz-card-suit is-S">♠</span></div>
+          <div class="ddz-card red"><span class="ddz-card-rank">A</span><span class="ddz-card-suit is-D">♦</span></div><div class="ddz-card black"><span class="ddz-card-rank">A</span><span class="ddz-card-suit is-C">♣</span></div>
+          <div class="ddz-card red selected"><span class="ddz-card-rank">Q</span><span class="ddz-card-suit is-H">♥</span></div><div class="ddz-card black selected"><span class="ddz-card-rank">Q</span><span class="ddz-card-suit is-S">♠</span></div>
+          <div class="ddz-card red"><span class="ddz-card-rank">10</span><span class="ddz-card-suit is-D">♦</span></div><div class="ddz-card black"><span class="ddz-card-rank">8</span><span class="ddz-card-suit is-C">♣</span></div>
+          <div class="ddz-card red"><span class="ddz-card-rank">7</span><span class="ddz-card-suit is-H">♥</span></div><div class="ddz-card black"><span class="ddz-card-rank">6</span><span class="ddz-card-suit is-S">♠</span></div><div class="ddz-card red"><span class="ddz-card-rank">5</span><span class="ddz-card-suit is-D">♦</span></div><div class="ddz-card black"><span class="ddz-card-rank">3</span><span class="ddz-card-suit is-C">♣</span></div>
+        </div>
+      </div>
+
+      <div class="ddz-controls"><div class="ddz-control-group"><button class="ddz-btn ddz-btn-hint" type="button">提示</button><button class="ddz-btn ddz-btn-accent" type="button">出牌</button><button class="ddz-btn ddz-btn-pass" type="button">过牌</button><button class="ddz-btn ddz-btn-ghost" type="button">取消选择</button></div></div>
+      <p class="ddz-msg">请选择大于对 9 的牌型</p>
+    </section>
+  </div>
+</body>
+</html>

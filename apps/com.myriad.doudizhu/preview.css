@@ -1,0 +1,18 @@
+:root {
+  --tapp-primary: #ef4444;
+  --tapp-primary-rgb: 239, 68, 68;
+}
+
+body { padding: 0 !important; background: #1a100c; }
+*, *::before, *::after { animation: none !important; }
+.ddz-root { height: 100%; padding: 16px 18px 20px; gap: 14px; }
+.ddz-header { padding-top: 12px; padding-bottom: 12px; }
+.ddz-table { flex: 1; min-height: 0; padding: 14px; gap: 12px; }
+.ddz-card-suit { display: grid; place-items: center; width: 18px; height: 18px; font-size: 17px; background-image: none !important; }
+.ddz-card.mini .ddz-card-suit { width: 12px; height: 12px; font-size: 12px; }
+.ddz-card.back { background: repeating-linear-gradient(135deg, rgb(255 255 255 / 12%) 0 3px, transparent 3px 8px), linear-gradient(145deg, #24568d, #102d58); }
+.ddz-card.joker { background: linear-gradient(160deg, #fff8dc, #efd789); }
+.ddz-card.joker.is-sj { background: linear-gradient(160deg, #f4f0ff, #c8c3e8); }
+.ddz-bg-scene { background: radial-gradient(900px 480px at 50% 0%, rgb(255 180 80 / 22%), transparent 60%), linear-gradient(180deg, #352015, #160d09); }
+.ddz-bg-felt { background: radial-gradient(ellipse at center, #277b51, #0d3d27 70%, #082619); }
+button, input { pointer-events: none !important; }

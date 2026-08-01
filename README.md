@@ -63,6 +63,7 @@ tapp-store/
 | `download` | ✅ | 相对 `base_url` 的路径表 |
 | `locales` | ❌ | BCP-47 → `{ name?, description? }` |
 | `long_description` / `tags` / `icon` / `icon_svg` / `theme_color` | ❌ | 展示 |
+| `preview` | ❌ | 无脚本静态预览（HTML、CSS、桌面画布与裁切参数） |
 | `size` | ❌ | 字节；**≥ 1 MiB 时 Myriad 走客户端下载进度** |
 | `featured` / `verified` | ❌ | UI 徽章 |
 
@@ -133,7 +134,8 @@ Manifest 若声明了 `pageStyles` / `pageTemplate`，索引必须提供对应 `
 2. 在 `apps/{id}/` 添加完整包文件（建议先用 Myriad [`@myriad/tapp-cli`](https://github.com/Myriad-You/Myriad/tree/preview/tools/tapp-cli) 在本地 `check` / `pack`）。
 3. 更新根目录 `index.json`：版本、权限、`download` 全路径、`category`、`size`（大包必填）、`locales`。
 4. 确认 **索引 `category` / `version` 与 `manifest.json` 一致**。
-5. 提交 Pull Request。
+5. 若声明 `preview`，运行 `node scripts/validate-previews.mjs` 检查字段、路径与静态资源安全。
+6. 提交 Pull Request。
 
 ### 发布检查清单
 

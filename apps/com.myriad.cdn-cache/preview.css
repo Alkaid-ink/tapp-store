@@ -1,0 +1,7 @@
+body { padding: 0 !important; overflow: hidden; }
+.shell { height: 100%; overflow: hidden; padding-top: 42px; }
+.hero h1 { font-size: 48px; }
+.grid { gap: 20px; }
+.panel { box-shadow: 0 18px 50px rgb(0 0 0 / 22%); }
+input, select, textarea, button { pointer-events: none !important; }
+textarea { resize: none; }
