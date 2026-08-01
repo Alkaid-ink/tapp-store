@@ -1,0 +1,35 @@
+{
+  "id": "site.abloom.meliora",
+  "name": "Meliora 播放器",
+  "version": "0.1.0",
+  "minSystemVersion": "0.2.1",
+  "description": "沉浸式歌词与节拍可视化:逐行/逐字歌词跟随、节拍网格驱动的呼吸背景、八段频谱。播放内核由 Myriad 宿主提供。",
+  "locales": {
+    "en-US": {
+      "name": "Meliora Player",
+      "description": "Immersive lyrics & beat visuals: synced lyrics, beat-grid breathing background and an 8-band spectrum. Playback is powered by the Myriad host."
+    }
+  },
+  "main": "main.js",
+  "hasPage": true,
+  "cssMode": "separated",
+  "pageStyles": "page.css",
+  "pageTemplate": "page.html",
+  "author": {
+    "name": "abloom25",
+    "url": "https://github.com/abloom25"
+  },
+  "icon": "🎵",
+  "iconSvg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><defs><linearGradient id='a' x1='58' y1='34' x2='454' y2='478' gradientUnits='userSpaceOnUse'><stop stop-color='#baf2ed'/><stop offset='.5' stop-color='#81d8d0'/><stop offset='1' stop-color='#287f7b'/></linearGradient><radialGradient id='b' cx='0' cy='0' r='1' gradientTransform='translate(160 95) rotate(48) scale(360)'><stop stop-color='#fff' stop-opacity='.28'/><stop offset='1' stop-color='#fff' stop-opacity='0'/></radialGradient></defs><rect width='512' height='512' rx='128' fill='#121719'/><rect width='512' height='512' rx='128' fill='url(#b)'/><path d='M82 340V164c0-32 40-46 60-21.6L256 286l114-143.6c20-24.4 60-10.4 60 21.6v176' fill='none' stroke='url(#a)' stroke-width='64' stroke-linecap='round' stroke-linejoin='round'/><circle cx='82' cy='372' r='54' fill='url(#a)'/><circle cx='430' cy='372' r='54' fill='url(#a)'/></svg>",
+  "themeColor": "#151318",
+  "category": "media",
+  "permissions": [
+    "media:read",
+    "media:control",
+    "storage",
+    "ui:fullscreen",
+    "network:fetch"
+  ],
+  "homepage": "https://music.abloom.site",
+  "repository": "https://github.com/abloom25/MelioraTapp"
+}
