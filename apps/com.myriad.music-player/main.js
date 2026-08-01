@@ -678,9 +678,23 @@ var LYRIC_WAVE_SPAN = 7;         // 波浪最多错峰的行数
 // 顺序推进（含跳过一两句短行）走波浪；超过这个跨度算 seek，瞬移到位
 var LYRIC_SEEK_JUMP_LINES = 3;
 
-// 焦点跨度是否属于「seek 级跳转」：首次定位、倒退、大跨度都算
+// 焦点跨度是否属于「seek 级跳转」：首次定位、大跨度都算
+//
+// ⚠️ prevIdx === -1 不能一律当 seek。前奏与间奏期间 currentLyricIndex 就是 -1，
+// 顺序播进第一句正是 -1 → 0——判成 seek 会让**首句**独独瞬移、其余行照常波浪
+// （1.1.37 起的老账：首句动画丢失）。此时该看的是「焦点要挪多远」而不是行号差：
+// 前奏刚过时焦点就停在第一句或它上面那组呼吸点，距离 0~1 行，是彻头彻尾的顺序推进；
+// 而从第 30 句 seek 回开头，焦点要跨半张歌单，仍旧该瞬移。
+// 呼吸点也占一个 items 槽位，故这一支按 items 下标算距离（阈值同样只用来区分
+// 「相邻」与「远」，混入呼吸点不影响判定）。
 function isLyricSeekJump(prevIdx, nextIdx) {
-  if (typeof prevIdx !== 'number' || prevIdx < 0 || nextIdx < 0) return true;
+  if (typeof prevIdx !== 'number' || nextIdx < 0) return true;
+  if (prevIdx < 0) {
+    if (lyricFx.focusK < 0) return true; // 从未定过焦 = 真·首次定位
+    var k = findLyricItemK(nextIdx);
+    if (k < 0) return true;
+    return Math.abs(k - lyricFx.focusK) > LYRIC_SEEK_JUMP_LINES;
+  }
   return Math.abs(nextIdx - prevIdx) > LYRIC_SEEK_JUMP_LINES;
 }
 
@@ -858,7 +872,10 @@ function findLyricItemK(lineIdx) {
 function lyricCullBand() {
   var vh = lyricFx.viewH || 0;
   if (vh < LYRIC_MIN_VIEW_H) return null;
-  return { top: -vh, bottom: vh * 2 };
+  // 可视区其实只有 0..vh，上下各留 0.4 屏缓冲即可（一帧最多挪几十 px，绰绰有余）。
+  // 原来上下各留满满一屏 = 3 屏高的带，845px 视口下同时有 44 行在画、每行还各带
+  // 一层 blur；收到 1.8 屏后降到 ~25 行，GPU 侧的模糊面直接少掉四成。
+  return { top: -vh * 0.4, bottom: vh * 1.4 };
 }
 
 /**
@@ -871,6 +888,10 @@ function setLyricItemVisible(it, visible) {
   if (it._vis === visible) return;
   it._vis = visible;
   it.el.style.visibility = visible ? '' : 'hidden';
+  // will-change 只挂在可视带内的行上。CSS 里写在 .lyric-line 基础样式里，
+  // 意味着 200 行歌单会常驻 200 个合成层（每层还各自带 blur），
+  // 光是层树维护就够拖垮滚动——屏外行退回 auto，让浏览器把层收掉。
+  it.el.style.willChange = visible ? 'transform' : 'auto';
 }
 
 function snapLyricItems() {
@@ -881,11 +902,18 @@ function snapLyricItems() {
     it.v = 0;
     it.scale = it.targetScale;
     it.scaleV = 0;
+    var vis = !band || (it.pos > band.top && it.pos < band.bottom);
+    setLyricItemVisible(it, vis);
+    if (!vis) {
+      // 与波浪同一套不变量：屏外行不写 DOM，写入缓存作废，进带那帧再补
+      it._wy = NaN;
+      it._ws = NaN;
+      continue;
+    }
     it._wy = Math.round(it.pos * 100);
     it._ws = Math.round(it.scale * 10000);
     it.el.style.transform =
       'translate3d(0,' + it.pos.toFixed(2) + 'px,0) scale(' + it.scale.toFixed(4) + ')';
-    setLyricItemVisible(it, !band || (it.pos > band.top && it.pos < band.bottom));
   }
 }
 
@@ -1233,11 +1261,19 @@ function lyricWaveTickBody(now) {
     // 屏外行退出绘制：省掉每帧上百个 blur 合成层（滚动卡顿主因）
     setLyricItemVisible(it, !culled);
     if (culled) {
-      // 远处行：吸附即可（写入去重会让稳态帧零 DOM 操作），不参与 moving 判定
+      // 远处行：吸附即可，不参与 moving 判定
       it.pos = ty;
       it.v = 0;
       it.scale = it.targetScale;
       it.scaleV = 0;
+      // ⚠️ 关键：屏外行绝不写 DOM。它们是 visibility:hidden，transform 无人可见，
+      // 而 targetS 每帧都在动 → 下面的量化去重对它们永远不成立，等于每帧给
+      // 上百个不可见的合成层各写一次 transform（实测 200 行歌单里可见 25 行、
+      // 却每帧写 174 次），这正是滚动卡顿的真正来源。
+      // 作废写入缓存，重新进入可视带的那一帧自然会补写一次正确值。
+      it._wy = NaN;
+      it._ws = NaN;
+      continue;
     } else if (now >= it.delayUntil) {
       var a = K * (ty - it.pos) - Cc * it.v;
       it.v += a * dt;
@@ -1286,12 +1322,41 @@ function retargetLyricItemsNow() {
 // 手动滚动后恢复自动跟焦的等待（原 3s 过长，回焦体感慢）
 var LYRIC_RESUME_MS = 1100;
 
+// 手动滚动期间取消景深模糊，停手这么久之后再淡回。
+// 刻意长于 LYRIC_RESUME_MS：让回焦波浪先跑完，模糊才慢慢糊回来——
+// 若与回焦同时发生，滚轮每停顿一下就会「糊一下又清一下」，非常闪
+var LYRIC_DEBLUR_MS = 2600;
+var lyricDeblurTimer = null;
+
+/** 手动滚动：立刻去模糊；每次滚动都把「淡回」计时器往后推 */
+function noteLyricScrollDeblur() {
+  var c = $('lyrics-container');
+  if (c) c.classList.add('scroll-clear');
+  if (lyricDeblurTimer) clearTimeout(lyricDeblurTimer);
+  lyricDeblurTimer = setTimeout(function() {
+    lyricDeblurTimer = null;
+    var el = $('lyrics-container');
+    if (el) el.classList.remove('scroll-clear');
+  }, LYRIC_DEBLUR_MS);
+}
+
+/** 立即恢复景深（点歌词跳转等「用户已明确表态」的场景，无需再等空闲） */
+function clearLyricScrollDeblur() {
+  if (lyricDeblurTimer) {
+    clearTimeout(lyricDeblurTimer);
+    lyricDeblurTimer = null;
+  }
+  var c = $('lyrics-container');
+  if (c) c.classList.remove('scroll-clear');
+}
+
 // 用户手动滚动：暂停自动跟随，稍后**始终以波浪**回焦当前行。
 // 不再按距离切瞬移：线性弹簧的收敛时间与幅度无关（5000px 与 300px 同样约 1s，
 // 只是中途更快），所以"远了就糊"的顾虑不成立；而按屏高设阈值在移动端/长歌单里
 // 会让常规的翻两屏也落进瞬移分支，观感就是回焦直接闪现。
 function userLyricScrollBegin() {
   pageState.autoScrollEnabled = false;
+  noteLyricScrollDeblur();
   if (lyricResumeTimer) clearTimeout(lyricResumeTimer);
   lyricResumeTimer = setTimeout(function() {
     lyricResumeTimer = null;
@@ -1403,6 +1468,29 @@ var INTERLUDE_MIN_GAP = 6;
 // 会把整曲时长误填进单行 duration。无下一句/整曲边界时才用此兜底上限。
 var MAX_VERBATIM_TAIL = 12;
 
+// ——— 不规范歌词（纯逐行、无 duration、脏 KRC）的间奏判定 ———
+// 这类歌词只有每句的起始时间，**没有任何「唱完」信息**。旧实现假定一句只唱 3 秒
+// （time + min(3, …)），于是句间隔一超过约 10s 就插呼吸点：慢歌一句唱七八秒很常见，
+// 结果是还在唱就进间奏、且几乎每句都插一次。
+// 拿不到真实行末时不猜具体时刻，只做两条保守约束：
+//   1) 假定一句最多唱 UNTIMED_ASSUMED_SING 秒（呼吸点不早于此刻出现）
+//   2) 扣掉这段假定演唱后，剩余空窗仍须大于 UNTIMED_MIN_GAP 才算真间奏
+// 即：句间隔需 > 16s 才插点（旧口径约 10s），且最早也要唱满 7s 才进。
+var UNTIMED_ASSUMED_SING = 7;
+var UNTIMED_MIN_GAP = 9;
+
+/** 无可信行末时的间奏起点；空窗不够大则返回 null（宁可不插） */
+function untimedInterludeEnd(lineStart, nextStart) {
+  var assumedEnd = lineStart + UNTIMED_ASSUMED_SING;
+  if (nextStart - assumedEnd > UNTIMED_MIN_GAP) return assumedEnd;
+  return null;
+}
+
+// 间奏收尾动效提前量（秒）：三点「鼓一下再被重力吸走」的总时长。
+// 需与 page.css 的 dotOutro（620ms）+ 第三点错峰（110ms）对齐——
+// 从 end-0.4 往前推这么多起跑，最后一颗塌陷完成正好赶上下一句接管焦点。
+var LYRIC_DOTS_OUTRO = 0.75;
+
 // 将逐字 end 与行级 duration 分别校验后合并。
 // 不让一个离谱的行 duration 拖住歌词，也不让过早结束的最后一字吞掉尾音。
 function getVerbatimTimelineEnd(v, lineStart, nextStart) {
@@ -1472,18 +1560,14 @@ function computeLineEnd(i, lyrics, verbatim) {
   var v = verbatim && verbatim[i];
   var rawEnd = getVerbatimTimelineEnd(v, lineStart, nextStart);
 
-  // 无逐字 / 无可信 duration：相对 nextStart 估算（旧 time+3 会无视 next 与 min-hold）
-  if (!isFinite(rawEnd)) {
-    rawEnd = lineStart + Math.min(3, Math.max(MIN_LINE_HOLD, (nextStart - lineStart) * 0.5));
-  }
-
-  // 脏数据：end 离谱（含 ms 误当 s、越过 next 过多）→ 改用保守估算
+  // 无逐字 / 无可信 duration / end 离谱（ms 误当 s、越过 next 过多）：
+  // 一律按「不知道这句唱到哪」处理，走保守口径而不是编一个行末出来
   if (!isFinite(rawEnd) || rawEnd <= 0 ||
       rawEnd > nextStart + 1 || rawEnd < lineStart - 0.5) {
-    rawEnd = lineStart + Math.min(3, Math.max(MIN_LINE_HOLD, (nextStart - lineStart) * 0.5));
-    if (!isFinite(rawEnd) || rawEnd >= nextStart) return null;
+    return untimedInterludeEnd(lineStart, nextStart);
   }
 
+  // 有可信行末：维持原口径（逐字/KRC 歌曲的间奏判定不受影响）
   // 强制至少 hold 满 MIN_LINE_HOLD（next 允许时），再钳到 nextStart
   var effectiveEnd = Math.max(rawEnd, lineStart + MIN_LINE_HOLD);
   effectiveEnd = Math.min(effectiveEnd, nextStart);
@@ -1528,6 +1612,19 @@ function updateInterludeDots() {
     }
     var k = it._k;
     var inGap = posSec >= it.start && posSec < it.end - 0.4;
+
+    // 收尾动效：间奏末尾三点先鼓一下，再被「重力」吸走塌陷消失。
+    // ⚠️ 不能在 inGap 转 false 时就摘掉 .finishing——塌陷才跑到一半，
+    // 点会当场弹回常驻态。一直留到明显离开本段（或 seek 回来）再撤。
+    var wantFin = shouldAnimate() &&
+      posSec >= it.start &&
+      posSec >= it.end - 0.4 - LYRIC_DOTS_OUTRO &&
+      posSec < it.end + 2.5;
+    if (wantFin !== !!it._fin) {
+      it._fin = wantFin;
+      it.el.classList.toggle('finishing', wantFin);
+    }
+
     if (inGap !== it.el.classList.contains('active')) {
       it.el.classList.toggle('active', inGap);
       if (inGap) {
@@ -1602,7 +1699,8 @@ function syncNoLyricsLayout() {
   root.classList.remove('mp-lyrics-loading'); // 废弃加载动画类
   // 列宽/hero 会因这些类变化而进入 0.46s 过渡：期间挂起歌词测量
   var layoutSig = layoutFocus + '|' + (confirmedEmpty ? 1 : 0) + '|' + (assumeHasLyrics ? 1 : 0);
-  if (layoutSig !== syncNoLyricsLayout._sig) {
+  var layoutChanged = layoutSig !== syncNoLyricsLayout._sig;
+  if (layoutChanged) {
     syncNoLyricsLayout._sig = layoutSig;
     suspendLyricMeasure();
   }
@@ -1635,17 +1733,21 @@ function syncNoLyricsLayout() {
     }
   }
 
-  // 列宽过渡结束后再重测跑马灯，避免开侧栏过程中反复改 --marquee 造成标题跳一下
-  if (syncNoLyricsLayout._marqueeTimer) {
-    clearTimeout(syncNoLyricsLayout._marqueeTimer);
-  }
-  syncNoLyricsLayout._marqueeTimer = setTimeout(function() {
-    syncNoLyricsLayout._marqueeTimer = null;
-    if (typeof remeasureScrollingText === 'function') {
-      remeasureScrollingText($('song-name'));
-      remeasureScrollingText($('song-artist'));
+  // 列宽过渡结束后再重测跑马灯，避免开侧栏过程中反复改 --marquee 造成标题跳一下。
+  // 仅在布局签名真的变了时才排这次重测：稳态播放中 syncNoLyricsLayout 同样会被
+  // 反复调用，无条件重排会周期性打断正在滚动的标题。
+  if (layoutChanged) {
+    if (syncNoLyricsLayout._marqueeTimer) {
+      clearTimeout(syncNoLyricsLayout._marqueeTimer);
     }
-  }, getSideLayoutSettleMs());
+    syncNoLyricsLayout._marqueeTimer = setTimeout(function() {
+      syncNoLyricsLayout._marqueeTimer = null;
+      if (typeof remeasureScrollingText === 'function') {
+        remeasureScrollingText($('song-name'));
+        remeasureScrollingText($('song-artist'));
+      }
+    }, getSideLayoutSettleMs());
+  }
 }
 
 /** 同步无歌词 / 有歌词 / 加载中状态，并刷新布局 */
@@ -2119,6 +2221,8 @@ function handleLyricClick(e) {
         lyricResumeTimer = null;
       }
       pageState.autoScrollEnabled = true;
+      // 点行即已选定目标，不必再等空闲：景深立刻跟着回焦一起回来
+      clearLyricScrollDeblur();
       // 本地先行：立即切时钟并重渲染高亮，不等状态事件回包。
       // 消除竞态窗口（旧时钟/间奏降级与 seek 交错会吞掉 active 类）
       setLyricClock(time + 0.01, lyricClock.playing);
@@ -3804,12 +3908,42 @@ function setScrollingText(outer, text) {
   });
 }
 
-// 容器尺寸变化后重新测量（清除缓存后重跑）
+// 容器尺寸变化后重新测量。
+//
+// ⚠️ 绝不能走 setScrollingText 的重建路径（清 __mqText 再重设）：那条路会先
+// remove('is-marquee') + 清掉 --marquee-shift，正在滚动的标题 transform 当场
+// 弹回 translateX(0)，随后 rAF 重新加类、动画从 0% 重播——就是「标题滚到头忽然
+// 闪回开头」。而稳态播放里 syncNoLyricsLayout 本来就会周期性触发重测，
+// 于是这一下闪回会反复出现。
+// 这里只在测量结果真的变了时才动 DOM；宽度没变就完全不碰，动画保持连续。
 function remeasureScrollingText(outer) {
   if (!outer || outer.__mqText == null) return;
-  var text = outer.__mqText;
-  outer.__mqText = null;
-  setScrollingText(outer, text);
+  if (prefersReducedMotion) return;
+  var inner = outer.querySelector('.marquee-inner');
+  if (!inner) return;
+
+  var overflow = inner.scrollWidth - outer.clientWidth;
+  if (overflow <= 4) {
+    // 变得放得下了（如侧栏收起）：退回省略号
+    if (outer.classList.contains('is-marquee')) {
+      outer.classList.remove('is-marquee');
+      outer.style.removeProperty('--marquee-shift');
+      outer.style.removeProperty('--marquee-duration');
+    }
+    return;
+  }
+
+  var shift = overflow + 16; // 与 setScrollingText 保持同一套算法
+  var nextShift = '-' + shift + 'px';
+  // 同一宽度重复测量：什么都不做，让动画接着跑
+  if (outer.classList.contains('is-marquee') &&
+      outer.style.getPropertyValue('--marquee-shift') === nextShift) {
+    return;
+  }
+  outer.style.setProperty('--marquee-shift', nextShift);
+  outer.style.setProperty('--marquee-duration',
+    Math.min(24, Math.max(6, shift / 40)).toFixed(1) + 's');
+  outer.classList.add('is-marquee');
 }
 
 // 高频 DOM 元素缓存 - 进度相关（每秒更新60次）
@@ -5797,14 +5931,18 @@ function scheduleEqNext() {
 
   eqLoopActive = true;
   var needFx = visualFxEnabled();
-  if (needFx && !isAnimLight()) {
+  // 用户正在手动滚歌词时把满帧 FX 降档：Aurora / 涟漪 / 背景漂移此刻不是用户
+  // 在看的东西，却和歌词滚动抢同一块 GPU（两个各自满 60fps 的 rAF 循环）。
+  // 停手后 lyricResumeTimer 到期自动恢复满帧。
+  var throttleForScroll = lyricResumeTimer != null;
+  if (needFx && !isAnimLight() && !throttleForScroll) {
     // standard FX：真 60fps rAF
     pageState.eqFrame = requestAnimationFrame(eqTick);
     return;
   }
-  // light FX / 仅 EQ / 零消费：timer 节流，避免空 60fps
+  // light FX / 滚动降档 / 仅 EQ / 零消费：timer 节流，避免空 60fps
   var delay;
-  if (needFx && isAnimLight()) {
+  if (needFx && (isAnimLight() || throttleForScroll)) {
     delay = EQ_LIGHT_MS;
   } else {
     var eq = getActiveEqEl();
@@ -6004,6 +6142,10 @@ function cleanup() {
   if (lyricResumeTimer) {
     clearTimeout(lyricResumeTimer);
     lyricResumeTimer = null;
+  }
+  if (lyricDeblurTimer) {
+    clearTimeout(lyricDeblurTimer);
+    lyricDeblurTimer = null;
   }
   // 歌词布局的延迟重测 / 容器观察者（原先只活在闭包里，销毁后仍会触发）
   if (lyricFx.remeasureRaf) {
