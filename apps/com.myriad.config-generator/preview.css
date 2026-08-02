@@ -1,0 +1,12 @@
+:root {
+  --tapp-primary: #7d70eb;
+  --tapp-primary-rgb: 125, 112, 235;
+}
+
+body { padding: 0 !important; background: #0a0a0a; }
+*, *::before, *::after { animation: none !important; }
+#tapp-content { overflow: hidden !important; }
+.page-content { max-width: 930px; padding-top: 28px; }
+.header-icon svg, .section-icon svg, .section-info-icon svg { width: 18px; height: 18px; }
+.preview-database-section { min-height: 280px; }
+input, button, select, textarea, label { pointer-events: none !important; }

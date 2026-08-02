@@ -676,9 +676,13 @@ html.mp-has-lyrics .track-title {
   vertical-align: bottom;
 }
 
-/* 艺术家渐变色文字（移至内层，兼容裁剪窗口） */
+/* 艺术家名（移至内层，兼容裁剪窗口）。
+   以黑白（--text-secondary）为基底，只掺一点封面色提味——整行铺满主题色会把
+   歌手名抢成第二个标题，也会随封面在深浅两套主题间乱飘 */
 .track-artist .marquee-inner {
-  background: linear-gradient(135deg, var(--music-primary), var(--music-secondary));
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--music-primary) 20%, var(--text-secondary)),
+    color-mix(in srgb, var(--music-secondary) 12%, var(--text-secondary)));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -1116,6 +1120,24 @@ html.mp-has-lyrics .track-title {
   transition-delay: 75ms;
 }
 
+/* 手动滚动期间取消景深模糊（Apple 行为）：正在翻的每一行都要看得清，
+   停手 LYRIC_DEBLUR_MS 后由 JS 摘掉本类，模糊按各行原有 transition 淡回。
+   ⚠️ 要盖过 .passed / .near-* / :hover 各自的 filter，特异性必须更高，
+   故统一用 #lyrics-container 前缀（id 保证胜出）。 */
+#lyrics-container.scroll-clear .lyric-line {
+  /* ⚠️ 必须是 none 而不是 blur(0)：blur(0) 仍然让每一行走完整的 filter 渲染管线，
+     各自建一张 filter 渲染面，半径为零也照样付光栅化代价——去了模糊却没去开销。
+     none 才真正把行移出 filter 路径；而 CSS 规定 none 与 blur() 插值时按恒等函数
+     处理，所以淡入淡出依然平滑。 */
+  filter: none;
+  transition-delay: 0ms; /* 清晰要立刻到位，不走 near-* 的错峰 */
+}
+
+/* 激活行的辉光不是景深，保留——且滤镜函数列表须与常态一致，否则淡回时会跳变 */
+#lyrics-container.scroll-clear .lyric-line.active {
+  filter: blur(0) drop-shadow(0 0 20px var(--lyric-glow));
+}
+
 /* ============ 间奏呼吸点（Apple Music 式）============ */
 /* 默认常驻显示（暗态，与非激活歌词行一致的存在感），间奏进行时点亮；
    占位与歌词行同节奏：同 padding，槽位高度 = 行框 40px×1.35 + 22px padding ≈ 76px */
@@ -1167,6 +1189,36 @@ html.mp-has-lyrics .track-title {
 /* 按间奏进度依次点亮 */
 .lyric-interlude span.on {
   opacity: 0.92;
+}
+
+/* 间奏收尾（Apple Music 式）：三点先鼓一下，再被「重力」吸走——加速塌陷至消失。
+   JS 在间奏结束前 LYRIC_DOTS_OUTRO 秒挂 .finishing，塌陷完成正好接上下一句。
+   ⚠️ 必须排在上面 .active span 之后：两条选择器特异性相同 (0,2,1)，靠源码顺序决胜，
+   挪到 .active 之前收尾就会被常驻呼吸动画盖掉。 */
+.lyric-interlude.finishing span {
+  animation: dotOutro 620ms both;
+}
+
+/* 三点被依次吸走，收尾也有错峰 */
+.lyric-interlude.finishing span:nth-child(2) { animation-delay: 55ms; }
+.lyric-interlude.finishing span:nth-child(3) { animation-delay: 110ms; }
+
+/* 两段式：先弹性鼓起（略过冲），再按重力加速塌缩到零 */
+@keyframes dotOutro {
+  0% {
+    transform: scale(1);
+    opacity: 0.92;
+    animation-timing-function: cubic-bezier(0.2, 0.85, 0.3, 1.35);
+  }
+  40% {
+    transform: scale(1.5);
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.5, 0, 0.85, 0.2);
+  }
+  100% {
+    transform: scale(0);
+    opacity: 0;
+  }
 }
 
 @keyframes dotBreathe {

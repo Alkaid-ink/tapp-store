@@ -1,0 +1,26 @@
+:root {
+  --tapp-primary: #7b6ee8;
+  --tapp-primary-rgb: 123, 110, 232;
+}
+
+body { padding: 0 !important; background: #0a0a0a; }
+*, *::before, *::after { animation: none !important; }
+#tapp-background { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.page-bg-base { position: absolute; inset: 0; background: radial-gradient(circle at 85% 4%, rgb(123 110 232 / 16%), transparent 35%), #0a0a0a; }
+.page-bg-glow { display: none; }
+#tapp-content { position: absolute; inset: 0; }
+.messenger-app { background: rgb(10 10 10 / 76%); }
+.sidebar { width: 330px; background: rgb(16 16 18 / 88%); }
+.chat-main { background: rgb(10 10 10 / 72%); }
+.chat-container { display: flex !important; }
+.messages-area { overflow: hidden; padding: 24px 34px 110px; gap: 12px; }
+.msg-row { content-visibility: visible; }
+.msg-bubble { max-width: 64%; font-size: 15px; padding: 11px 15px; }
+.conv-item { min-height: 68px; }
+.conv-avatar { width: 44px; height: 44px; }
+.preview-avatar-purple { background: linear-gradient(145deg, #a285ff, #6652c8) !important; color: white !important; }
+.preview-avatar-coral { background: linear-gradient(145deg, #ff987a, #c65370) !important; color: white !important; }
+.preview-avatar-blue { background: linear-gradient(145deg, #65c8df, #4d6ac5) !important; color: white !important; }
+.preview-avatar-green { background: linear-gradient(145deg, #71d69b, #31886b) !important; color: white !important; }
+.preview-avatar-amber { background: linear-gradient(145deg, #f7c769, #c0773d) !important; color: white !important; }
+button, input, textarea { pointer-events: none !important; }

@@ -1,0 +1,42 @@
+<!doctype html>
+<html class="dark">
+<body class="dark">
+  <main class="shell" id="admin-ui">
+    <header class="hero">
+      <div><p class="eyebrow">CACHE CONTROL</p><h1>CDN 缓存刷新</h1><p class="subtitle">支持 Cloudflare、腾讯云 EdgeOne 与阿里云 CDN。优先精确刷新 URL，谨慎清理全站。</p></div>
+      <div class="provider-badge">Cloudflare</div>
+    </header>
+
+    <section class="grid">
+      <article class="panel">
+        <div class="panel-head"><div><span class="step">01</span><h2>服务商配置</h2></div><span class="muted">已保存 · 仅当前用户可用</span></div>
+        <div class="fields">
+          <label><span>CDN 服务商</span><select><option selected>Cloudflare</option><option>腾讯云 EdgeOne</option><option>阿里云 CDN</option></select></label>
+          <label><span>Zone ID</span><input value="example-zone-••••-8f2a" autocomplete="off"></label>
+          <div id="cloudflare-fields"><label><span>Cloudflare API Token</span><input type="password" value="preview-token-redacted" autocomplete="off"></label></div>
+          <label><span>站点地址</span><input type="url" value="https://myriad.example.net"></label>
+        </div>
+        <div class="actions"><button class="button primary" type="button">保存配置</button><button class="button ghost danger" type="button">清除密钥</button></div>
+        <p class="security-note">密钥保存在当前登录用户的 Tapp 私有存储中，不写入安装包、商店索引或刷新日志。</p>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head"><div><span class="step">02</span><h2>刷新缓存</h2></div><span class="muted">上次刷新成功</span></div>
+        <label><span>需要刷新的完整 URL（每行一个）</span><textarea rows="10">https://myriad.example.net/
+https://myriad.example.net/assets/app.css
+https://myriad.example.net/assets/app.js</textarea></label>
+        <div class="quick-row"><button class="chip" type="button">添加首页</button><button class="chip" type="button">去重</button><button class="chip" type="button">清空输入</button></div>
+        <div class="actions purge-actions"><button class="button primary" type="button">刷新这些 URL</button><button class="button danger-solid" type="button">清理全站缓存</button></div>
+      </article>
+    </section>
+
+    <section class="panel logs-panel">
+      <div class="panel-head"><div><span class="step">03</span><h2>刷新日志</h2></div><button class="button ghost" type="button">清空日志</button></div>
+      <div class="logs">
+        <div class="log"><span class="log-status"></span><div class="log-main"><div class="log-title">精确刷新完成</div><div class="log-detail">3 个 URL · Cloudflare · 示例站点</div></div><time class="log-time">刚刚</time></div>
+        <div class="log"><span class="log-status"></span><div class="log-main"><div class="log-title">首页缓存已刷新</div><div class="log-detail">https://myriad.example.net/</div></div><time class="log-time">18 分钟前</time></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

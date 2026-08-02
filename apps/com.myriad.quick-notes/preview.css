@@ -1,0 +1,13 @@
+:root {
+  --tapp-primary: #7c6fe8;
+  --tapp-primary-rgb: 124, 111, 232;
+}
+
+body { padding: 0 !important; background: #0a0a0a; }
+*, *::before, *::after { animation: none !important; }
+.notes-area { overflow: hidden; }
+.notes-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.sticky-note { min-height: 180px; max-height: 220px; }
+.sticky-text { font-size: 16px; line-height: 1.65; white-space: pre-line; }
+.status-avatar svg, .status-action-btn svg { width: 16px; height: 16px; }
+.float-input-wrap { pointer-events: none; }

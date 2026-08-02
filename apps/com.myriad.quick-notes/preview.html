@@ -1,0 +1,97 @@
+<!doctype html>
+<html class="dark">
+<body>
+  <div id="tapp-background">
+    <div class="page-bg-base"></div>
+    <div class="page-bg-glow page-bg-glow-1"></div>
+    <div class="page-bg-glow page-bg-glow-2"></div>
+  </div>
+
+  <div id="tapp-content">
+    <div class="page-content">
+      <header class="status-header">
+        <div id="status-pill" class="status-pill">
+          <div class="status-avatar" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M8 2v3M16 2v3M3 9h18"/>
+              <path d="M21 8.5V17c0 3-1.5 5-5 5H8c-3.5 0-5-2-5-5V8.5c0-3 1.5-5 5-5h8c3.5 0 5 2 5 5z"/>
+              <path d="M8 14h4M8 18h8"/>
+            </svg>
+          </div>
+          <div class="status-info">
+            <span class="status-title">便携便签</span>
+            <span class="status-subtitle">5 条便签 · 自动保存</span>
+          </div>
+          <div class="status-actions">
+            <button class="status-action-btn" type="button" aria-label="搜索">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            </button>
+            <button class="status-action-btn" type="button" aria-label="更多">
+              <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div class="notes-area">
+        <div class="notes-grid">
+          <article class="sticky-note color-0 pinned no-animate">
+            <span class="sticky-pin-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2l8 8-3 1-4 4 1 4-2 2-5-5-5 5-1-1 5-5-5-5 2-2 4 1 4-4 1-3z"/></svg>
+            </span>
+            <div class="sticky-content">
+              <div class="sticky-text">发布前检查：商店预览、移动端布局、更新说明与权限描述。</div>
+              <div class="sticky-footer"><span class="sticky-time">今天 09:24</span><span class="sticky-long-hint">置顶</span></div>
+            </div>
+          </article>
+          <article class="sticky-note color-2 no-animate">
+            <div class="sticky-content">
+              <div class="sticky-text">界面应该安静，让内容成为最明显的层级。</div>
+              <div class="sticky-footer"><span class="sticky-time">今天 08:40</span></div>
+            </div>
+          </article>
+          <article class="sticky-note color-1 no-animate">
+            <div class="sticky-content">
+              <div class="sticky-text">App Store 观察：大图负责氛围，标题负责识别，详细信息集中到详情区域。</div>
+              <div class="sticky-footer"><span class="sticky-time">昨天 21:16</span></div>
+            </div>
+          </article>
+          <article class="sticky-note color-3 no-animate">
+            <div class="sticky-content">
+              <div class="sticky-text">晚间安排<br>跑步 30 分钟<br>整理项目周报<br>阅读两章</div>
+              <div class="sticky-footer"><span class="sticky-time">昨天 18:30</span></div>
+            </div>
+          </article>
+          <article class="sticky-note color-4 no-animate">
+            <div class="sticky-content">
+              <div class="sticky-text">好的工具不会抢走注意力，它只是把复杂的信息整理清楚。</div>
+              <div class="sticky-footer"><span class="sticky-time">周一 14:08</span></div>
+            </div>
+          </article>
+          <article class="sticky-note color-5 no-animate">
+            <div class="sticky-content">
+              <div class="sticky-text">周末采购：咖啡豆、笔记本、绿植营养液。</div>
+              <div class="sticky-footer"><span class="sticky-time">周日 11:32</span></div>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <div class="float-input-wrap">
+        <div class="input-card">
+          <div class="input-area">
+            <textarea class="page-input" rows="1" placeholder="记录一个想法…"></textarea>
+            <div class="input-footer">
+              <div class="composer-tools"><button class="color-toggle-btn" type="button"><span class="color-toggle-swatch color-0"></span></button></div>
+              <span class="char-count">0 / 500</span>
+            </div>
+          </div>
+          <button class="page-send-btn" type="button" aria-label="添加">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
