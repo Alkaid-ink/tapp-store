@@ -1,0 +1,53 @@
+<main class="rocom-page" data-page-root>
+  <header class="rocom-topbar">
+    <div class="rocom-brand"><span aria-hidden="true">&#10022;</span><b>&#27931;&#20811;&#29579;&#22269;</b><em>&#36828;&#34892;&#21830;&#20154;</em></div>
+    <div class="rocom-sync"><i aria-hidden="true"></i><span data-field="updated">&#31561;&#24453;&#21518;&#21488;&#21516;&#27493;</span><button type="button" data-action="refresh" aria-label="&#21516;&#27493;&#26368;&#26032;&#24773;&#25253;">&#21516;&#27493;</button></div>
+  </header>
+  <section class="adventure-map">
+    <div class="map-grid" aria-hidden="true"></div>
+    <div class="map-road map-road-one" aria-hidden="true"></div>
+    <div class="map-road map-road-two" aria-hidden="true"></div>
+    <div class="map-pin pin-one" aria-hidden="true"></div>
+    <div class="map-pin pin-two" aria-hidden="true"></div>
+    <div class="map-copy">
+      <p>TRAVELLING MERCHANT STOCK</p>
+      <h1>&#36828;&#34892;&#21830;&#20154;&#36135;&#21333;</h1>
+      <span data-field="subtitle">&#31561;&#24453;&#21518;&#21488;&#21516;&#27493;</span>
+      <div class="hero-chips" aria-hidden="true"><b>&#27599; 4 &#23567;&#26102;&#25442;&#36135;</b><b>&#20851;&#27880;&#21629;&#20013;</b><b>&#29579;&#22269;&#34892;&#31243;</b></div>
+    </div>
+    <div class="hero-terminal merchant-showcase" aria-hidden="true">
+      <div class="merchant-window">
+        <span class="merchant-moon"></span>
+        <div class="merchant-cart"><i></i><b></b><em></em></div>
+        <div class="merchant-gems"><i></i><i></i><i></i></div>
+        <div class="terminal-lines"><i></i><i></i><i></i></div>
+      </div>
+      <div class="terminal-badge"><span>&#36135;&#21333;&#24050;&#23601;&#32490;</span><b>LIVE</b></div>
+    </div>
+  </section>
+  <section class="quest-strip" aria-label="&#20170;&#26085;&#24773;&#25253;&#25688;&#35201;">
+    <article class="quest-card quest-market"><span>&#36828;&#34892;&#21830;&#20154;</span><strong data-field="round">--</strong><small>&#27599; 4 &#23567;&#26102;&#26356;&#25442;&#36135;&#29289;</small></article>
+    <article class="quest-card quest-clock"><span>&#26412;&#36718;&#20498;&#35745;&#26102;</span><strong data-field="countdown">--</strong><small>&#24320;&#24066;&#65306;08:00&#8212;24:00</small></article>
+    <article class="quest-card quest-watch"><span>&#20851;&#27880;&#32447;&#32034;</span><strong data-field="watch-count">--</strong><small>&#26412;&#36718;&#21629;&#20013;&#30340;&#20851;&#27880;&#29289;&#21697;</small></article>
+  </section>
+  <nav class="rocom-tabs" role="tablist" aria-label="&#29579;&#22269;&#24773;&#25253;&#20998;&#31867;">
+    <button class="is-active" id="tab-merchant" role="tab" type="button" data-tab="merchant" aria-selected="true" aria-controls="panel-merchant"><i aria-hidden="true">&#9670;</i>&#21830;&#20154;&#36135;&#21333;</button>
+    <button id="tab-activities" role="tab" type="button" data-tab="activities" aria-selected="false" aria-controls="panel-activities"><i aria-hidden="true">&#9670;</i>&#27963;&#21160;&#34892;&#31243;</button>
+    <button id="tab-announcements" role="tab" type="button" data-tab="announcements" aria-selected="false" aria-controls="panel-announcements"><i aria-hidden="true">&#9670;</i>&#29579;&#22269;&#20844;&#21578;</button>
+    <button id="tab-wiki" role="tab" type="button" data-tab="wiki" aria-selected="false" aria-controls="panel-wiki"><i aria-hidden="true">&#9670;</i>&#31934;&#28789;&#22270;&#37492;</button>
+  </nav>
+  <section class="intel-panel is-active" id="panel-merchant" role="tabpanel" data-panel="merchant" aria-labelledby="tab-merchant">
+    <div class="panel-head"><div><p>TRAVELLER'S STOCK</p><h2>&#36828;&#34892;&#21830;&#20154;&#36135;&#21333;</h2></div><div class="panel-actions"><span data-field="stock-count">--</span><button type="button" data-stock-filter="watched" aria-pressed="false">&#21482;&#30475;&#20851;&#27880;</button></div></div>
+    <p class="notice is-hidden" data-field="message" aria-live="polite"></p>
+    <div class="product-grid" data-field="product-list" aria-live="polite"></div>
+  </section>
+  <section class="intel-panel" id="panel-activities" role="tabpanel" data-panel="activities" aria-labelledby="tab-activities">
+    <div class="panel-head"><div><p>EVENT ROUTES</p><h2>&#27963;&#21160;&#34892;&#31243;</h2></div><span>&#35268;&#21010;&#20320;&#30340;&#29579;&#22269;&#36335;&#32447;</span></div><div class="activity-list" data-field="activity-list"></div>
+  </section>
+  <section class="intel-panel" id="panel-announcements" role="tabpanel" data-panel="announcements" aria-labelledby="tab-announcements">
+    <div class="panel-head"><div><p>CASTLE POST</p><h2>&#29579;&#22269;&#20844;&#21578;</h2></div><span>&#26368;&#26032;&#23448;&#26041;&#36164;&#35759;</span></div><div class="announcement-list" data-field="announcement-list"></div>
+  </section>
+  <section class="intel-panel atlas-panel" id="panel-wiki" role="tabpanel" data-panel="wiki" aria-labelledby="tab-wiki">
+    <div class="panel-head"><div><p>CREATURE ATLAS</p><h2>&#31934;&#28789;&#22270;&#37492;</h2></div><span>&#36755;&#20837;&#21517;&#31216;&#25110; ID &#26597;&#25214;</span></div><form class="pet-search" data-search-form><input type="search" data-field="pet-query" placeholder="&#20363;&#22914;&#65306;&#36842;&#33707;&#25110; 1001" aria-label="&#31934;&#28789;&#21517;&#31216;&#25110; ID"><button class="atlas-button" type="button" data-action="search-pets">&#26816;&#32034;&#22270;&#37492;</button></form><div class="pet-results" data-field="pet-results" aria-live="polite"><p class="empty-copy">&#36755;&#20837;&#31934;&#28789;&#21517;&#31216;&#21518;&#65292;&#22312;&#36825;&#37324;&#26597;&#30475;&#22270;&#37492;&#32447;&#32034;&#12290;</p></div>
+  </section>
+</main>
