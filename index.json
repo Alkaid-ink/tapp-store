@@ -4,7 +4,7 @@
   "version": "1.8.94",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-08-02T00:31:05Z",
+  "updated_at": "2026-08-02T00:34:42Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.you",
@@ -556,13 +556,13 @@
         "page_styles": "apps/site.abloom.meliora/page.css",
         "page_template": "apps/site.abloom.meliora/page.html"
       },
-      "size": 255475,
+      "size": 255584,
       "downloads": 0,
       "rating": 0,
       "featured": false,
       "verified": false,
       "created_at": "2026-08-01T16:58:00Z",
-      "updated_at": "2026-08-02T00:31:05Z"
+      "updated_at": "2026-08-02T00:34:42Z"
     }
   ],
   "last_updated": "2026-08-01T16:58:00Z"
