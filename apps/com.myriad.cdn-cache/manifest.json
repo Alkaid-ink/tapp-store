@@ -1,24 +1,24 @@
 {
     "id":  "com.myriad.cdn-cache",
     "name":  "CDN 缓存刷新",
-    "version":  "1.0.0",
-    "minSystemVersion":  "0.3.18",
-    "description":  "仅管理员界面可操作的 Cloudflare、EdgeOne 与阿里云 CDN 缓存刷新工具",
+    "version":  "1.1.0",
+    "minSystemVersion":  "0.3.23",
+    "description":  "仅管理员可操作的 Cloudflare、EdgeOne、阿里云 CDN 与 AWS CloudFront 缓存刷新工具",
     "locales":  {
                     "en-US":  {
                                   "name":  "CDN Cache Purge",
-                                  "description":  "Purge Cloudflare, EdgeOne, and Alibaba Cloud CDN caches"
+                                  "description":  "Purge Cloudflare, EdgeOne, Alibaba Cloud CDN, and AWS CloudFront caches"
                               },
                     "ja-JP":  {
                                   "name":  "CDN キャッシュ更新",
-                                  "description":  "Cloudflare、EdgeOne、Alibaba Cloud CDN のキャッシュを更新"
+                                  "description":  "Cloudflare、EdgeOne、Alibaba Cloud CDN、AWS CloudFront のキャッシュを更新"
                               }
                 },
     "category":  "developer",
     "main":  "main.js",
     "author":  {
                    "name":  "我願一直向著陽光.℡",
-                   "url":   "https://github.com/zgzyh"
+                   "url":  "https://github.com/zgzyh"
                },
     "permissions":  [
                         "storage",
@@ -36,7 +36,7 @@
     "apis":  {
                  "cloudflarePurgeUrls":  {
                                              "type":  "http",
-                                             "access":  "protected",
+                                             "access":  "manager",
                                              "endpoint":  "https://api.cloudflare.com/client/v4/zones/{{params.zoneId}}/purge_cache",
                                              "method":  "POST",
                                              "headers":  {
@@ -50,7 +50,7 @@
                                          },
                  "cloudflarePurgeAll":  {
                                             "type":  "http",
-                                            "access":  "protected",
+                                            "access":  "manager",
                                             "endpoint":  "https://api.cloudflare.com/client/v4/zones/{{params.zoneId}}/purge_cache",
                                             "method":  "POST",
                                             "headers":  {
@@ -64,14 +64,14 @@
                                         },
                  "aliyunPurge":  {
                                      "type":  "http",
-                                     "access":  "protected",
+                                     "access":  "manager",
                                      "endpoint":  "https://cdn.aliyuncs.com/?{{params.query}}",
                                      "method":  "GET",
                                      "description":  "阿里云 CDN 刷新文件或目录缓存"
                                  },
                  "edgeOnePurgeUrls":  {
                                           "type":  "http",
-                                          "access":  "protected",
+                                          "access":  "manager",
                                           "endpoint":  "https://teo.tencentcloudapi.com/",
                                           "method":  "POST",
                                           "headers":  {
@@ -86,7 +86,7 @@
                                       },
                  "edgeOnePurgeAll":  {
                                          "type":  "http",
-                                         "access":  "protected",
+                                         "access":  "manager",
                                          "endpoint":  "https://teo.tencentcloudapi.com/",
                                          "method":  "POST",
                                          "headers":  {
@@ -98,6 +98,21 @@
                                                      },
                                          "body":  "{{params.payload}}",
                                          "description":  "EdgeOne 清除全站缓存（同源 JSON payload）"
-                                     }
+                                     },
+                 "awsPurge":  {
+                                  "type":  "http",
+                                  "access":  "manager",
+                                  "endpoint":  "https://cloudfront.amazonaws.com/2020-05-31/distribution/{{params.distributionId}}/invalidation",
+                                  "method":  "POST",
+                                  "headers":  {
+                                                  "Authorization":  "{{params.authorization}}",
+                                                  "Content-Type":  "application/xml",
+                                                  "X-Amz-Content-Sha256":  "{{params.payloadHash}}",
+                                                  "X-Amz-Date":  "{{params.amzDate}}"
+                                              },
+                                  "bodyMode":  "raw",
+                                  "body":  "{{params.body}}",
+                                  "description":  "AWS CloudFront 创建缓存失效任务（SigV4 原始 XML）"
+                              }
              }
 }
