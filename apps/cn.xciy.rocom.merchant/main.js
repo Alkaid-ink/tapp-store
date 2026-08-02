@@ -27,7 +27,7 @@ function getRound() {
   var seconds = Math.max(0, end * 60 - (current.getHours() * 3600 + current.getMinutes() * 60 + current.getSeconds()));
   return { isOpen: true, current: round, total: 4, countdown: (Math.floor(seconds / 3600) ? Math.floor(seconds / 3600) + '\u5c0f\u65f6' : '') + Math.floor((seconds % 3600) / 60) + '\u5206\u949f' };
 }
-function settings() { return Tapp.settings.getAll().then(function (data) { return { apiKey: text(data.wegame_api_key).trim(), watchlist: splitWatchlist(data.watchlist) }; }); }
+function settings() { return Tapp.settings.getAll().then(function (data) { return { watchlist: splitWatchlist(data.watchlist) }; }); }
 function hasValue(value) { return value !== null && value !== undefined && !(typeof value === 'string' && value.trim() === ''); }
 function firstValue(source, keys) {
   if (!source || typeof source !== 'object') { return undefined; }
@@ -120,9 +120,8 @@ async function syncRocom(force) {
   if (rocomSyncPromise) { return rocomSyncPromise; }
   rocomSyncPromise = (async function () {
     var config = await settings();
-    if (!config.apiKey) { var missing = { state: 'missing-key', products: [], activities: [], announcements: [], round: getRound(), updatedAt: Date.now() }; await Tapp.storage.set(ROCOM_SNAPSHOT_KEY, missing); return missing; }
     var previous = await loadSnapshot();
-    var results = await Promise.allSettled([Tapp.api('merchantInfo', { apiKey: config.apiKey, refresh: Boolean(force) }), Tapp.api('activitiesInfo', { apiKey: config.apiKey }), Tapp.api('announcementLatest', { apiKey: config.apiKey })]);
+    var results = await Promise.allSettled([Tapp.api('merchantInfo', { refresh: Boolean(force) }), Tapp.api('activitiesInfo', {}), Tapp.api('announcementLatest', {})]);
     var merchantResult = results[0];
     if (merchantResult.status !== 'fulfilled') {
       if (previous && previous.products && previous.products.length) { return Object.assign({}, previous, { state: 'stale', round: getRound() }); }
@@ -135,7 +134,7 @@ async function syncRocom(force) {
 }
 Tapp.lifecycle.onReady(function () { if (!Tapp.pages && !Tapp.widgets) { syncRocom(false).catch(function () {}); } });
 
-function messageFor(snapshot) { if (!snapshot || snapshot.state === 'missing-key') { return '\u8bf7\u5148\u5728 Tapp \u540e\u53f0\u8bbe\u7f6e\u4e2d\u586b\u5199 WeGame API Key'; } if (snapshot.state === 'empty') { return '\u672c\u8f6e\u6682\u65e0\u53ef\u5c55\u793a\u7684\u5546\u54c1'; } if (snapshot.state === 'stale') { return '\u6570\u636e\u670d\u52a1\u6682\u65f6\u4e0d\u53ef\u7528\uff0c\u6b63\u5728\u663e\u793a\u6700\u8fd1\u4e00\u6b21\u60c5\u62a5'; } if (snapshot.state === 'unavailable') { return '\u6570\u636e\u670d\u52a1\u6682\u65f6\u4e0d\u53ef\u7528\uff0c\u8bf7\u7a0d\u540e\u518d\u540c\u6b65'; } return ''; }
+function messageFor(snapshot) { if (!snapshot || snapshot.state === 'missing-key') { return '\u8bf7\u5728 Tapp \u8be6\u60c5\u9875\u7684\u51ed\u636e\u4e2d\u914d\u7f6e WeGame API Key'; } if (snapshot.state === 'empty') { return '\u672c\u8f6e\u6682\u65e0\u53ef\u5c55\u793a\u7684\u5546\u54c1'; } if (snapshot.state === 'stale') { return '\u6570\u636e\u670d\u52a1\u6682\u65f6\u4e0d\u53ef\u7528\uff0c\u6b63\u5728\u663e\u793a\u6700\u8fd1\u4e00\u6b21\u60c5\u62a5'; } if (snapshot.state === 'unavailable') { return '\u6570\u636e\u670d\u52a1\u6682\u65f6\u4e0d\u53ef\u7528\uff0c\u8bf7\u786e\u8ba4\u5df2\u5728 Tapp \u8be6\u60c5\u9875\u7684\u51ed\u636e\u4e2d\u914d\u7f6e WeGame API Key \u540e\u91cd\u8bd5'; } return ''; }
 function emptyStateHtml(title, body) { return '<div class="empty-state"><strong>' + escapeHtml(title) + '</strong><span>' + escapeHtml(body) + '</span></div>'; }
 function statusClass(status) { if (status === '\u8fdb\u884c\u4e2d' || status === '\u5e38\u9a7b') { return ' status-live'; } if (status === '\u672a\u5f00\u59cb') { return ' status-upcoming'; } return ' status-ended'; }
 function setButtonLoading(button, loading, busyLabel) { if (!button) { return; } if (!button.getAttribute('data-idle-label')) { button.setAttribute('data-idle-label', button.textContent); } button.disabled = Boolean(loading); button.setAttribute('aria-busy', loading ? 'true' : 'false'); button.textContent = loading ? busyLabel : button.getAttribute('data-idle-label'); }
@@ -171,9 +170,7 @@ function productHtml(item) { return '<article class="product-card' + (item.watch
 function activityHtml(item) { return '<article class="activity-card"><div class="activity-cover">' + (item.cover ? '<img src="' + escapeHtml(item.cover) + '" alt="" />' : '&#28216;') + '</div><div><div class="activity-card-head"><h3>' + escapeHtml(item.name) + '</h3><span class="status-pill' + statusClass(item.status) + '">' + escapeHtml(item.status) + '</span></div><p>' + escapeHtml(item.desc) + '</p><small>' + escapeHtml(item.start) + ' &#8212; ' + escapeHtml(item.end) + '</small></div></article>'; }
 function announcementHtml(item) { var coverClass = item.cover ? ' has-cover' : ' no-cover'; return '<article class="announcement-card' + coverClass + (item.sticky ? ' is-sticky' : '') + '">' + (item.cover ? '<img src="' + escapeHtml(item.cover) + '" alt="" />' : '') + '<div><span>' + (item.sticky ? '\u7f6e\u9876\u516c\u544a' : '\u5b98\u65b9\u516c\u544a') + '</span><h3>' + escapeHtml(item.title) + '</h3><p>' + escapeHtml(item.summary || '\u6682\u65e0\u516c\u544a\u6458\u8981') + '</p><small>' + escapeHtml(item.time || '--') + '</small></div></article>'; }
 async function searchPets(query) {
-  var config = await settings();
-  if (!config.apiKey) { throw new Error('\u8bf7\u5148\u8bbe\u7f6e API Key'); }
-  var response = await Tapp.api('wikiPets', { apiKey: config.apiKey, q: encodeURIComponent(query) });
+  var response = await Tapp.api('wikiPets', { q: encodeURIComponent(query) });
   var payload = unwrap(response);
   var items = arrayFromPayload(payload);
   return items.map(function (item) { return { name: text(item.name || item.pet_name || item.petName || item.title || item.pet_id || item.id || '\u672a\u547d\u540d\u7cbe\u7075'), id: text(item.pet_id || item.petId || item.id || item.no), icon: text(item.icon || item.small_icon || item.icon_url || item.avatar || item.image), form: text(item.form || item.form_name), quality: text(item.quality || item.rank), types: Array.isArray(item.type_names) ? item.type_names.join('\u00b7') : (Array.isArray(item.types) ? item.types.join('\u00b7') : text(item.type_names || item.types || item.type)) }; });

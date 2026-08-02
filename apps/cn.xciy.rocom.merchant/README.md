@@ -12,7 +12,7 @@
 
 ## 使用前准备
 
-在 Tapp 设置中填写 WeGame API Key。该密钥仅用于请求洛克王国相关数据，不会写入仓库或预览文件。
+由安装 owner 或管理员在 Tapp 详情页的凭据（credentials）中填写 WeGame API Key。凭据仅会由宿主附加到声明的 WeGame 请求头，沙箱、设置和访客均无法读取。
 
 ## 权限说明
 
