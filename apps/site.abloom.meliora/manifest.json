@@ -27,7 +27,6 @@
     "media:read",
     "media:control",
     "storage",
-    "ui:fullscreen",
     "network:fetch"
   ],
   "homepage": "https://music.abloom.site",
