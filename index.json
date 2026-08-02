@@ -4,7 +4,7 @@
   "version": "1.8.94",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-08-01T14:50:28Z",
+  "updated_at": "2026-08-02T00:37:28Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.you",
@@ -511,7 +511,59 @@
       "verified": true,
       "created_at": "2026-08-01T00:00:00Z",
       "updated_at": "2026-08-01T01:40:06Z"
+    },
+    {
+      "id": "site.abloom.meliora",
+      "name": "Meliora 播放器",
+      "version": "0.1.0",
+      "description": "沉浸式歌词与节拍可视化:逐行/逐字歌词跟随、节拍网格驱动的呼吸背景、八段频谱",
+      "long_description": "Meliora 的 Myriad Tapp 版本:原样复刻 Meliora 播放页(歌词 FLIP 滚动、逐行/逐字高亮、节拍呼吸背景、五段频谱),播放内核、歌词(网易云 yrc / 酷狗 KRC 逐字)、节拍网格与频谱均由 Myriad 宿主提供。",
+      "locales": {
+        "en-US": {
+          "name": "Meliora Player",
+          "description": "Immersive lyrics & beat visuals powered by the Myriad host player"
+        }
+      },
+      "author": {
+        "name": "abloom25",
+        "url": "https://github.com/abloom25"
+      },
+      "license": "AGPL-3.0-or-later",
+      "homepage": "https://github.com/abloom25/MelioraTapp",
+      "repository": "https://github.com/abloom25/MelioraTapp",
+      "category": "media",
+      "tags": [
+        "音乐",
+        "播放器",
+        "歌词",
+        "可视化",
+        "频谱"
+      ],
+      "permissions": [
+        "media:read",
+        "media:control",
+        "storage",
+        "ui:fullscreen",
+        "network:fetch"
+      ],
+      "icon_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 512 512\"><defs><linearGradient id=\"a\" x1=\"58\" y1=\"34\" x2=\"454\" y2=\"478\" gradientUnits=\"userSpaceOnUse\"><stop stop-color=\"#baf2ed\"/><stop offset=\".5\" stop-color=\"#81d8d0\"/><stop offset=\"1\" stop-color=\"#287f7b\"/></linearGradient><radialGradient id=\"b\" cx=\"0\" cy=\"0\" r=\"1\" gradientTransform=\"translate(160 95) rotate(48) scale(360)\"><stop stop-color=\"#fff\" stop-opacity=\".28\"/><stop offset=\"1\" stop-color=\"#fff\" stop-opacity=\"0\"/></radialGradient></defs><rect width=\"512\" height=\"512\" rx=\"128\" fill=\"#121719\"/><rect width=\"512\" height=\"512\" rx=\"128\" fill=\"url(#b)\"/><path d=\"M82 340V164c0-32 40-46 60-21.6L256 286l114-143.6c20-24.4 60-10.4 60 21.6v176\" fill=\"none\" stroke=\"url(#a)\" stroke-width=\"64\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"82\" cy=\"372\" r=\"54\" fill=\"url(#a)\"/><circle cx=\"430\" cy=\"372\" r=\"54\" fill=\"url(#a)\"/></svg>",
+      "theme_color": "#151318",
+      "screenshots": [],
+      "download": {
+        "manifest": "apps/site.abloom.meliora/manifest.json",
+        "code": "apps/site.abloom.meliora/main.js",
+        "readme": "apps/site.abloom.meliora/README.md",
+        "page_styles": "apps/site.abloom.meliora/page.css",
+        "page_template": "apps/site.abloom.meliora/page.html"
+      },
+      "size": 256601,
+      "downloads": 0,
+      "rating": 0,
+      "featured": false,
+      "verified": false,
+      "created_at": "2026-08-01T16:58:00Z",
+      "updated_at": "2026-08-02T00:37:28Z"
     }
   ],
-  "last_updated": "2026-08-01T01:40:06Z"
+  "last_updated": "2026-08-01T16:58:00Z"
 }
