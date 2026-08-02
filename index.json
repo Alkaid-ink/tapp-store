@@ -4,7 +4,7 @@
   "version": "1.8.99",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-08-02T09:16:42Z",
+  "updated_at": "2026-08-02T23:21:44Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.you",
@@ -459,8 +459,24 @@
       "homepage": "https://github.com/Myriad-You/tapp-store/tree/main/apps/com.myriad.cdn-cache",
       "repository": "https://github.com/Myriad-You/tapp-store",
       "category": "developer",
-      "tags": ["CDN", "缓存", "Cloudflare", "EdgeOne", "阿里云", "AWS", "CloudFront", "运维", "开发者"],
-      "permissions": ["storage", "ui:notification", "ui:confirm", "ui:theme", "network:fetch"],
+      "tags": [
+        "CDN",
+        "缓存",
+        "Cloudflare",
+        "EdgeOne",
+        "阿里云",
+        "AWS",
+        "CloudFront",
+        "运维",
+        "开发者"
+      ],
+      "permissions": [
+        "storage",
+        "ui:notification",
+        "ui:confirm",
+        "ui:theme",
+        "network:fetch"
+      ],
       "icon_svg": "<svg viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M20 17.5A4.5 4.5 0 0017 9.64 6 6 0 005.2 8.3 4.5 4.5 0 006.5 17H20z\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"/><path d=\"M9 13h6M12 10l3 3-3 3\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>",
       "theme_color": "#f97316",
       "screenshots": [],
@@ -468,10 +484,19 @@
         "version": 1,
         "type": "snapshot",
         "html": "apps/com.myriad.cdn-cache/preview.html",
-        "styles": ["apps/com.myriad.cdn-cache/page.css", "apps/com.myriad.cdn-cache/preview.css"],
-        "viewport": {"width": 1440, "height": 900},
+        "styles": [
+          "apps/com.myriad.cdn-cache/page.css",
+          "apps/com.myriad.cdn-cache/preview.css"
+        ],
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
         "fit": "cover",
-        "focus": {"x": 0.5, "y": 0.5},
+        "focus": {
+          "x": 0.5,
+          "y": 0.5
+        },
         "theme": "dark"
       },
       "download": {
@@ -533,13 +558,13 @@
         "page_styles": "apps/site.abloom.meliora/page.css",
         "page_template": "apps/site.abloom.meliora/page.html"
       },
-      "size": 257917,
+      "size": 258223,
       "downloads": 0,
       "rating": 0,
       "featured": false,
       "verified": false,
       "created_at": "2026-08-01T16:58:00Z",
-      "updated_at": "2026-08-02T00:55:23Z"
+      "updated_at": "2026-08-02T23:21:44Z"
     },
     {
       "id": "cn.xciy.rocom.merchant",
