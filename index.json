@@ -438,17 +438,17 @@
     {
       "id": "com.myriad.cdn-cache",
       "name": "CDN 缓存刷新",
-      "version": "1.0.0",
-      "description": "仅管理员界面可操作的 Cloudflare、EdgeOne 与阿里云 CDN 缓存刷新工具",
-      "long_description": "面向站点管理员的 CDN 缓存刷新工具：支持 Cloudflare、腾讯云 EdgeOne 与阿里云 CDN。配置与密钥保存在当前用户私有存储，普通访客仅见提示页；可按 URL 精确刷新或清理全站缓存，并保留本地操作日志。",
+      "version": "1.1.0",
+      "description": "仅管理员可操作的 Cloudflare、EdgeOne、阿里云 CDN 与 AWS CloudFront 缓存刷新工具",
+      "long_description": "面向站点管理员的 CDN 缓存刷新工具：支持 Cloudflare、腾讯云 EdgeOne、阿里云 CDN 与 AWS CloudFront。CloudFront 使用 raw XML 与 SigV4；所有出站 API 仅允许管理员调用。可按 URL 精确刷新或清理全站缓存，并保留本地操作日志。",
       "locales": {
         "en-US": {
           "name": "CDN Cache Purge",
-          "description": "Purge Cloudflare, EdgeOne, and Alibaba Cloud CDN caches"
+          "description": "Purge Cloudflare, EdgeOne, Alibaba Cloud CDN, and AWS CloudFront caches"
         },
         "ja-JP": {
           "name": "CDN キャッシュ更新",
-          "description": "Cloudflare、EdgeOne、Alibaba Cloud CDN のキャッシュを更新"
+          "description": "Cloudflare、EdgeOne、Alibaba Cloud CDN、AWS CloudFront のキャッシュを更新"
         }
       },
       "author": {
@@ -459,22 +459,8 @@
       "homepage": "https://github.com/Myriad-You/tapp-store/tree/main/apps/com.myriad.cdn-cache",
       "repository": "https://github.com/Myriad-You/tapp-store",
       "category": "developer",
-      "tags": [
-        "CDN",
-        "缓存",
-        "Cloudflare",
-        "EdgeOne",
-        "阿里云",
-        "运维",
-        "开发者"
-      ],
-      "permissions": [
-        "storage",
-        "ui:notification",
-        "ui:confirm",
-        "ui:theme",
-        "network:fetch"
-      ],
+      "tags": ["CDN", "缓存", "Cloudflare", "EdgeOne", "阿里云", "AWS", "CloudFront", "运维", "开发者"],
+      "permissions": ["storage", "ui:notification", "ui:confirm", "ui:theme", "network:fetch"],
       "icon_svg": "<svg viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M20 17.5A4.5 4.5 0 0017 9.64 6 6 0 005.2 8.3 4.5 4.5 0 006.5 17H20z\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"/><path d=\"M9 13h6M12 10l3 3-3 3\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>",
       "theme_color": "#f97316",
       "screenshots": [],
@@ -482,19 +468,10 @@
         "version": 1,
         "type": "snapshot",
         "html": "apps/com.myriad.cdn-cache/preview.html",
-        "styles": [
-          "apps/com.myriad.cdn-cache/page.css",
-          "apps/com.myriad.cdn-cache/preview.css"
-        ],
-        "viewport": {
-          "width": 1440,
-          "height": 900
-        },
+        "styles": ["apps/com.myriad.cdn-cache/page.css", "apps/com.myriad.cdn-cache/preview.css"],
+        "viewport": {"width": 1440, "height": 900},
         "fit": "cover",
-        "focus": {
-          "x": 0.5,
-          "y": 0.5
-        },
+        "focus": {"x": 0.5, "y": 0.5},
         "theme": "dark"
       },
       "download": {
@@ -504,13 +481,13 @@
         "page_styles": "apps/com.myriad.cdn-cache/page.css",
         "page_template": "apps/com.myriad.cdn-cache/page.html"
       },
-      "size": 36288,
+      "size": 45737,
       "downloads": 0,
       "rating": 0,
       "featured": true,
       "verified": true,
       "created_at": "2026-08-01T00:00:00Z",
-      "updated_at": "2026-08-01T01:40:06Z"
+      "updated_at": "2026-08-02T17:40:21Z"
     },
     {
       "id": "site.abloom.meliora",
