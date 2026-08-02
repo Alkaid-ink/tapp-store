@@ -1,16 +1,16 @@
 # CDN 缓存刷新
 
-集中管理 Cloudflare、腾讯云 EdgeOne 与阿里云 CDN 的缓存刷新任务。
+集中管理 Cloudflare、腾讯云 EdgeOne、阿里云 CDN 与 AWS CloudFront 的缓存刷新任务。
 
 作者：**我願一直向著陽光.℡**
 
 ## 版本
 
-`1.0.0`
+`1.1.0`
 
 ## 功能
 
-- **多 CDN 支持**：在同一页面切换 Cloudflare、EdgeOne 与阿里云 CDN
+- **多 CDN 支持**：在同一页面切换 Cloudflare、EdgeOne、阿里云 CDN 与 AWS CloudFront
 - **精确刷新**：按行输入完整 URL，批量提交缓存刷新任务
 - **全站清理**：二次确认后清理站点全部缓存
 - **角色隔离**：管理员使用运维控制台；游客和普通用户只看到只读状态页
@@ -27,6 +27,7 @@
 | Cloudflare | Zone ID、API Token、站点地址 | `purge_everything` |
 | 腾讯云 EdgeOne | Zone ID、SecretId、SecretKey、站点地址 | `purge_all` |
 | 阿里云 CDN | AccessKey ID、AccessKey Secret、站点地址 | 根目录 `Directory` 刷新 |
+| AWS CloudFront | Distribution ID、Access Key ID、Secret Access Key、站点地址 | `/*` Invalidation |
 
 ### Cloudflare
 
@@ -39,6 +40,10 @@
 ### 阿里云 CDN
 
 使用仅具备 `cdn:RefreshObjectCaches` 权限的 RAM 用户 AccessKey。按 URL 刷新使用 `File` 类型。
+
+### AWS CloudFront
+
+使用仅允许目标 Distribution 执行 `cloudfront:CreateInvalidation` 的 IAM 用户凭证。CloudFront 的 SigV4 服务区域固定为 `us-east-1`；插件以同一份 XML 计算 SHA-256 与签名，并通过 `bodyMode: "raw"` 原样发送。按 URL 刷新时只提交 URL 的路径和查询参数，全站清理使用 `/*`。
 
 ## 使用方法
 
@@ -72,7 +77,7 @@
 ```text
 com.myriad.cdn-cache/
 ├── manifest.json  # 应用信息、权限和 CDN API 声明
-├── main.js        # 配置、阿里云签名、刷新与日志逻辑
+├── main.js        # 配置、TC3/RPC/SigV4 签名、刷新与日志逻辑
 ├── page.html      # 页面模板
 ├── page.css       # 页面样式与服务商配置互斥显示
 └── README.md      # 使用说明
@@ -90,16 +95,22 @@ com.myriad.cdn-cache/
 - 非管理员不会读取配置与日志，也不会绑定任何运维按钮。
 - 保存凭证、清除凭证、提交刷新和清空日志前会再次实时校验管理员身份。
 - 角色查询失败时默认拒绝访问，避免降级为开放模式。
-- 管理员判断是页面侧门禁；声明式 API 的 `protected` 仅要求登录，真正的出站授权仍由 elevated `network:fetch` Runtime Grant 与 CDN 凭证共同决定。
-- Myriad 当前不支持 API 级 `admin` access；请勿将普通用户加入 `user_perm_network_fetch`，也不要向普通用户提供站点 CDN 凭证。
+- 管理员页面门禁与声明式 API 的 `manager` 访问控制共同生效；出站请求还需要 elevated `network:fetch` Runtime Grant 与有效 CDN 凭证。
+- 所有 CDN API 均声明为 `access: "manager"`，普通登录用户无法直接调用；仍不应向普通用户提供站点 CDN 凭证。
 
 ## 更新日志
+
+### v1.1.0 (2026-08-02)
+
+- 新增 AWS CloudFront 按路径与全站缓存失效
+- 使用 `bodyMode: "raw"` 原样发送 CloudFront XML，确保 SigV4 payload hash 与线上字节一致
+- 所有 CDN 声明式 API 收紧为 `access: "manager"`
+- AWS 凭证配置仅在选择 CloudFront 时显示
 
 ### v1.0.0 (2026-08-01)
 
 - 重构 EdgeOne TC3：同一 payload 对象参与签名与声明式出站，Content-Type 对齐为 `application/json`
 - URL 在 EdgeOne 签名前规范化为 ASCII，避免非 ASCII JSON 转义差异
-- AWS CloudFront 因宿主不支持 raw XML body，当前不提供
 - 刷新操作始终读取当前表单配置，避免误用旧的已保存配置
 - 明确管理员 UI 门禁、Runtime Grant 与 CDN 凭证的安全边界
 - 增加管理员与非管理员双界面
