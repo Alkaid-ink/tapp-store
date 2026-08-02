@@ -1,7 +1,7 @@
 {
   "id": "cn.xciy.rocom.merchant",
   "name": "\u6d1b\u514b\u738b\u56fd\u60c5\u62a5\u53f0",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "\u67e5\u770b\u8fdc\u884c\u5546\u4eba\u3001\u6d3b\u52a8\u65e5\u5386\u3001\u6700\u65b0\u516c\u544a\u4e0e\u7cbe\u7075\u56fe\u9274\u3002",
   "category": "utility", "main": "main.js", "hasPage": true, "pageTemplate": "page.html", "styles": "styles.css", "cssMode": "unified", "themeColor": "#745aa8",
   "author": { "name": "StarChen" }, "permissions": ["network:fetch", "storage", "widget:register"], "backgroundRequirements": ["sync"],

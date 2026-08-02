@@ -58,7 +58,7 @@ function appendGoodsSource(value, output, depth) {
   }
   if (typeof value === 'object') {
     var keys = Object.keys(value);
-    var looksLikeGoods = goodsKeys(value).length && (priceValue(value) !== undefined || limitValue(value) !== undefined);
+    var looksLikeGoods = goodsKeys(value).length && (limitValue(value) !== undefined || hasValue(value.goods_name) || hasValue(value.goodsName) || hasValue(value.item_name) || hasValue(value.itemName) || hasValue(value.prop_name) || hasValue(value.propName) || hasValue(value.pet_id) || hasValue(value.petId));
     if (looksLikeGoods) { output.push(value); }
     keys.forEach(function (key) {
       if (/goods|props|pets|items|list|records|rows|data/i.test(key)) { appendGoodsSource(value[key], output, depth + 1); }
@@ -86,62 +86,7 @@ function matchingGoods(item, index) {
   }
   return {};
 }
-var PRICE_FIELDS = ['price', 'price_text', 'priceText', 'goods_price', 'goodsPrice', 'buy_price', 'buyPrice', 'buy_price_num', 'buyPriceNum', 'sell_price', 'sellPrice', 'purchase_price', 'purchasePrice', 'purchase_num', 'purchaseNum', 'exchange_price', 'exchangePrice', 'exchange_num', 'exchangeNum', 'need_num', 'needNum', 'require_num', 'requireNum', 'price_num', 'priceNum', 'consume_num', 'consumeNum', 'cost', 'cost_num', 'costNum', 'gold_price', 'goldPrice', 'gold_cost', 'goldCost', 'need_gold', 'needGold', 'need_coin', 'needCoin', 'need_money', 'needMoney', 'gold', 'gold_num', 'goldNum', 'coin_price', 'coinPrice', 'coin', 'coins', 'currency_num', 'currencyNum', 'currency_amount', 'currencyAmount', 'money', 'money_num', 'moneyNum', 'amount', 'value', 'text', 'label'];
-function numericPrice(value) {
-  if (typeof value === 'number') { return Number.isFinite(value) ? value : NaN; }
-  if (typeof value === 'string' && value.trim() !== '') {
-    var match = value.replace(/[,\s]/g, '').match(/-?\d+(?:\.\d+)?/);
-    var parsed = match ? Number(match[0]) : NaN;
-    return Number.isFinite(parsed) ? parsed : NaN;
-  }
-  return NaN;
-}
-function priceSources(item) {
-  if (!item || typeof item !== 'object') { return []; }
-  return [item, item.goods, item.goods_info, item.goodsInfo, item.goods_detail, item.goodsDetail, item.item, item.item_info, item.itemInfo, item.detail, item.info, item.data, item.meta, item.price_info, item.priceInfo, item.cost_info, item.costInfo, item.currency, item.money].filter(function (source) { return source && typeof source === 'object'; });
-}
-function scanPriceValue(source, depth) {
-  if (!source || typeof source !== 'object' || depth > 3) { return undefined; }
-  var fallback;
-  var keys = Object.keys(source);
-  for (var index = 0; index < keys.length; index += 1) {
-    var key = keys[index]; var normalizedKey = key.toLowerCase(); var value = source[key];
-    var priceLike = /(price|cost|consume|currency|gold|coin|money|amount|exchange|need|require|pay|bean|rock|\u4ef7|\u8d39|\u94b1|\u8d1d|\u5151\u6362|\u6d88\u8017|\u9700\u8981|\u6d1b\u514b\u8d1d)/.test(normalizedKey) && !/(limit|count|id|quantity|stock|total|time|date|\u9650|\u6570\u91cf|\u65f6\u95f4)/.test(normalizedKey);
-    if (value && typeof value === 'object') {
-      var nested = scanPriceValue(value, depth + 1);
-      if (nested !== undefined && hasUsablePrice(nested)) { return nested; }
-      if (fallback === undefined && nested !== undefined) { fallback = nested; }
-    } else if (priceLike && hasValue(value)) {
-      if (fallback === undefined) { fallback = value; }
-      if (numericPrice(value) > 0) { return value; }
-    }
-  }
-  return fallback;
-}
-function priceValue(item) {
-  var fallback;
-  var sources = priceSources(item);
-  for (var sourceIndex = 0; sourceIndex < sources.length; sourceIndex += 1) {
-    var source = sources[sourceIndex];
-    for (var fieldIndex = 0; fieldIndex < PRICE_FIELDS.length; fieldIndex += 1) {
-      var value = source[PRICE_FIELDS[fieldIndex]];
-      if (value && typeof value === 'object') { value = firstValue(value, ['value', 'amount', 'num', 'number', 'price', 'cost', 'text', 'label']); }
-      if (!hasValue(value)) { continue; }
-      if (fallback === undefined) { fallback = value; }
-      if (numericPrice(value) > 0) { return value; }
-    }
-  }
-  var scanned = scanPriceValue(item, 0);
-  return hasUsablePrice(scanned) ? scanned : (fallback !== undefined ? fallback : scanned);
-}
 function limitValue(item) { return firstValue(item, ['buy_limit_num', 'buyLimitNum', 'buy_limit', 'buyLimit', 'limit']); }
-function hasUsablePrice(value) { return hasValue(value) && numericPrice(value) > 0; }
-function mergedPrice(item, extra) {
-  var ownPrice = priceValue(item); var metaPrice = priceValue(extra);
-  if (hasUsablePrice(ownPrice)) { return ownPrice; }
-  if (hasUsablePrice(metaPrice)) { return metaPrice; }
-  return hasValue(ownPrice) ? ownPrice : metaPrice;
-}
 function normalizeMerchant(payload, watchlist) {
   var activities = payload.merchantActivities || payload.merchant_activities || []; var activity = Array.isArray(activities) && activities[0] ? activities[0] : {};
   var prices = goodsIndex(merchantGoodsSources(payload, activity));
@@ -152,7 +97,7 @@ function normalizeMerchant(payload, watchlist) {
     var start = numberTimestamp(item.start_time) || numberTimestamp(activity.start_time); var end = numberTimestamp(item.end_time) || numberTimestamp(activity.end_time);
     if (start && end && (now < start || now >= end)) { return; }
     var extra = matchingGoods(item, prices); var name = text(item.name || item.goods_name || item.goodsName || extra.goods_name || extra.goodsName || extra.name || '\u672a\u547d\u540d\u5546\u54c1');
-    products.push({ name: name, category: group.name, price: mergedPrice(item, extra), limit: limitValue(item) !== undefined ? limitValue(item) : limitValue(extra), image: text(item.icon_url || item.iconUrl), watched: watchlist.indexOf(name) !== -1 });
+    products.push({ name: name, category: group.name, limit: limitValue(item) !== undefined ? limitValue(item) : limitValue(extra), image: text(item.icon_url || item.iconUrl), watched: watchlist.indexOf(name) !== -1 });
   }); });
   return { activity: activity, products: products };
 }
