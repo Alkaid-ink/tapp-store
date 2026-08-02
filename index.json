@@ -567,7 +567,7 @@
     {
       "id": "cn.xciy.rocom.merchant",
       "name": "洛克王国情报台",
-      "version": "1.4.0",
+      "version": "1.4.1",
       "description": "查看远行商人、活动日历、最新公告与精灵图鉴。",
       "long_description": "洛克王国情报台用于快速查看远行商人当前轮次、换货倒计时、在售商品、关注清单命中、活动行程、官方公告与精灵图鉴搜索。提供页面视图与 2x2 / 4x2 / 4x4 小组件，适合放在桌面持续关注商人刷新。",
       "locales": {
@@ -639,8 +639,8 @@
       "featured": false,
       "verified": false,
       "created_at": "2026-08-02T05:39:55Z",
-      "updated_at": "2026-08-02T10:01:52Z"
+      "updated_at": "2026-08-02T10:08:06Z"
     }
   ],
-  "last_updated": "2026-08-02T10:01:52Z"
+  "last_updated": "2026-08-02T10:08:06Z"
 }
