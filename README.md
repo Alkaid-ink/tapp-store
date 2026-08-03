@@ -62,7 +62,7 @@ tapp-store/
 | `permissions` | ✅ | 申请权限 |
 | `download` | ✅ | 相对 `base_url` 的路径表 |
 | `locales` | ❌ | BCP-47 → `{ name?, description? }` |
-| `long_description` / `tags` / `icon` / `icon_svg` / `theme_color` | ❌ | 展示 |
+| `long_description` / `tags` / `icon` / `icon_svg` / `icon_shell` / `theme_color` | ❌ | 展示；`icon_shell: true` 时全彩图标仍套 material 色壳（默认 auto 铺满） |
 | `preview` | ❌ | 无脚本静态预览（HTML、CSS、桌面画布与裁切参数） |
 | `size` | ❌ | 字节；**≥ 1 MiB 时 Myriad 走客户端下载进度** |
 | `featured` / `verified` | ❌ | UI 徽章 |
