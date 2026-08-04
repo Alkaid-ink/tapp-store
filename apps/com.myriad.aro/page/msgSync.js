@@ -5,26 +5,52 @@
 /** Fingerprint message list so pin/content changes refresh even when count stays the same. */
 function messagesFingerprint(msgs) {
   if (!msgs || !msgs.length) return '0';
-  var last = msgs[msgs.length - 1] || {};
-  var pins = 0;
-  var ids = [];
+  var parts = [];
   for (var i = 0; i < msgs.length; i++) {
-    if (msgs[i].is_pinned) pins++;
-    if (i === 0 || i === msgs.length - 1 || msgs[i].is_pinned) {
-      ids.push((msgs[i].message_id || '') + (msgs[i].is_pinned ? '*' : ''));
+    var msg = msgs[i] || {};
+    var payload = msg.payload;
+    var body = '';
+    var kind = typeof payload;
+    try {
+      if (typeof isE2eCiphertextEnvelope === 'function' && isE2eCiphertextEnvelope(payload)) {
+        kind = 'cipher';
+        body = String(payload.ciphertext || '');
+      } else if (typeof payload === 'string') {
+        body = payload;
+      } else if (payload && typeof payload === 'object') {
+        var primary = payload.text || payload.title || payload.filename
+          || payload.url || payload.data || payload.description || '';
+        body = String(primary);
+        kind = 'object:' + Object.keys(payload).sort().join(',');
+      }
+    } catch (eFp) { /* ignore malformed payloads */ }
+    // Every row participates. In particular, a non-tail ciphertext becoming
+    // plaintext must repaint even when message count and the final row stay put.
+    parts.push([
+      msg.message_id || '',
+      msg.created_at || '',
+      msg.is_pinned ? '1' : '0',
+      msg.is_encrypted ? '1' : '0',
+      kind,
+      body.length,
+      body.slice(0, 48),
+      body.slice(-24),
+    ].join(':'));
+  }
+  return msgs.length + '|' + parts.join('|');
+}
+
+function hasCiphertextMessages() {
+  if (typeof state === 'undefined' || !Array.isArray(state.messages)) return false;
+  for (var i = 0; i < state.messages.length; i++) {
+    if (
+      typeof isE2eCiphertextEnvelope === 'function'
+      && isE2eCiphertextEnvelope(state.messages[i] && state.messages[i].payload)
+    ) {
+      return true;
     }
   }
-  // Include a slice of last payload so ciphertext→plaintext decrypt refreshes UI
-  // even when message_id/count stay the same (WS envelope vs GET decrypt race).
-  var lastBody = '';
-  try {
-    var lp = last.payload;
-    if (typeof lp === 'string') lastBody = lp.slice(0, 48);
-    else if (lp && typeof lp === 'object') {
-      lastBody = (lp.text || lp.ciphertext || lp.title || lp.filename || JSON.stringify(lp)).toString().slice(0, 48);
-    }
-  } catch (eFp) { /* ignore */ }
-  return msgs.length + '|' + (last.message_id || '') + '|' + (last.created_at || '') + '|' + pins + '|' + ids.join(',') + '|' + lastBody;
+  return false;
 }
 
 /**
@@ -198,39 +224,82 @@ function pushOptimisticMessage(msgType, payload, opts) {
   return id;
 }
 
-var _decryptRefreshTimers = [];
-var _decryptRefreshAttempts = 0;
-function scheduleDecryptRefresh() {
-  // Burst retries: keys may land a moment after the first ciphertext WS event.
-  if (_decryptRefreshAttempts > 6) return;
-  _decryptRefreshAttempts += 1;
-  var delays = [100, 400, 1000, 2200];
-  delays.forEach(function (ms) {
-    var t = setTimeout(function () {
-      if (typeof pollMessages === 'function') {
-        pollMessages(true).catch(function () {});
-      }
-      // Reset attempt budget once we have no ciphertext left
-      if (typeof state !== 'undefined' && Array.isArray(state.messages)) {
-        var still = false;
-        for (var i = 0; i < state.messages.length; i++) {
-          if (typeof isE2eCiphertextEnvelope === 'function'
-            && isE2eCiphertextEnvelope(state.messages[i].payload)) {
-            still = true;
-            break;
-          }
-        }
-        if (!still) _decryptRefreshAttempts = 0;
-      }
-    }, ms);
-    _decryptRefreshTimers.push(t);
-  });
-  // Cap timer list
-  if (_decryptRefreshTimers.length > 16) {
-    _decryptRefreshTimers.splice(0, _decryptRefreshTimers.length - 16).forEach(function (id) {
-      try { clearTimeout(id); } catch (e) { /* ignore */ }
-    });
+var DECRYPT_REFRESH_DELAYS = [120, 500, 1500, 4000, 10000];
+var _decryptRefreshTimer = null;
+var _decryptRefreshAttempt = 0;
+var _decryptRefreshScope = '';
+var _decryptRefreshInFlight = false;
+var _decryptRefreshRun = 0;
+
+function currentDecryptRefreshScope() {
+  if (typeof state === 'undefined' || !state.activeKind || !state.activeId) return '';
+  return state.activeKind + ':' + state.activeId + ':' + String(state.openGen || 0);
+}
+
+function cancelDecryptRefresh() {
+  _decryptRefreshRun += 1;
+  if (_decryptRefreshTimer != null) {
+    try { clearTimeout(_decryptRefreshTimer); } catch (e) { /* ignore */ }
   }
+  _decryptRefreshTimer = null;
+  _decryptRefreshAttempt = 0;
+  _decryptRefreshScope = '';
+  _decryptRefreshInFlight = false;
+}
+
+function scheduleDecryptRefresh(opts) {
+  opts = opts || {};
+  var scope = currentDecryptRefreshScope();
+  if (!scope || !hasCiphertextMessages()) {
+    cancelDecryptRefresh();
+    return;
+  }
+
+  if (_decryptRefreshScope !== scope) {
+    cancelDecryptRefresh();
+    _decryptRefreshScope = scope;
+  }
+  if (opts.reset) _decryptRefreshAttempt = 0;
+  if (opts.immediate && _decryptRefreshTimer != null) {
+    try { clearTimeout(_decryptRefreshTimer); } catch (eClear) { /* ignore */ }
+    _decryptRefreshTimer = null;
+  }
+  if (_decryptRefreshTimer != null || _decryptRefreshInFlight) return;
+  if (_decryptRefreshAttempt >= DECRYPT_REFRESH_DELAYS.length) return;
+
+  var run = _decryptRefreshRun;
+  var delay = opts.immediate ? 0 : DECRYPT_REFRESH_DELAYS[_decryptRefreshAttempt];
+  _decryptRefreshAttempt += 1;
+  _decryptRefreshTimer = setTimeout(function () {
+    _decryptRefreshTimer = null;
+    if (run !== _decryptRefreshRun || scope !== currentDecryptRefreshScope()) return;
+    if (!hasCiphertextMessages()) {
+      cancelDecryptRefresh();
+      return;
+    }
+
+    _decryptRefreshInFlight = true;
+    var request = typeof pollMessages === 'function'
+      ? pollMessages(true, {
+        messagesOnly: true,
+        stickBottom: false,
+        skipDecryptSchedule: true,
+      })
+      : Promise.resolve();
+    Promise.resolve(request).catch(function (ePoll) {
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn('[Aro] decrypt refresh failed:', ePoll);
+      }
+    }).then(function () {
+      if (run !== _decryptRefreshRun || scope !== currentDecryptRefreshScope()) return;
+      _decryptRefreshInFlight = false;
+      if (!hasCiphertextMessages()) {
+        cancelDecryptRefresh();
+        return;
+      }
+      scheduleDecryptRefresh();
+    });
+  }, delay);
 }
 
 function mergeIncomingMessage(msg) {
@@ -262,7 +331,6 @@ function mergeIncomingMessage(msg) {
   } else {
     renderMessages({ animateNew: true, newCount: 1 });
   }
-  if (needsDecryptRefresh) scheduleDecryptRefresh();
+  if (needsDecryptRefresh) scheduleDecryptRefresh({ reset: true });
   return true;
 }
-
