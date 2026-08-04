@@ -436,7 +436,7 @@
       "updated_at": "2026-07-29T00:23:31Z"
     },
     {
-      "id": "com.myriad.cdn-cache",
+      "id": "cn.wyyzxzyg.cdn-cache",
       "name": "CDN 缓存刷新",
       "version": "1.1.0",
       "description": "仅管理员可操作的 Cloudflare、EdgeOne、阿里云 CDN 与 AWS CloudFront 缓存刷新工具",
@@ -483,10 +483,10 @@
       "preview": {
         "version": 1,
         "type": "snapshot",
-        "html": "apps/com.myriad.cdn-cache/preview.html",
+        "html": "app/scn.wyyzxzyg.cdn-cache/preview.html",
         "styles": [
-          "apps/com.myriad.cdn-cache/page.css",
-          "apps/com.myriad.cdn-cache/preview.css"
+          "apps/cn.wyyzxzyg.cdn-cache/page.css",
+          "apps/cn.wyyzxzyg.cdn-cache/preview.css"
         ],
         "viewport": {
           "width": 1440,
@@ -500,11 +500,11 @@
         "theme": "dark"
       },
       "download": {
-        "manifest": "apps/com.myriad.cdn-cache/manifest.json",
-        "code": "apps/com.myriad.cdn-cache/main.js",
-        "readme": "apps/com.myriad.cdn-cache/README.md",
-        "page_styles": "apps/com.myriad.cdn-cache/page.css",
-        "page_template": "apps/com.myriad.cdn-cache/page.html"
+        "manifest": "apps/cn.wyyzxzyg.cdn-cache/manifest.json",
+        "code": "apps/cn.wyyzxzyg.cdn-cache/main.js",
+        "readme": "apps/cn.wyyzxzyg.cdn-cache/README.md",
+        "page_styles": "apps/cn.wyyzxzyg.cdn-cache/page.css",
+        "page_template": "apps/cn.wyyzxzyg.cdn-cache/page.html"
       },
       "size": 45737,
       "downloads": 0,
