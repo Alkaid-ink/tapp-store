@@ -1,10 +1,10 @@
 {
   "$schema": "https://myriad.you/schemas/tapp-store-v1.json",
   "name": "Myriad Official Tapp Store",
-  "version": "1.10.0",
+  "version": "1.11.0",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-08-04T02:50:41Z",
+  "updated_at": "2026-08-04T05:52:10Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.you",
@@ -713,7 +713,89 @@
       "verified": false,
       "created_at": "2026-08-04T02:07:42Z",
       "updated_at": "2026-08-04T02:50:41Z"
+    },
+    {
+      "id": "cn.echootaku.days",
+      "name": "朝夕",
+      "version": "0.1.0",
+      "description": "记录值得期待与纪念的日子，在主页随时查看最近倒数。",
+      "long_description": "用朝夕记录生日、纪念日、旅行、考试和其他重要时刻。支持每年重复、自定义分类与颜色、搜索筛选，以及 2x2、4x2、4x4 三种主页小组件；所有数据仅保存在当前用户的私有存储中。",
+      "locales": {
+        "en-US": {
+          "name": "Days",
+          "description": "Keep meaningful dates close and see the next countdown at a glance."
+        },
+        "ja-JP": {
+          "name": "日々",
+          "description": "大切な日を記録し、次のカウントダウンをいつでも確認できます。"
+        }
+      },
+      "author": {
+        "name": "EchoOtaku",
+        "url": "https://echootaku.cn"
+      },
+      "license": "MIT",
+      "homepage": "https://github.com/Myriad-You/tapp-store/tree/main/apps/cn.echootaku.days",
+      "repository": "https://github.com/Myriad-You/tapp-store",
+      "category": "productivity",
+      "tags": [
+        "倒数日",
+        "纪念日",
+        "生日",
+        "日期",
+        "小组件"
+      ],
+      "permissions": [
+        "storage",
+        "ui:notification",
+        "ui:theme",
+        "ui:confirm",
+        "widget:register"
+      ],
+      "icon_svg": "<svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><rect x='3' y='4.5' width='18' height='16' rx='3' stroke='currentColor' stroke-width='1.8'/><path d='M7.5 2.5v4M16.5 2.5v4M3 9h18' stroke='currentColor' stroke-width='1.8' stroke-linecap='round'/><path d='M8 13h3v3H8zM14 13h2' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/></svg>",
+      "theme_color": "#D97757",
+      "screenshots": [],
+      "preview": {
+        "version": 1,
+        "type": "snapshot",
+        "html": "apps/cn.echootaku.days/preview.html",
+        "styles": [
+          "apps/cn.echootaku.days/preview.css"
+        ],
+        "viewport": {
+          "width": 1280,
+          "height": 720
+        },
+        "fit": "cover",
+        "focus": {
+          "x": 0.5,
+          "y": 0.48
+        },
+        "theme": "light"
+      },
+      "download": {
+        "manifest": "apps/cn.echootaku.days/manifest.json",
+        "code": "apps/cn.echootaku.days/main.js",
+        "readme": "apps/cn.echootaku.days/README.md",
+        "widget_styles": "apps/cn.echootaku.days/widget.css",
+        "page_styles": "apps/cn.echootaku.days/page.css",
+        "page_template": "apps/cn.echootaku.days/page.html",
+        "widget_templates": {
+          "days-countdown": {
+            "2x2": "apps/cn.echootaku.days/templates/widget-2x2.html",
+            "4x2": "apps/cn.echootaku.days/templates/widget-4x2.html",
+            "4x4": "apps/cn.echootaku.days/templates/widget-4x4.html"
+          }
+        }
+      },
+      "size": 41666,
+      "downloads": 0,
+      "rating": 0,
+      "featured": false,
+      "verified": false,
+      "created_at": "2026-08-04T05:52:10Z",
+      "updated_at": "2026-08-04T05:52:10Z"
     }
   ],
-  "last_updated": "2026-08-04T02:50:41Z"
+  "last_updated": "2026-08-04T05:52:10Z"
 }
