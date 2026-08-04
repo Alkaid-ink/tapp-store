@@ -297,6 +297,9 @@ async function openConversation(kind, id) {
   renderConvList();
   updateSendState();
   startPolling();
+  if (typeof hasCiphertextMessages === 'function' && hasCiphertextMessages()) {
+    scheduleDecryptRefresh({ reset: true, immediate: true });
+  }
   subscribeRealtime();
   // Room open: actively re-confirm roster (home/fan-out lag after someone just joined).
   if (kind === 'room') {
@@ -1032,12 +1035,48 @@ function confirmRoomMembers(roomId, gen, opts) {
   }
 }
 
-async function pollMessages(force) {
-  if (!state.activeId || !state.activeKind) return;
-  // Snapshot target so a mid-flight conversation switch cannot apply wrong msgs.
-  var kind = state.activeKind;
-  var id = state.activeId;
-  var gen = state.openGen;
+var _messagePollFlight = null;
+var _messagePollQueued = null;
+
+function buildMessagePollRequest(force, opts) {
+  opts = opts || {};
+  if (!state.activeId || !state.activeKind) return null;
+  var messagesOnly = !!opts.messagesOnly;
+  return {
+    kind: state.activeKind,
+    id: state.activeId,
+    gen: state.openGen,
+    forceMerge: !!force || !!opts.forceMerge,
+    fetchMembers: !messagesOnly && (!!force || !!opts.fetchMembers),
+    allowRosterCadence: !messagesOnly,
+    stickBottom: opts.stickBottom == null ? (!!force && !messagesOnly) : !!opts.stickBottom,
+    skipDecryptSchedule: !!opts.skipDecryptSchedule,
+  };
+}
+
+function sameMessagePollScope(a, b) {
+  return !!a && !!b && a.kind === b.kind && a.id === b.id && a.gen === b.gen;
+}
+
+function queueMessagePoll(req) {
+  if (!_messagePollQueued || !sameMessagePollScope(_messagePollQueued, req)) {
+    _messagePollQueued = req;
+    return;
+  }
+  _messagePollQueued.forceMerge = _messagePollQueued.forceMerge || req.forceMerge;
+  _messagePollQueued.fetchMembers = _messagePollQueued.fetchMembers || req.fetchMembers;
+  _messagePollQueued.allowRosterCadence = _messagePollQueued.allowRosterCadence
+    || req.allowRosterCadence;
+  _messagePollQueued.stickBottom = _messagePollQueued.stickBottom || req.stickBottom;
+  _messagePollQueued.skipDecryptSchedule = _messagePollQueued.skipDecryptSchedule
+    && req.skipDecryptSchedule;
+}
+
+async function pollMessagesOnce(request) {
+  var kind = request.kind;
+  var id = request.id;
+  var gen = request.gen;
+  if (!isConversationCurrent(kind, id, gen)) return;
   try {
     var res;
     if (kind === 'channel') {
@@ -1045,9 +1084,14 @@ async function pollMessages(force) {
     } else {
       // Rooms: always poll messages. Roster only on force, boost window, or every 4th tick
       // (membership WS + confirm bursts cover the common path; full dual-fetch was heavy).
-      state._roomMemberPollTick = (state._roomMemberPollTick || 0) + 1;
+      if (request.allowRosterCadence) {
+        state._roomMemberPollTick = (state._roomMemberPollTick || 0) + 1;
+      }
       var boostActive = !!(state.rosterBoostUntil && Date.now() < state.rosterBoostUntil);
-      var shouldFetchMembers = !!force || boostActive || (state._roomMemberPollTick % 4 === 0);
+      var shouldFetchMembers = request.fetchMembers || (
+        request.allowRosterCadence
+        && (boostActive || (state._roomMemberPollTick % 4 === 0))
+      );
       if (shouldFetchMembers) {
         var pollSeq = (state.rosterFetchSeq = (state.rosterFetchSeq || 0) + 1);
         var roomPoll = await Promise.allSettled([
@@ -1057,6 +1101,8 @@ async function pollMessages(force) {
         if (!isConversationCurrent(kind, id, gen)) return;
         if (roomPoll[0].status === 'fulfilled') {
           res = roomPoll[0].value;
+        } else {
+          throw roomPoll[0].reason;
         }
         if (
           roomPoll[1].status === 'fulfilled'
@@ -1070,7 +1116,7 @@ async function pollMessages(force) {
           var nextMfp = typeof membersFingerprint === 'function'
             ? membersFingerprint(nextMembers)
             : String(nextMembers.length);
-          if (force || nextMfp !== prevMfp) {
+          if (request.forceMerge || nextMfp !== prevMfp) {
             state.members = nextMembers;
             var ac = typeof activeMemberCountFromList === 'function'
               ? activeMemberCountFromList(nextMembers)
@@ -1091,7 +1137,7 @@ async function pollMessages(force) {
       var fp = messagesFingerprint(msgs);
       var hadError = !!state.chatLoadError;
       state.chatLoadError = null;
-      if (force || fp !== state.messagesFp || hadError) {
+      if (request.forceMerge || fp !== state.messagesFp || hadError) {
         var prevLen = state.messages.length;
         var prevLast = prevLen ? (state.messages[prevLen - 1].message_id || '') : '';
         // Prefer known plaintext over a poll that still only has ciphertext
@@ -1108,7 +1154,7 @@ async function pollMessages(force) {
           var nearBot = typeof isMessagesNearBottom === 'function'
             ? isMessagesNearBottom($('messages'))
             : true;
-          if (nearBot || force) {
+          if (nearBot || request.stickBottom) {
             var trimmed = state.messages.length - 350;
             if (trimmed > 0) {
               state.messages = state.messages.slice(trimmed);
@@ -1123,28 +1169,22 @@ async function pollMessages(force) {
         // Track whether more history likely exists above the live window
         if (typeof ensureHistoryState === 'function') {
           var hs = ensureHistoryState();
-          if (hs.hasMoreMain == null || force) {
+          if (hs.hasMoreMain == null || request.forceMerge) {
             hs.hasMoreMain = (msgs.length >= (MSG_WINDOW_LIMIT || 50));
           }
         }
-        var stillCipher = false;
-        for (var ci = 0; ci < mergedMsgs.length; ci++) {
-          if (typeof isE2eCiphertextEnvelope === 'function'
-            && isE2eCiphertextEnvelope(mergedMsgs[ci].payload)) {
-            stillCipher = true;
-            break;
-          }
-        }
-        if (stillCipher) scheduleDecryptRefresh();
-        else _decryptRefreshAttempts = 0;
+        var stillCipher = typeof hasCiphertextMessages === 'function'
+          ? hasCiphertextMessages()
+          : false;
+        if (stillCipher && !request.skipDecryptSchedule) scheduleDecryptRefresh();
+        else if (!stillCipher && typeof cancelDecryptRefresh === 'function') cancelDecryptRefresh();
         var grew = mergedMsgs.length > prevLen;
         var tailChanged = mergedMsgs.length
           && (mergedMsgs[mergedMsgs.length - 1].message_id || '') !== prevLast;
         var paint = typeof scheduleRenderMessages === 'function'
           ? scheduleRenderMessages
           : renderMessages;
-        // force=true is open/send/decrypt — stick to bottom. Background poll preserves scroll.
-        var stick = !!force;
+        var stick = request.stickBottom;
         if (grew && tailChanged && !state.skipMsgAppear && !hadError) {
           paint({
             animateNew: true,
@@ -1156,7 +1196,42 @@ async function pollMessages(force) {
         }
       }
     }
-  } catch (e) { /* ignore */ }
+  } catch (e) {
+    if (isConversationCurrent(kind, id, gen) && typeof console !== 'undefined' && console.warn) {
+      console.warn('[Aro] message poll failed for ' + kind + ':' + id + ':', e);
+    }
+  }
+}
+
+async function drainMessagePollQueue() {
+  while (_messagePollQueued) {
+    var request = _messagePollQueued;
+    _messagePollQueued = null;
+    await pollMessagesOnce(request);
+  }
+}
+
+function pollMessages(force, opts) {
+  var request = buildMessagePollRequest(force, opts);
+  if (!request) return Promise.resolve();
+  queueMessagePoll(request);
+  return startMessagePollDrain();
+}
+
+function startMessagePollDrain() {
+  if (_messagePollFlight) return _messagePollFlight;
+  if (!_messagePollQueued) return Promise.resolve();
+
+  var flight = drainMessagePollQueue();
+  _messagePollFlight = flight;
+  var clearFlight = function () {
+    if (_messagePollFlight === flight) _messagePollFlight = null;
+    // A request can arrive after the drain loop's last condition but before
+    // this completion callback. Start one more drain instead of stranding it.
+    if (_messagePollQueued && !_messagePollFlight) startMessagePollDrain();
+  };
+  flight.then(clearFlight, clearFlight);
+  return flight;
 }
 
 function currentPollInterval() {
@@ -1168,16 +1243,22 @@ function currentPollInterval() {
   return base;
 }
 
+var _pollLoopRun = 0;
+
 function startPolling() {
   // Cancel only the poll loop — do NOT cancel roster confirm bursts.
   if (state.pollTimer) {
     clearTimeout(state.pollTimer);
     state.pollTimer = null;
   }
-  function tick() {
+  var run = ++_pollLoopRun;
+  var kind = state.activeKind;
+  var id = state.activeId;
+  var gen = state.openGen;
+  async function tick() {
     state.pollTimer = null;
-    pollMessages(false);
-    if (!state.activeId || !state.activeKind) return;
+    await pollMessages(false);
+    if (run !== _pollLoopRun || !isConversationCurrent(kind, id, gen)) return;
     // Drop boost when expired so interval returns to normal.
     if (state.rosterBoostUntil && Date.now() >= state.rosterBoostUntil) {
       state.rosterBoostUntil = 0;
@@ -1188,25 +1269,86 @@ function startPolling() {
 }
 
 function stopPolling() {
+  _pollLoopRun += 1;
   if (state.pollTimer) {
     clearTimeout(state.pollTimer);
     state.pollTimer = null;
   }
+  if (typeof cancelDecryptRefresh === 'function') cancelDecryptRefresh();
 }
 
-async function subscribeRealtime() {
+var REALTIME_RECONNECT_DELAYS = [750, 1500, 3000, 6000, 10000];
+var _realtimeReconnectTimer = null;
+var _realtimeReconnectAttempt = 0;
+var _realtimeReconnectRun = 0;
+var _realtimeDisconnectSerial = 0;
+
+function cancelRealtimeReconnect() {
+  _realtimeReconnectRun += 1;
+  if (_realtimeReconnectTimer != null) {
+    try { clearTimeout(_realtimeReconnectTimer); } catch (e) { /* ignore */ }
+  }
+  _realtimeReconnectTimer = null;
+  _realtimeReconnectAttempt = 0;
+}
+
+function scheduleRealtimeReconnect(kind, id, gen) {
+  if (!isConversationCurrent(kind, id, gen) || _realtimeReconnectTimer != null) return;
+  var run = _realtimeReconnectRun;
+  var delay = REALTIME_RECONNECT_DELAYS[
+    Math.min(_realtimeReconnectAttempt, REALTIME_RECONNECT_DELAYS.length - 1)
+  ];
+  _realtimeReconnectAttempt += 1;
+  _realtimeReconnectTimer = setTimeout(function () {
+    _realtimeReconnectTimer = null;
+    if (run !== _realtimeReconnectRun || !isConversationCurrent(kind, id, gen)) return;
+    subscribeRealtime({ reconnectRun: run }).then(function () {
+      if (run !== _realtimeReconnectRun || !isConversationCurrent(kind, id, gen)) return;
+      if (state.subscribedKind !== kind || state.subscribedId !== id) {
+        scheduleRealtimeReconnect(kind, id, gen);
+      }
+    }).catch(function () {
+      if (run === _realtimeReconnectRun && isConversationCurrent(kind, id, gen)) {
+        scheduleRealtimeReconnect(kind, id, gen);
+      }
+    });
+  }, delay);
+}
+
+function handleRealtimeDisconnect(kind, id) {
+  if (state.subscribedKind === kind && state.subscribedId === id) {
+    state.subscribedKind = null;
+    state.subscribedId = null;
+  }
+  var gen = state.openGen;
+  if (!isConversationCurrent(kind, id, gen)) return;
+  _realtimeDisconnectSerial += 1;
+  pollMessages(true, { stickBottom: false });
+  scheduleRealtimeReconnect(kind, id, gen);
+}
+
+async function subscribeRealtime(opts) {
+  opts = opts || {};
   if (!state.activeId || !state.activeKind || !Tapp.federation) return;
   var kind = state.activeKind;
   var id = state.activeId;
   var gen = state.openGen;
   // Already subscribed to this conversation
-  if (state.subscribedKind === kind && state.subscribedId === id) return;
-  await unsubscribeRealtime();
+  if (state.subscribedKind === kind && state.subscribedId === id) {
+    cancelRealtimeReconnect();
+    return;
+  }
+  await unsubscribeRealtime({ preserveReconnect: true });
   if (!isConversationCurrent(kind, id, gen)) return;
+  var disconnectSerial = _realtimeDisconnectSerial;
   try {
     if (kind === 'channel' && typeof Tapp.federation.subscribeChannel === 'function') {
       await Tapp.federation.subscribeChannel(id);
-      if (!isConversationCurrent(kind, id, gen)) {
+      if (
+        !isConversationCurrent(kind, id, gen)
+        || disconnectSerial !== _realtimeDisconnectSerial
+        || (opts.reconnectRun != null && opts.reconnectRun !== _realtimeReconnectRun)
+      ) {
         // User already left — best-effort drop this sub
         try {
           if (typeof Tapp.federation.unsubscribeChannel === 'function') {
@@ -1219,7 +1361,11 @@ async function subscribeRealtime() {
       state.subscribedId = id;
     } else if (kind === 'room' && typeof Tapp.federation.subscribeRoom === 'function') {
       await Tapp.federation.subscribeRoom(id);
-      if (!isConversationCurrent(kind, id, gen)) {
+      if (
+        !isConversationCurrent(kind, id, gen)
+        || disconnectSerial !== _realtimeDisconnectSerial
+        || (opts.reconnectRun != null && opts.reconnectRun !== _realtimeReconnectRun)
+      ) {
         try {
           if (typeof Tapp.federation.unsubscribeRoom === 'function') {
             await Tapp.federation.unsubscribeRoom(id);
@@ -1230,12 +1376,18 @@ async function subscribeRealtime() {
       state.subscribedKind = 'room';
       state.subscribedId = id;
     }
+    if (state.subscribedKind === kind && state.subscribedId === id) {
+      cancelRealtimeReconnect();
+    }
   } catch (e) {
     console.warn('[Aro] realtime subscribe failed, falling back to poll:', e);
+    if (isConversationCurrent(kind, id, gen)) scheduleRealtimeReconnect(kind, id, gen);
   }
 }
 
-async function unsubscribeRealtime() {
+async function unsubscribeRealtime(opts) {
+  opts = opts || {};
+  if (!opts.preserveReconnect) cancelRealtimeReconnect();
   if (!state.subscribedKind || !state.subscribedId || !Tapp.federation) {
     state.subscribedKind = null;
     state.subscribedId = null;
@@ -1250,6 +1402,54 @@ async function unsubscribeRealtime() {
   } catch (e) { /* ignore */ }
   state.subscribedKind = null;
   state.subscribedId = null;
+}
+
+var _e2eDetailRefreshScope = '';
+var _e2eDetailRefreshFlight = null;
+
+function handleActiveKeyExchange(kind, id) {
+  var gen = state.openGen;
+  if (!isConversationCurrent(kind, id, gen)) return Promise.resolve();
+  if (typeof scheduleDecryptRefresh === 'function') {
+    scheduleDecryptRefresh({ reset: true, immediate: true });
+  }
+
+  var scope = kind + ':' + id + ':' + String(gen || 0);
+  if (_e2eDetailRefreshFlight && _e2eDetailRefreshScope === scope) {
+    return _e2eDetailRefreshFlight;
+  }
+
+  var request;
+  if (kind === 'channel' && typeof Tapp.federation.getChannel === 'function') {
+    request = Tapp.federation.getChannel(id);
+  } else if (kind === 'room' && typeof Tapp.federation.getRoom === 'function') {
+    request = Tapp.federation.getRoom(id);
+  } else {
+    request = Promise.resolve(null);
+  }
+
+  _e2eDetailRefreshScope = scope;
+  var flight = Promise.resolve(request).then(function (detail) {
+    if (!detail || !isConversationCurrent(kind, id, gen)) return;
+    if (kind === 'channel') state.channelDetail = detail;
+    else state.roomDetail = detail;
+    if (typeof renderChatHeader === 'function') renderChatHeader();
+    if (typeof updateSendState === 'function') updateSendState();
+    if (typeof maybeAnnounceE2eEstablished === 'function') maybeAnnounceE2eEstablished();
+  }).catch(function (e) {
+    if (isConversationCurrent(kind, id, gen) && typeof console !== 'undefined' && console.warn) {
+      console.warn('[Aro] E2E detail refresh failed:', e);
+    }
+  });
+  _e2eDetailRefreshFlight = flight;
+  var clear = function () {
+    if (_e2eDetailRefreshFlight === flight) {
+      _e2eDetailRefreshFlight = null;
+      _e2eDetailRefreshScope = '';
+    }
+  };
+  flight.then(clear, clear);
+  return flight;
 }
 
 function handleRealtimeMessage(ev) {
@@ -1292,6 +1492,10 @@ function handleRealtimeMessage(ev) {
     mergeIncomingMessage(data.message);
     // 当前会话但页面在后台时仍提示
     maybeNotifyIncomingMessage(scope, scopeId, data.message);
+    return;
+  }
+  if (data.type === 'key_exchange') {
+    handleActiveKeyExchange(activeKind, activeId);
     return;
   }
   if (data.type === 'room_message_pinned' && data.message_id) {
@@ -1430,6 +1634,10 @@ function bindRealtimeListeners() {
   if (typeof Tapp.federation.onChannelUpdate === 'function') {
     Tapp.federation.onChannelUpdate(function (ev) {
       if (!ev || !ev.channelId) return;
+      if (ev.event === 'disconnected') {
+        handleRealtimeDisconnect('channel', ev.channelId);
+        return;
+      }
       // List-level status can update even when another chat is open
       if (ev.event === 'closed' || ev.event === 'accepted') {
         for (var ci = 0; ci < state.channels.length; ci++) {
@@ -1457,15 +1665,18 @@ function bindRealtimeListeners() {
         renderChatHeader();
         renderConvList();
         updateSendState();
-      } else if (ev.event === 'disconnected') {
-        // WS dropped — poll will keep things eventually consistent
-        pollMessages(true);
+      } else if (ev.event === 'key_exchange') {
+        handleActiveKeyExchange('channel', ev.channelId);
       }
     });
   }
   if (typeof Tapp.federation.onRoomUpdate === 'function') {
     Tapp.federation.onRoomUpdate(function (ev) {
       if (!ev || !ev.roomId) return;
+      if (ev.event === 'disconnected') {
+        handleRealtimeDisconnect('room', ev.roomId);
+        return;
+      }
       if (ev.event === 'deleted') {
         if (state.activeKind === 'room' && state.activeId === ev.roomId) {
           exitActiveConversationUi(lang.dissolve || 'Room deleted', true);
@@ -1489,7 +1700,7 @@ function bindRealtimeListeners() {
       }
       var roomId = ev.roomId;
       var gen = state.openGen;
-      if (ev.event === 'disconnected') pollMessages(true);
+      if (ev.event === 'key_exchange') handleActiveKeyExchange('room', roomId);
       else if (ev.event === 'governance_changed') {
         Tapp.federation.getRoom(roomId).then(function (detail) {
           if (!detail || !isConversationCurrent('room', roomId, gen)) return;
