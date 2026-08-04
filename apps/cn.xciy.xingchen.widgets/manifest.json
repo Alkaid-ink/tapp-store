@@ -1,13 +1,13 @@
 {
   "id": "cn.xciy.xingchen.widgets",
   "name": "星辰小组件",
-  "version": "0.5.6",
+  "version": "0.6.0",
   "minSystemVersion": "0.3.23",
-  "description": "GitHub 数据卡片、系统访客统计与个人信息小组件合集。",
+  "description": "GitHub 数据卡片、照片墙、系统访客统计与个人信息小组件合集。",
   "locales": {
     "en-US": {
       "name": "Star Widgets",
-      "description": "GitHub cards, built-in site analytics, and personal contact widgets"
+      "description": "GitHub cards, photo walls, built-in site analytics, and personal contact widgets"
     }
   },
   "category": "utility",
@@ -379,6 +379,97 @@
           "min": 0,
           "max": 80,
           "step": 1
+        }
+      ]
+    },
+    {
+      "id": "photo-wall",
+      "name": "照片墙",
+      "description": "用全幅主图与拼贴网格铺满桌面模块，最多展示九张网络照片。",
+      "icon": "▧",
+      "category": "visualization",
+      "defaultSize": "4x2",
+      "sizes": [
+        "2x1",
+        "2x2",
+        "4x1",
+        "4x2",
+        "4x4"
+      ],
+      "templates": {
+        "2x1": "templates/photo-wall-2x1.html",
+        "2x2": "templates/photo-wall-2x2.html",
+        "4x1": "templates/photo-wall-4x1.html",
+        "4x2": "templates/photo-wall-4x2.html",
+        "4x4": "templates/photo-wall-4x4.html"
+      },
+      "settings": [
+        {
+          "key": "images",
+          "label": "照片链接",
+          "type": "input",
+          "description": "最多九张 HTTP/HTTPS 图片，使用竖线 | 分隔。每种尺寸会自动选取合适数量。",
+          "defaultValue": "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=82 | https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1200&q=82 | https://images.unsplash.com/photo-1493246507139-91e8fad9978e?auto=format&fit=crop&w=1200&q=82 | https://images.unsplash.com/photo-1500534623283-312aade485b7?auto=format&fit=crop&w=1200&q=82 | https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=82 | https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=1200&q=82 | https://images.unsplash.com/photo-1501854140801-50d01698950b?auto=format&fit=crop&w=1200&q=82 | https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1200&q=82 | https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1200&q=82",
+          "placeholder": "https://example.com/1.jpg | https://example.com/2.jpg"
+        },
+        {
+          "key": "layout",
+          "label": "排列方式",
+          "type": "select",
+          "description": "自动拼贴会突出首张照片；图片不足时自动切换为均衡排列。",
+          "defaultValue": "auto",
+          "options": [
+            { "value": "auto", "label": "自动拼贴" },
+            { "value": "mosaic", "label": "主图拼贴" },
+            { "value": "grid", "label": "均衡排列" }
+          ]
+        },
+        {
+          "key": "focus",
+          "label": "照片焦点",
+          "type": "select",
+          "defaultValue": "center",
+          "options": [
+            { "value": "center", "label": "居中" },
+            { "value": "top", "label": "偏上" },
+            { "value": "bottom", "label": "偏下" },
+            { "value": "left", "label": "偏左" },
+            { "value": "right", "label": "偏右" }
+          ]
+        },
+        {
+          "key": "gap",
+          "label": "照片间距",
+          "type": "number",
+          "defaultValue": 4,
+          "min": 0,
+          "max": 16,
+          "step": 1
+        },
+        {
+          "key": "cornerRadius",
+          "label": "整体圆角",
+          "type": "number",
+          "defaultValue": 18,
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "tileRadius",
+          "label": "照片圆角",
+          "type": "number",
+          "defaultValue": 10,
+          "min": 0,
+          "max": 24,
+          "step": 1
+        },
+        {
+          "key": "backgroundColor",
+          "label": "间隙颜色",
+          "type": "color",
+          "description": "照片间距和加载占位区域的底色。",
+          "defaultValue": "#0F172A"
         }
       ]
     },

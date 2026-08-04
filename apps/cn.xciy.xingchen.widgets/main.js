@@ -615,6 +615,162 @@ Tapp.widgets["website-visitors"] = {
   render: visitorRender
 };
 
+/** @typedef {"auto" | "mosaic" | "grid"} PhotoWallLayout */
+/**
+ * @typedef {Object} PhotoWallResolvedConfig
+ * @property {string[]} images
+ * @property {PhotoWallLayout} layout
+ * @property {number} gap
+ * @property {number} cornerRadius
+ * @property {number} tileRadius
+ * @property {string} focus
+ * @property {string} backgroundColor
+ */
+
+var PHOTO_WALL_DEFAULT_IMAGES = [
+  "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=82",
+  "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1200&q=82",
+  "https://images.unsplash.com/photo-1493246507139-91e8fad9978e?auto=format&fit=crop&w=1200&q=82",
+  "https://images.unsplash.com/photo-1500534623283-312aade485b7?auto=format&fit=crop&w=1200&q=82",
+  "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=82",
+  "https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=1200&q=82",
+  "https://images.unsplash.com/photo-1501854140801-50d01698950b?auto=format&fit=crop&w=1200&q=82",
+  "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1200&q=82",
+  "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1200&q=82"
+];
+
+/** @param {unknown} value @returns {string[]} */
+function photoWallParseImages(value) {
+  var raw = value === undefined || value === null
+    ? PHOTO_WALL_DEFAULT_IMAGES.join(" | ")
+    : xingchenText(value);
+  var seen = Object.create(null);
+  return raw.split(/\r?\n|\|/).map(function (item) {
+    return item.trim();
+  }).filter(function (item) {
+    if (!item || seen[item]) return false;
+    try {
+      var url = new URL(item);
+      if (url.protocol !== "https:" && url.protocol !== "http:") return false;
+      seen[item] = true;
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  }).slice(0, 9);
+}
+
+/** @param {unknown} value @returns {PhotoWallLayout} */
+function photoWallLayout(value) {
+  var layout = xingchenText(value).trim();
+  return layout === "grid" || layout === "mosaic" ? layout : "auto";
+}
+
+/** @param {unknown} value @returns {string} */
+function photoWallFocus(value) {
+  var focus = xingchenText(value).trim();
+  var positions = {
+    center: "50% 50%",
+    top: "50% 20%",
+    bottom: "50% 80%",
+    left: "20% 50%",
+    right: "80% 50%"
+  };
+  return positions[focus] || positions.center;
+}
+
+/** @param {XingchenWidgetProps} props @returns {PhotoWallResolvedConfig} */
+function photoWallResolvedConfig(props) {
+  var config = props && (props.config || props.settings) ? (props.config || props.settings || {}) : {};
+  return {
+    images: photoWallParseImages(config.images),
+    layout: photoWallLayout(config.layout),
+    gap: Math.round(xingchenNumber(config.gap, 4, 0, 16)),
+    cornerRadius: xingchenNumber(config.cornerRadius, 18, 0, 40),
+    tileRadius: xingchenNumber(config.tileRadius, 10, 0, 24),
+    focus: photoWallFocus(config.focus),
+    backgroundColor: xingchenColor(config.backgroundColor, "#0F172A")
+  };
+}
+
+/** @param {string} size @returns {number} */
+function photoWallVisibleLimit(size) {
+  var limits = { "2x1": 3, "4x1": 5, "2x2": 4, "4x2": 6, "4x4": 9 };
+  return limits[size] || limits["4x2"];
+}
+
+/** @param {HTMLElement} container @returns {HTMLElement} */
+function photoWallEnsureMarkup(container) {
+  var shell = /** @type {HTMLElement | null} */ (container.querySelector("[data-photo-wall-shell]"));
+  if (shell) return shell;
+  container.innerHTML = '<section class="photo-wall-widget" data-photo-wall-shell data-size="4x2" role="group" aria-label="照片墙"></section>';
+  return /** @type {HTMLElement} */ (container.querySelector("[data-photo-wall-shell]"));
+}
+
+/** @param {HTMLElement} container @param {XingchenWidgetProps} props */
+function photoWallRender(container, props) {
+  var shell = photoWallEnsureMarkup(container);
+  var config = photoWallResolvedConfig(props || {});
+  var size = props && props.size ? props.size : "4x2";
+  var visibleLimit = photoWallVisibleLimit(size);
+  var images = config.images.slice(0, visibleLimit);
+  var resolvedLayout = config.layout === "grid"
+    ? "grid"
+    : (images.length === visibleLimit && images.length >= 3 ? "mosaic" : "grid");
+
+  container.style.background = "transparent";
+  container.ownerDocument.documentElement.style.background = "transparent";
+  if (container.ownerDocument.body) container.ownerDocument.body.style.background = "transparent";
+  shell.setAttribute("data-size", size);
+  shell.setAttribute("data-layout", resolvedLayout);
+  shell.setAttribute("data-count", String(images.length));
+  shell.setAttribute("aria-label", "照片墙，共 " + images.length + " 张照片");
+  shell.style.setProperty("--photo-wall-gap", config.gap + "px");
+  shell.style.setProperty("--photo-wall-radius", config.cornerRadius + "px");
+  shell.style.setProperty("--photo-tile-radius", (config.gap === 0 ? 0 : config.tileRadius) + "px");
+  shell.style.setProperty("--photo-focus", config.focus);
+  shell.style.setProperty("--photo-wall-background", config.backgroundColor);
+  shell.innerHTML = "";
+
+  if (!images.length) {
+    var empty = container.ownerDocument.createElement("div");
+    empty.className = "photo-wall-empty";
+    empty.innerHTML = '<span aria-hidden="true">▧</span><strong>添加照片链接</strong><small>使用竖线分隔多张图片</small>';
+    shell.appendChild(empty);
+    return;
+  }
+
+  var fragment = container.ownerDocument.createDocumentFragment();
+  images.forEach(function (url, index) {
+    var item = container.ownerDocument.createElement("figure");
+    var image = /** @type {HTMLImageElement} */ (container.ownerDocument.createElement("img"));
+    item.className = "photo-wall-item";
+    item.setAttribute("data-index", String(index + 1));
+    image.alt = "照片 " + (index + 1);
+    image.decoding = "async";
+    image.loading = "eager";
+    image.referrerPolicy = "no-referrer";
+    image.onload = function () {
+      item.setAttribute("data-state", "ready");
+      image.onload = null;
+      image.onerror = null;
+    };
+    image.onerror = function () {
+      item.setAttribute("data-state", "error");
+      image.onload = null;
+      image.onerror = null;
+    };
+    image.src = url;
+    item.appendChild(image);
+    fragment.appendChild(item);
+  });
+  shell.appendChild(fragment);
+}
+
+Tapp.widgets["photo-wall"] = {
+  render: photoWallRender
+};
+
 /** @typedef {"email" | "qq" | "wechat" | "telegram" | "github" | "gitee" | "bilibili" | "custom"} PersonalPlatform */
 /**
  * @typedef {Object} PersonalResolvedConfig
