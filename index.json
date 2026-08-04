@@ -436,7 +436,7 @@
       "updated_at": "2026-07-29T00:23:31Z"
     },
     {
-      "id": "com.myriad.cdn-cache",
+      "id": "cn.wyyzxzyg.cdn-cache",
       "name": "CDN 缓存刷新",
       "version": "1.1.0",
       "description": "仅管理员可操作的 Cloudflare、EdgeOne、阿里云 CDN 与 AWS CloudFront 缓存刷新工具",
@@ -483,10 +483,10 @@
       "preview": {
         "version": 1,
         "type": "snapshot",
-        "html": "apps/com.myriad.cdn-cache/preview.html",
+        "html": "app/scn.wyyzxzyg.cdn-cache/preview.html",
         "styles": [
-          "apps/com.myriad.cdn-cache/page.css",
-          "apps/com.myriad.cdn-cache/preview.css"
+          "apps/cn.wyyzxzyg.cdn-cache/page.css",
+          "apps/cn.wyyzxzyg.cdn-cache/preview.css"
         ],
         "viewport": {
           "width": 1440,
@@ -500,11 +500,11 @@
         "theme": "dark"
       },
       "download": {
-        "manifest": "apps/com.myriad.cdn-cache/manifest.json",
-        "code": "apps/com.myriad.cdn-cache/main.js",
-        "readme": "apps/com.myriad.cdn-cache/README.md",
-        "page_styles": "apps/com.myriad.cdn-cache/page.css",
-        "page_template": "apps/com.myriad.cdn-cache/page.html"
+        "manifest": "apps/cn.wyyzxzyg.cdn-cache/manifest.json",
+        "code": "apps/cn.wyyzxzyg.cdn-cache/main.js",
+        "readme": "apps/cn.wyyzxzyg.cdn-cache/README.md",
+        "page_styles": "apps/cn.wyyzxzyg.cdn-cache/page.css",
+        "page_template": "apps/cn.wyyzxzyg.cdn-cache/page.html"
       },
       "size": 45737,
       "downloads": 0,
@@ -513,6 +513,32 @@
       "verified": true,
       "created_at": "2026-08-01T00:00:00Z",
       "updated_at": "2026-08-02T17:40:21Z"
+    },
+    {
+      "id": "com.myriad.minecraft-hub",
+      "name": "Minecraft 服务器与 Wiki",
+      "version": "1.0.2",
+      "description": "面向玩家的 Java/基岩版服务器查询、收藏与 Minecraft Wiki 搜索工具",
+      "long_description": "查询 Minecraft Java 与基岩版服务器的在线状态、版本、MOTD、人数、玩家和软件信息；收藏常用服务器、保存最近查询，并支持多服务器首页小组件轮播与自定义状态检测间隔。",
+      "author": {"name": "我願一直向著陽光.℡", "url": "https://github.com/zgzyh"},
+      "license": "MIT",
+      "homepage": "https://github.com/Myriad-You/tapp-store/tree/main/apps/cn.wyyzxzyg.minecraft-hub",
+      "repository": "https://github.com/Myriad-You/tapp-store",
+      "category": "games",
+      "tags": ["Minecraft", "服务器", "查服", "Wiki", "Java", "基岩版"],
+      "permissions": ["storage", "ui:notification", "ui:theme", "network:fetch", "widget:register"],
+      "icon_svg": "<svg viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><path fill=\"currentColor\" d=\"M3 5.5 12 2l9 3.5v13L12 22l-9-3.5v-13Zm9-1.35L6.1 6.45 12 8.8l5.9-2.35L12 4.15Zm-7 4v8.98l6 2.34v-8.98L5 8.15Zm8 11.32 6-2.34V8.15l-6 2.34v8.98Z\"/></svg>",
+      "theme_color": "#57a64e",
+      "screenshots": [],
+      "preview": {"version":1,"type":"snapshot","html":"apps/cn.wyyzxzyg.minecraft-hub/preview.html","styles":["apps/cn.wyyzxzyg.minecraft-hub/page.css","apps/cn.wyyzxzyg.minecraft-hub/preview.css"],"viewport":{"width":1440,"height":900},"fit":"cover","focus":{"x":0.5,"y":0.5},"theme":"light"},
+      "download": {"manifest":"apps/cn.wyyzxzyg.minecraft-hub/manifest.json","code":"apps/cn.wyyzxzyg.minecraft-hub/main.js","readme":"apps/cn.wyyzxzyg.minecraft-hub/README.md","page_styles":"apps/cn.wyyzxzyg.minecraft-hub/page.css","page_template":"apps/cn.wyyzxzyg.minecraft-hub/page.html","widget_styles":"apps/cn.wyyzxzyg.minecraft-hub/widget.css","widget_templates":{"server-status":{"4x2":"apps/cn.wyyzxzyg.minecraft-hub/widget-4x2.html"}}},
+      "size": 30876,
+      "downloads": 0,
+      "rating": 0,
+      "featured": false,
+      "verified": true,
+      "created_at": "2026-08-04T00:00:00Z",
+      "updated_at": "2026-08-04T00:00:00Z"
     },
     {
       "id": "site.abloom.meliora",
