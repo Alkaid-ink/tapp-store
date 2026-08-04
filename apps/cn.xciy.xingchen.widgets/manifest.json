@@ -1,0 +1,606 @@
+{
+  "id": "cn.xciy.xingchen.widgets",
+  "name": "星辰小组件",
+  "version": "0.6.0",
+  "minSystemVersion": "0.3.23",
+  "description": "GitHub 数据卡片、照片墙、系统访客统计与个人信息小组件合集。",
+  "locales": {
+    "en-US": {
+      "name": "Star Widgets",
+      "description": "GitHub cards, photo walls, built-in site analytics, and personal contact widgets"
+    }
+  },
+  "category": "utility",
+  "main": "main.js",
+  "author": {
+    "name": "StarChen",
+    "url": "https://github.com/Pstarchen"
+  },
+  "homepage": "https://github.com/Myriad-You/tapp-store/tree/main/apps/cn.xciy.xingchen.widgets",
+  "repository": "https://github.com/Myriad-You/tapp-store",
+  "permissions": [
+    "network:fetch",
+    "analytics:read",
+    "widget:register"
+  ],
+  "iconSvg": "<svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M12 2.5l2.2 5.1 5.5.5-4.2 3.7 1.3 5.4L12 14.4 7.2 17.2l1.3-5.4-4.2-3.7 5.5-.5L12 2.5z' stroke='currentColor' stroke-width='1.7' stroke-linejoin='round'/><path d='M18.5 16.5l.7 1.6 1.8.2-1.4 1.2.4 1.7-1.5-.9-1.5.9.4-1.7-1.4-1.2 1.8-.2.7-1.6z' fill='currentColor'/></svg>",
+  "themeColor": "#7C3AED",
+  "styles": "styles.css",
+  "cssMode": "unified",
+  "widgets": [
+    {
+      "id": "github-stats-card",
+      "name": "GitHub 数据卡片",
+      "description": "展示统计、热门语言、仓库、Gist 或 WakaTime 卡片，并支持官方文档中的高级查询参数。",
+      "icon": "★",
+      "category": "stats",
+      "defaultSize": "4x2",
+      "sizes": [
+        "2x2",
+        "4x2",
+        "4x4"
+      ],
+      "templates": {
+        "2x2": "templates/widget-2x2.html",
+        "4x2": "templates/widget-4x2.html",
+        "4x4": "templates/widget-4x4.html"
+      },
+      "refreshPolicy": {
+        "mode": "interval",
+        "intervalSeconds": 21600,
+        "refreshOnVisible": true
+      },
+      "settings": [
+        {
+          "key": "baseUrl",
+          "label": "服务域名",
+          "type": "input",
+          "description": "GitHub Stats Extended 实例地址，可替换为其他兼容部署。",
+          "defaultValue": "https://github-stats-hazel-beta.vercel.app",
+          "placeholder": "https://example.vercel.app"
+        },
+        {
+          "key": "cardType",
+          "label": "卡片类型",
+          "type": "select",
+          "defaultValue": "stats",
+          "options": [
+            { "value": "stats", "label": "GitHub 统计" },
+            { "value": "top-langs", "label": "热门语言" },
+            { "value": "pin", "label": "仓库卡片" },
+            { "value": "gist", "label": "Gist 卡片" },
+            { "value": "wakatime", "label": "WakaTime" }
+          ]
+        },
+        {
+          "key": "username",
+          "label": "用户名",
+          "type": "input",
+          "description": "GitHub 用户名；WakaTime 类型下填写 WakaTime 用户名。",
+          "defaultValue": "octocat",
+          "placeholder": "octocat"
+        },
+        {
+          "key": "repository",
+          "label": "仓库名称",
+          "type": "input",
+          "description": "仓库卡片使用，可填写 repo 或 owner/repo。",
+          "defaultValue": "Hello-World",
+          "placeholder": "owner/repository"
+        },
+        {
+          "key": "gistId",
+          "label": "Gist ID",
+          "type": "input",
+          "description": "仅 Gist 卡片使用。",
+          "defaultValue": "",
+          "placeholder": "bbfce31e0217a3689c8d961a356cb10d"
+        },
+        {
+          "key": "theme",
+          "label": "卡片主题",
+          "type": "select",
+          "description": "自动模式会结合容器背景：透明时跟随宿主深浅色，实色时使用对应的亮色或深色卡片。",
+          "defaultValue": "auto",
+          "options": [
+            { "value": "auto", "label": "跟随容器背景（自动）" },
+            { "value": "transparent", "label": "透明" },
+            { "value": "default", "label": "默认亮色" },
+            { "value": "dark", "label": "深色" },
+            { "value": "radical", "label": "Radical" },
+            { "value": "tokyonight", "label": "Tokyo Night" },
+            { "value": "gruvbox", "label": "Gruvbox" },
+            { "value": "dracula", "label": "Dracula" },
+            { "value": "onedark", "label": "One Dark" },
+            { "value": "synthwave", "label": "Synthwave" }
+          ]
+        },
+        {
+          "key": "locale",
+          "label": "卡片语言",
+          "type": "select",
+          "defaultValue": "cn",
+          "options": [
+            { "value": "cn", "label": "简体中文" },
+            { "value": "zh-tw", "label": "繁体中文" },
+            { "value": "en", "label": "English" },
+            { "value": "ja", "label": "日本語" },
+            { "value": "kr", "label": "한국어" }
+          ]
+        },
+        {
+          "key": "customTitle",
+          "label": "自定义标题",
+          "type": "input",
+          "description": "留空时使用服务默认标题。",
+          "defaultValue": "",
+          "placeholder": "我的 GitHub 数据"
+        },
+        {
+          "key": "showIcons",
+          "label": "显示图标",
+          "type": "toggle",
+          "defaultValue": true
+        },
+        {
+          "key": "hideBorder",
+          "label": "隐藏卡片边框",
+          "type": "toggle",
+          "defaultValue": true
+        },
+        {
+          "key": "showShell",
+          "label": "显示星辰外壳",
+          "type": "toggle",
+          "description": "关闭后仅显示 GitHub 卡片，隐藏标题、状态、阴影和底部信息；底色由“容器背景”决定。",
+          "defaultValue": false
+        },
+        {
+          "key": "surfaceMode",
+          "label": "容器背景",
+          "type": "select",
+          "description": "透明模式不绘制整卡底色；也可以跟随深浅色或固定为白色、黑色。",
+          "defaultValue": "transparent",
+          "options": [
+            { "value": "transparent", "label": "透明（默认）" },
+            { "value": "auto", "label": "跟随深浅色" },
+            { "value": "light", "label": "白色" },
+            { "value": "dark", "label": "黑色" }
+          ]
+        },
+        {
+          "key": "disableAnimations",
+          "label": "禁用 SVG 动画",
+          "type": "toggle",
+          "description": "桌面常驻时建议开启，以减少持续动画。",
+          "defaultValue": true
+        },
+        {
+          "key": "rankIcon",
+          "label": "排名图标",
+          "type": "select",
+          "description": "仅 GitHub 统计卡片使用。",
+          "defaultValue": "github",
+          "options": [
+            { "value": "default", "label": "默认圆环" },
+            { "value": "github", "label": "GitHub 图标" },
+            { "value": "percentile", "label": "百分位" },
+            { "value": "hidden", "label": "隐藏排名" }
+          ]
+        },
+        {
+          "key": "includeAllCommits",
+          "label": "统计全部提交",
+          "type": "toggle",
+          "description": "仅 GitHub 统计卡片使用。",
+          "defaultValue": true
+        },
+        {
+          "key": "numberFormat",
+          "label": "数字格式",
+          "type": "select",
+          "defaultValue": "short",
+          "options": [
+            { "value": "short", "label": "简写（6.6k）" },
+            { "value": "long", "label": "完整（6626）" }
+          ]
+        },
+        {
+          "key": "languageLayout",
+          "label": "语言卡布局",
+          "type": "select",
+          "description": "仅热门语言卡片使用。",
+          "defaultValue": "compact",
+          "options": [
+            { "value": "normal", "label": "标准" },
+            { "value": "compact", "label": "紧凑" },
+            { "value": "donut", "label": "圆环" },
+            { "value": "donut-vertical", "label": "竖向圆环" },
+            { "value": "pie", "label": "饼图" }
+          ]
+        },
+        {
+          "key": "langsCount",
+          "label": "语言数量",
+          "type": "number",
+          "description": "热门语言或 WakaTime 卡片使用，官方范围为 1–20。",
+          "defaultValue": 6,
+          "min": 1,
+          "max": 20,
+          "step": 1
+        },
+        {
+          "key": "hideItems",
+          "label": "隐藏项目",
+          "type": "input",
+          "description": "逗号分隔；统计卡可填 stars,commits,prs,issues,contribs，语言卡可填语言名。",
+          "defaultValue": "",
+          "placeholder": "issues,contribs"
+        },
+        {
+          "key": "showItems",
+          "label": "附加统计",
+          "type": "input",
+          "description": "逗号分隔，例如 reviews,prs_merged,prs_reviewed。",
+          "defaultValue": "",
+          "placeholder": "reviews,prs_merged"
+        },
+        {
+          "key": "excludeRepo",
+          "label": "排除仓库",
+          "type": "input",
+          "description": "逗号分隔，适用于统计和热门语言卡片。",
+          "defaultValue": "",
+          "placeholder": "repo-one,repo-two"
+        },
+        {
+          "key": "showOwner",
+          "label": "显示所有者",
+          "type": "toggle",
+          "description": "仓库卡片和 Gist 卡片使用。",
+          "defaultValue": true
+        },
+        {
+          "key": "accentColor",
+          "label": "自动主题强调色",
+          "type": "color",
+          "description": "仅“自动适配”主题使用。",
+          "defaultValue": "#7C3AED"
+        },
+        {
+          "key": "borderRadius",
+          "label": "卡片圆角",
+          "type": "number",
+          "defaultValue": 8,
+          "min": 0,
+          "max": 24,
+          "step": 0.5
+        },
+        {
+          "key": "cacheSeconds",
+          "label": "缓存秒数",
+          "type": "number",
+          "description": "官方文档允许 21600–86400 秒；自托管实例还可由服务端环境变量覆盖。",
+          "defaultValue": 21600,
+          "min": 21600,
+          "max": 86400,
+          "step": 3600
+        },
+        {
+          "key": "advancedParams",
+          "label": "高级查询参数",
+          "type": "input",
+          "description": "按官方文档填写额外参数，例如 hide_values=true&stats_format=bytes。结构化设置会覆盖同名参数。",
+          "defaultValue": "",
+          "placeholder": "hide_values=true&stats_format=bytes"
+        }
+      ]
+    },
+    {
+      "id": "website-visitors",
+      "name": "网站访客",
+      "description": "读取 Myriad 内置站点分析，展示累计访问量或累计独立访客。",
+      "icon": "◉",
+      "category": "stats",
+      "defaultSize": "4x1",
+      "sizes": [
+        "2x1",
+        "4x1"
+      ],
+      "templates": {
+        "2x1": "templates/visitor-2x1.html",
+        "4x1": "templates/visitor-4x1.html"
+      },
+      "refreshPolicy": {
+        "mode": "interval",
+        "intervalSeconds": 300,
+        "refreshOnVisible": true
+      },
+      "settings": [
+        {
+          "key": "metric",
+          "label": "累计指标",
+          "type": "select",
+          "description": "访问量为累计 PV；独立访客为累计 UV，但受系统访客保留期限制。",
+          "defaultValue": "views",
+          "options": [
+            { "value": "views", "label": "累计访问量（PV）" },
+            { "value": "unique_visitors", "label": "累计独立访客（UV）" }
+          ]
+        },
+        {
+          "key": "label",
+          "label": "显示标题",
+          "type": "input",
+          "defaultValue": "Views",
+          "placeholder": "Views"
+        },
+        {
+          "key": "numberLocale",
+          "label": "数字格式",
+          "type": "select",
+          "defaultValue": "en-US",
+          "options": [
+            { "value": "en-US", "label": "95,283" },
+            { "value": "zh-CN", "label": "95,283（中文）" },
+            { "value": "de-DE", "label": "95.283" }
+          ]
+        },
+        {
+          "key": "showGrouping",
+          "label": "显示千位分隔符",
+          "type": "toggle",
+          "defaultValue": true
+        },
+        {
+          "key": "containerColor",
+          "label": "外层容器颜色",
+          "type": "color",
+          "description": "控制整条圆角访客容器的颜色。",
+          "defaultValue": "#F2D8EC"
+        },
+        {
+          "key": "labelColor",
+          "label": "标题颜色",
+          "type": "color",
+          "defaultValue": "#27162B"
+        },
+        {
+          "key": "valueColor",
+          "label": "数字颜色",
+          "type": "color",
+          "defaultValue": "#925553"
+        },
+        {
+          "key": "cornerRadius",
+          "label": "圆角大小",
+          "type": "number",
+          "defaultValue": 42,
+          "min": 0,
+          "max": 80,
+          "step": 1
+        }
+      ]
+    },
+    {
+      "id": "photo-wall",
+      "name": "照片墙",
+      "description": "用全幅主图与拼贴网格铺满桌面模块，最多展示九张网络照片。",
+      "icon": "▧",
+      "category": "visualization",
+      "defaultSize": "4x2",
+      "sizes": [
+        "2x1",
+        "2x2",
+        "4x1",
+        "4x2",
+        "4x4"
+      ],
+      "templates": {
+        "2x1": "templates/photo-wall-2x1.html",
+        "2x2": "templates/photo-wall-2x2.html",
+        "4x1": "templates/photo-wall-4x1.html",
+        "4x2": "templates/photo-wall-4x2.html",
+        "4x4": "templates/photo-wall-4x4.html"
+      },
+      "settings": [
+        {
+          "key": "images",
+          "label": "照片链接",
+          "type": "input",
+          "description": "最多九张 HTTP/HTTPS 图片，使用竖线 | 分隔。每种尺寸会自动选取合适数量。",
+          "defaultValue": "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=82 | https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1200&q=82 | https://images.unsplash.com/photo-1493246507139-91e8fad9978e?auto=format&fit=crop&w=1200&q=82 | https://images.unsplash.com/photo-1500534623283-312aade485b7?auto=format&fit=crop&w=1200&q=82 | https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=82 | https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=1200&q=82 | https://images.unsplash.com/photo-1501854140801-50d01698950b?auto=format&fit=crop&w=1200&q=82 | https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1200&q=82 | https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1200&q=82",
+          "placeholder": "https://example.com/1.jpg | https://example.com/2.jpg"
+        },
+        {
+          "key": "layout",
+          "label": "排列方式",
+          "type": "select",
+          "description": "自动拼贴会突出首张照片；图片不足时自动切换为均衡排列。",
+          "defaultValue": "auto",
+          "options": [
+            { "value": "auto", "label": "自动拼贴" },
+            { "value": "mosaic", "label": "主图拼贴" },
+            { "value": "grid", "label": "均衡排列" }
+          ]
+        },
+        {
+          "key": "focus",
+          "label": "照片焦点",
+          "type": "select",
+          "defaultValue": "center",
+          "options": [
+            { "value": "center", "label": "居中" },
+            { "value": "top", "label": "偏上" },
+            { "value": "bottom", "label": "偏下" },
+            { "value": "left", "label": "偏左" },
+            { "value": "right", "label": "偏右" }
+          ]
+        },
+        {
+          "key": "gap",
+          "label": "照片间距",
+          "type": "number",
+          "defaultValue": 4,
+          "min": 0,
+          "max": 16,
+          "step": 1
+        },
+        {
+          "key": "cornerRadius",
+          "label": "整体圆角",
+          "type": "number",
+          "defaultValue": 18,
+          "min": 0,
+          "max": 40,
+          "step": 1
+        },
+        {
+          "key": "tileRadius",
+          "label": "照片圆角",
+          "type": "number",
+          "defaultValue": 10,
+          "min": 0,
+          "max": 24,
+          "step": 1
+        },
+        {
+          "key": "backgroundColor",
+          "label": "间隙颜色",
+          "type": "color",
+          "description": "照片间距和加载占位区域的底色。",
+          "defaultValue": "#0F172A"
+        }
+      ]
+    },
+    {
+      "id": "personal-info",
+      "name": "个人信息",
+      "description": "用横向胶囊或方形名片展示邮箱、QQ、微信、Telegram、GitHub、Gitee、哔哩哔哩或自定义联系方式。",
+      "icon": "＠",
+      "category": "utility",
+      "defaultSize": "4x1",
+      "sizes": [
+        "2x1",
+        "4x1",
+        "2x2"
+      ],
+      "templates": {
+        "2x1": "templates/personal-2x1.html",
+        "4x1": "templates/personal-4x1.html",
+        "2x2": "templates/personal-2x2.html"
+      },
+      "settings": [
+        {
+          "key": "platform",
+          "label": "信息类型",
+          "type": "select",
+          "description": "自动使用对应平台的默认标题、图标和品牌色。",
+          "defaultValue": "email",
+          "options": [
+            { "value": "email", "label": "邮箱" },
+            { "value": "qq", "label": "QQ" },
+            { "value": "wechat", "label": "微信" },
+            { "value": "telegram", "label": "Telegram" },
+            { "value": "github", "label": "GitHub" },
+            { "value": "gitee", "label": "Gitee" },
+            { "value": "bilibili", "label": "哔哩哔哩" },
+            { "value": "custom", "label": "自定义" }
+          ]
+        },
+        {
+          "key": "title",
+          "label": "标题",
+          "type": "input",
+          "description": "留空时使用所选平台的默认名称。",
+          "defaultValue": "",
+          "placeholder": "E-mail"
+        },
+        {
+          "key": "content",
+          "label": "内容",
+          "type": "input",
+          "defaultValue": "your@email.com",
+          "placeholder": "账号、昵称或地址"
+        },
+        {
+          "key": "customIcon",
+          "label": "自定义图标",
+          "type": "input",
+          "description": "仅“自定义”类型使用；没有填写 SVG 时显示该字符或 Emoji。",
+          "defaultValue": "✦",
+          "placeholder": "✦"
+        },
+        {
+          "key": "customSvg",
+          "label": "自定义 SVG 代码",
+          "type": "input",
+          "description": "仅“自定义”类型使用。粘贴完整 SVG 代码；使用 currentColor 可跟随图标颜色，并会自动移除危险内容。",
+          "defaultValue": "",
+          "placeholder": "<svg viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"...\"/></svg>"
+        },
+        {
+          "key": "showIcon",
+          "label": "显示图标",
+          "type": "toggle",
+          "defaultValue": true
+        },
+        {
+          "key": "useBrandColor",
+          "label": "使用平台品牌色",
+          "type": "toggle",
+          "description": "关闭后使用下方自定义图标底色。",
+          "defaultValue": true
+        },
+        {
+          "key": "accentColor",
+          "label": "自定义图标底色",
+          "type": "color",
+          "defaultValue": "#2F68B2"
+        },
+        {
+          "key": "cardColor",
+          "label": "信息条颜色",
+          "type": "color",
+          "defaultValue": "#DCE5FA"
+        },
+        {
+          "key": "titleColor",
+          "label": "标题颜色",
+          "type": "color",
+          "defaultValue": "#111827"
+        },
+        {
+          "key": "contentColor",
+          "label": "内容颜色",
+          "type": "color",
+          "defaultValue": "#5B6478"
+        },
+        {
+          "key": "iconColor",
+          "label": "图标颜色",
+          "type": "color",
+          "defaultValue": "#FFFFFF"
+        },
+        {
+          "key": "cornerRadius",
+          "label": "信息条圆角",
+          "type": "number",
+          "defaultValue": 42,
+          "min": 0,
+          "max": 80,
+          "step": 1
+        },
+        {
+          "key": "iconRadius",
+          "label": "图标圆角",
+          "type": "number",
+          "defaultValue": 16,
+          "min": 0,
+          "max": 32,
+          "step": 1
+        }
+      ]
+    }
+  ]
+}
