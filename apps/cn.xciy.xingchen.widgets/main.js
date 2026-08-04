@@ -6,6 +6,11 @@ var XINGCHEN_DEFAULT_BASE_URL = "https://github-stats-hazel-beta.vercel.app";
 var XINGCHEN_INSTANCE_PROPS = new WeakMap();
 /** @type {WeakSet<HTMLElement>} */
 var XINGCHEN_THEME_BOUND = new WeakSet();
+/** @type {WeakMap<HTMLElement, number>} */
+var XINGCHEN_RENDER_TOKENS = new WeakMap();
+/** @type {Set<() => void>} */
+var XINGCHEN_THEME_UNSUBSCRIBERS = new Set();
+var XINGCHEN_RENDER_SEQUENCE = 0;
 
 /** @typedef {"stats" | "top-langs" | "pin" | "gist" | "wakatime"} XingchenCardType */
 /**
@@ -338,7 +343,7 @@ function xingchenBindTheme(container, props) {
   var ui = xingchenUiBridge();
   if (!ui || typeof ui.onThemeChange !== "function") return;
   XINGCHEN_THEME_BOUND.add(container);
-  ui.onThemeChange(function (theme) {
+  var unsubscribe = ui.onThemeChange(function (theme) {
     var currentProps = XINGCHEN_INSTANCE_PROPS.get(container) || {};
     var nextTheme = xingchenNormalizeTheme(theme);
     xingchenRenderGitHubStats(container, {
@@ -348,10 +353,18 @@ function xingchenBindTheme(container, props) {
       theme: nextTheme || currentProps.theme
     });
   });
+  if (typeof unsubscribe === "function") XINGCHEN_THEME_UNSUBSCRIBERS.add(unsubscribe);
+}
+
+/** @param {HTMLElement} container @param {number} token @param {HTMLImageElement} image @param {string} url */
+function xingchenIsCurrentImageRequest(container, token, image, url) {
+  return XINGCHEN_RENDER_TOKENS.get(container) === token && image.getAttribute("src") === url;
 }
 
 /** @param {HTMLElement} container @param {XingchenWidgetProps} props */
 async function xingchenRenderGitHubStats(container, props) {
+    var renderToken = ++XINGCHEN_RENDER_SEQUENCE;
+    XINGCHEN_RENDER_TOKENS.set(container, renderToken);
     xingchenBindTheme(container, props || {});
     var shell = xingchenEnsureMarkup(container);
     var typeField = /** @type {HTMLElement} */ (shell.querySelector("[data-xingchen-type]"));
@@ -361,9 +374,14 @@ async function xingchenRenderGitHubStats(container, props) {
     var image = /** @type {HTMLImageElement} */ (shell.querySelector("[data-xingchen-image]"));
     var placeholder = /** @type {HTMLElement} */ (shell.querySelector("[data-xingchen-placeholder]"));
     var message = /** @type {HTMLElement} */ (shell.querySelector("[data-xingchen-message]"));
+    image.onload = null;
+    image.onerror = null;
+    image.removeAttribute("src");
+    image.classList.remove("is-ready");
 
     try {
       var currentTheme = await xingchenCurrentTheme(props || {});
+      if (XINGCHEN_RENDER_TOKENS.get(container) !== renderToken) return;
       var config = xingchenResolvedConfig(props || {}, currentTheme);
       var meta = XINGCHEN_CARD_META[config.cardType];
       var missing = xingchenValidateRequired(config);
@@ -389,27 +407,36 @@ async function xingchenRenderGitHubStats(container, props) {
       }
 
       var cardUrl = xingchenBuildCardUrl(config);
+      var nextImage = /** @type {HTMLImageElement} */ (container.ownerDocument.createElement("img"));
+      nextImage.setAttribute("data-xingchen-image", "");
+      nextImage.alt = meta.label + " · " + (config.username || config.gistId);
       message.hidden = true;
       placeholder.hidden = false;
-      image.classList.remove("is-ready");
       statusField.textContent = "加载中";
       statusField.setAttribute("data-state", "loading");
 
-      image.onload = function () {
+      nextImage.onload = function () {
+        if (!xingchenIsCurrentImageRequest(container, renderToken, nextImage, cardUrl)) return;
+        nextImage.onload = null;
+        nextImage.onerror = null;
+        image.replaceWith(nextImage);
         placeholder.hidden = true;
         message.hidden = true;
-        image.classList.add("is-ready");
+        nextImage.classList.add("is-ready");
         statusField.textContent = "已同步";
         statusField.setAttribute("data-state", "ready");
       };
-      image.onerror = function () {
+      nextImage.onerror = function () {
+        if (!xingchenIsCurrentImageRequest(container, renderToken, nextImage, cardUrl)) return;
+        nextImage.onload = null;
+        nextImage.onerror = null;
         statusField.textContent = "加载失败";
         statusField.setAttribute("data-state", "error");
         xingchenSetMessage(shell, "卡片加载失败", "请检查用户名、服务域名和 network:fetch 授权");
       };
-      image.alt = meta.label + " · " + (config.username || config.gistId);
-      image.src = cardUrl;
+      nextImage.src = cardUrl;
     } catch (error) {
+      if (XINGCHEN_RENDER_TOKENS.get(container) !== renderToken) return;
       statusField.textContent = "配置错误";
       statusField.setAttribute("data-state", "error");
       xingchenSetMessage(shell, "配置无法使用", xingchenErrorMessage(error));
@@ -474,35 +501,6 @@ function visitorNormalizeCount(value) {
 /** @param {number} count @param {VisitorResolvedConfig} config @returns {string} */
 function visitorFormatCount(count, config) {
   return count.toLocaleString(config.numberLocale, { useGrouping: config.showGrouping });
-}
-
-/** @param {string} value @returns {string} */
-function visitorCacheKey(value) {
-  var hash = 2166136261;
-  for (var index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return "xingchen:visitor:" + (hash >>> 0).toString(16);
-}
-
-/** @param {string} key @returns {number | null} */
-function visitorReadCache(key) {
-  try {
-    var cached = JSON.parse(localStorage.getItem(key) || "null");
-    return cached && Number.isFinite(cached.count) ? Number(cached.count) : null;
-  } catch (_error) {
-    return null;
-  }
-}
-
-/** @param {string} key @param {number} count */
-function visitorWriteCache(key, count) {
-  try {
-    localStorage.setItem(key, JSON.stringify({ count: count, updatedAt: Date.now() }));
-  } catch (_error) {
-    // The live value can still be displayed if browser storage is unavailable.
-  }
 }
 
 /** @param {unknown} value @returns {unknown} */
@@ -585,8 +583,6 @@ async function visitorRender(container, props) {
 
   try {
     var config = visitorResolvedConfig(props || {});
-    var cacheKey = visitorCacheKey("site-analytics|all_time|" + config.metric);
-    var cachedCount = visitorReadCache(cacheKey);
 
     container.style.background = "transparent";
     container.ownerDocument.documentElement.style.background = "transparent";
@@ -600,12 +596,10 @@ async function visitorRender(container, props) {
     labelField.textContent = config.label;
     shell.title = "正在读取系统站点分析数据";
 
-    if (cachedCount !== null) visitorShowCount(shell, countField, config, cachedCount);
-    else countField.textContent = "—";
+    countField.textContent = "—";
 
     var summary = await visitorGetAnalyticsSummary();
     var count = visitorReadAnalyticsCount(summary, config.metric);
-    visitorWriteCache(cacheKey, count);
     visitorShowCount(shell, countField, config, count);
     shell.setAttribute("data-state", "ready");
     shell.title = config.metric === "views"
@@ -862,3 +856,17 @@ function personalRender(container, props) {
 Tapp.widgets["personal-info"] = {
   render: personalRender
 };
+
+Tapp.lifecycle.onDestroy(function () {
+  XINGCHEN_THEME_UNSUBSCRIBERS.forEach(function (unsubscribe) {
+    try {
+      unsubscribe();
+    } catch (_error) {
+      // Ignore teardown failures from an already-disposed host subscription.
+    }
+  });
+  XINGCHEN_THEME_UNSUBSCRIBERS.clear();
+  XINGCHEN_INSTANCE_PROPS = new WeakMap();
+  XINGCHEN_THEME_BOUND = new WeakSet();
+  XINGCHEN_RENDER_TOKENS = new WeakMap();
+});

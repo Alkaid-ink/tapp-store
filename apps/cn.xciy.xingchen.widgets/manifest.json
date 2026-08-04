@@ -1,13 +1,13 @@
 {
   "id": "cn.xciy.xingchen.widgets",
   "name": "星辰小组件",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "minSystemVersion": "0.3.23",
-  "description": "可扩展的桌面小组件合集，支持 GitHub 数据卡片、网站访客统计和个人信息展示。",
+  "description": "GitHub 数据卡片、系统访客统计与个人信息小组件合集。",
   "locales": {
     "en-US": {
       "name": "Star Widgets",
-      "description": "An extensible widget collection for GitHub cards, website visitor counts, and personal contact details"
+      "description": "GitHub cards, built-in site analytics, and personal contact widgets"
     }
   },
   "category": "utility",
@@ -16,8 +16,8 @@
     "name": "StarChen",
     "url": "https://github.com/Pstarchen"
   },
-  "homepage": "https://github.com/Pstarchen/github-stats-extended",
-  "repository": "https://github.com/Pstarchen/github-stats-extended",
+  "homepage": "https://github.com/Myriad-You/tapp-store/tree/main/apps/cn.xciy.xingchen.widgets",
+  "repository": "https://github.com/Myriad-You/tapp-store",
   "permissions": [
     "network:fetch",
     "analytics:read",
