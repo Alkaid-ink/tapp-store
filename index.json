@@ -456,7 +456,7 @@
         "url": "https://github.com/zgzyh"
       },
       "license": "MIT",
-      "homepage": "https://github.com/Myriad-You/tapp-store/tree/main/apps/com.myriad.cdn-cache",
+      "homepage": "https://github.com/Myriad-You/tapp-store/tree/main/apps/cn.wyyzxzyg.cdn-cache",
       "repository": "https://github.com/Myriad-You/tapp-store",
       "category": "developer",
       "tags": [
@@ -515,7 +515,7 @@
       "updated_at": "2026-08-02T17:40:21Z"
     },
     {
-      "id": "com.myriad.minecraft-hub",
+      "id": "cn.wyyzxzyg.minecraft-hub",
       "name": "Minecraft 服务器与 Wiki",
       "version": "1.0.2",
       "description": "面向玩家的 Java/基岩版服务器查询、收藏与 Minecraft Wiki 搜索工具",
@@ -537,8 +537,8 @@
       "rating": 0,
       "featured": false,
       "verified": true,
-      "created_at": "2026-08-04T00:00:00Z",
-      "updated_at": "2026-08-04T00:00:00Z"
+      "created_at": "2026-08-04T16:25:05Z",
+      "updated_at": "2026-08-04T16:26:57Z"
     },
     {
       "id": "site.abloom.meliora",
