@@ -532,7 +532,7 @@
       "screenshots": [],
       "preview": {"version":1,"type":"snapshot","html":"apps/cn.wyyzxzyg.minecraft-hub/preview.html","styles":["apps/cn.wyyzxzyg.minecraft-hub/page.css","apps/cn.wyyzxzyg.minecraft-hub/preview.css"],"viewport":{"width":1440,"height":900},"fit":"cover","focus":{"x":0.5,"y":0.5},"theme":"light"},
       "download": {"manifest":"apps/cn.wyyzxzyg.minecraft-hub/manifest.json","code":"apps/cn.wyyzxzyg.minecraft-hub/main.js","readme":"apps/cn.wyyzxzyg.minecraft-hub/README.md","page_styles":"apps/cn.wyyzxzyg.minecraft-hub/page.css","page_template":"apps/cn.wyyzxzyg.minecraft-hub/page.html","widget_styles":"apps/cn.wyyzxzyg.minecraft-hub/widget.css","widget_templates":{"server-status":{"4x2":"apps/cn.wyyzxzyg.minecraft-hub/widget-4x2.html"}}},
-      "size": 31483,
+      "size": 31564,
       "downloads": 0,
       "rating": 0,
       "featured": false,
