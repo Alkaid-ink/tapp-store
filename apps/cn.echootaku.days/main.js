@@ -72,20 +72,24 @@ function daysNotify(message, type) {
   }
   return Promise.resolve();
 }
+var daysThemeOff = null;
 function daysApplyTheme(theme) {
   document.documentElement.classList.toggle('dark', theme === 'dark');
   if (document.body) document.body.classList.toggle('dark', theme === 'dark');
 }
-async function daysInitTheme() {
-  try { daysApplyTheme(await Tapp.ui.getTheme()); } catch (_) {}
-  if (Tapp.ui && typeof Tapp.ui.onThemeChange === 'function') Tapp.ui.onThemeChange(daysApplyTheme);
+async function daysInitTheme(fallbackTheme) {
+  try { daysApplyTheme(await Tapp.ui.getTheme()); } catch (_) { if (fallbackTheme) daysApplyTheme(fallbackTheme); }
+  if (daysThemeOff) daysThemeOff(); daysThemeOff = null;
+  if (Tapp.ui && typeof Tapp.ui.onThemeChange === 'function') {
+    var off = Tapp.ui.onThemeChange(daysApplyTheme); if (typeof off === 'function') daysThemeOff = off;
+  }
 }
+function daysSetText(root, selector, value) { var element = root.querySelector(selector); if (element) element.textContent = value; }
 
 // ========== Widget Code ==========
 var daysWidgetOff = null;
 var daysWidgetDestroyBound = false;
 var daysWidgetMidnightTimer = null;
-function daysSetText(root, selector, value) { var element = root.querySelector(selector); if (element) element.textContent = value; }
 function daysScheduleWidgetMidnight(root, props) {
   if (daysWidgetMidnightTimer) clearTimeout(daysWidgetMidnightTimer);
   var now = new Date(); var next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1, 0);
@@ -97,7 +101,6 @@ function daysRenderWidget(root, events, props) {
   var sorted = daysSortEvents(events); var now = new Date();
   daysSetText(root, '[data-widget-date]', (now.getMonth() + 1) + '月' + now.getDate() + '日');
   if (props && props.primaryColor) root.style.setProperty('--days-accent', props.primaryColor);
-  if (props && props.theme) daysApplyTheme(props.theme);
   var primary = sorted[0];
   if (primary) {
     var target = daysOccurrence(primary, now); var diff = daysDifference(primary, now); var copy = daysCountCopy(diff);
@@ -127,6 +130,7 @@ if (typeof Tapp !== 'undefined' && Tapp.widgets) {
   Tapp.widgets['days-countdown'] = {
     render: async function (container, props) {
       var root = container.querySelector('[data-widget-root]') || container;
+      await daysInitTheme(props && props.theme);
       daysRenderWidget(root, await daysLoadEvents(), props || {});
       daysScheduleWidgetMidnight(root, props);
       if (daysWidgetOff) daysWidgetOff();
@@ -137,7 +141,7 @@ if (typeof Tapp !== 'undefined' && Tapp.widgets) {
       }
       if (!daysWidgetDestroyBound) {
         daysWidgetDestroyBound = true;
-        Tapp.lifecycle.onDestroy(function () { if (daysWidgetOff) daysWidgetOff(); if (daysWidgetMidnightTimer) clearTimeout(daysWidgetMidnightTimer); daysWidgetOff = null; daysWidgetMidnightTimer = null; });
+        Tapp.lifecycle.onDestroy(function () { if (daysWidgetOff) daysWidgetOff(); if (daysThemeOff) daysThemeOff(); if (daysWidgetMidnightTimer) clearTimeout(daysWidgetMidnightTimer); daysWidgetOff = null; daysThemeOff = null; daysWidgetMidnightTimer = null; });
       }
     }
   };
@@ -182,13 +186,18 @@ function daysRenderPage(root) {
   });
 }
 function daysOpenEditor(root, event) {
-  var panel = root.querySelector('[data-editor]'); var form = root.querySelector('[data-event-form]'); form.reset();
-  daysPageState.editingId = event ? event.id : null; form.elements.id.value = event ? event.id : '';
-  form.elements.title.value = event ? event.title : ''; form.elements.date.value = event ? event.date : daysTodayKey();
-  form.elements.category.value = event ? event.category : 'life'; form.elements.note.value = event ? event.note : '';
-  form.elements.annual.checked = event ? event.annual : false; form.elements.color.value = event ? event.color : DAYS_COLORS[daysPageState.events.length % DAYS_COLORS.length];
-  daysSetText(root, '[data-editor-title]', event ? '编辑日子' : '新建日子'); root.querySelector('[data-action="delete-event"]').hidden = !event;
-  panel.hidden = false; requestAnimationFrame(function () { panel.classList.add('is-open'); form.elements.title.focus(); });
+  var panel = root.querySelector('[data-editor]'); var form = root.querySelector('[data-event-form]');
+  if (!panel || !form) throw new Error('[Days] editor template is incomplete');
+  var idField = form.querySelector('[name="id"]'); var titleField = form.querySelector('[name="title"]'); var dateField = form.querySelector('[name="date"]');
+  var categoryField = form.querySelector('[name="category"]'); var noteField = form.querySelector('[name="note"]'); var annualField = form.querySelector('[name="annual"]'); var colorField = form.querySelector('[name="color"]');
+  if (!idField || !titleField || !dateField || !categoryField || !noteField || !annualField || !colorField) throw new Error('[Days] editor fields are incomplete');
+  panel.hidden = false; panel.classList.add('is-open'); form.reset();
+  daysPageState.editingId = event ? event.id : null; idField.value = event ? event.id : '';
+  titleField.value = event ? event.title : ''; dateField.value = event ? event.date : daysTodayKey();
+  categoryField.value = event ? event.category : 'life'; noteField.value = event ? event.note : '';
+  annualField.checked = event ? event.annual : false; colorField.value = event ? event.color : DAYS_COLORS[daysPageState.events.length % DAYS_COLORS.length];
+  daysSetText(root, '[data-editor-title]', event ? '编辑日子' : '新建日子'); var deleteButton = root.querySelector('[data-action="delete-event"]'); if (deleteButton) deleteButton.hidden = !event;
+  setTimeout(function () { titleField.focus(); }, 0);
 }
 function daysCloseEditor(root) {
   var panel = root.querySelector('[data-editor]'); panel.classList.remove('is-open'); daysPageState.editingId = null;
@@ -212,10 +221,13 @@ async function daysMountPage(root) {
   root.addEventListener('click', function (event) {
     var action = event.target.closest('[data-action]');
     if (action) {
-      var name = action.dataset.action; if (name === 'new-event') daysOpenEditor(root, null); if (name === 'close-editor') daysCloseEditor(root); if (name === 'delete-event') daysDeleteEvent(root).catch(console.error); return;
+      var name = action.dataset.action;
+      if (name === 'new-event') { try { daysOpenEditor(root, null); } catch (error) { console.error(error); daysNotify('编辑器打开失败，请重新加载页面', 'error'); } }
+      if (name === 'close-editor') daysCloseEditor(root); if (name === 'delete-event') daysDeleteEvent(root).catch(console.error); return;
     }
     var filter = event.target.closest('[data-filter]'); if (filter) { daysPageState.filter = filter.dataset.filter; root.querySelectorAll('[data-filter]').forEach(function (button) { button.classList.toggle('is-active', button === filter); }); daysRenderPage(root); return; }
-    var card = event.target.closest('[data-event-id]'); if (card) daysOpenEditor(root, daysPageState.events.find(function (item) { return item.id === card.dataset.eventId; }));
+    var card = event.target.closest('[data-event-id]');
+    if (card) { try { daysOpenEditor(root, daysPageState.events.find(function (item) { return item.id === card.dataset.eventId; })); } catch (error) { console.error(error); daysNotify('编辑器打开失败，请重新加载页面', 'error'); } }
   });
   root.addEventListener('keydown', function (event) { var card = event.target.closest('[data-event-id]'); if (card && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); card.click(); } if (event.key === 'Escape') daysCloseEditor(root); });
   root.querySelector('[data-search]').addEventListener('input', function (event) { daysPageState.query = event.target.value; daysRenderPage(root); });
@@ -223,7 +235,7 @@ async function daysMountPage(root) {
   if (Tapp.storage && typeof Tapp.storage.onChanged === 'function') {
     daysPageState.off = Tapp.storage.onChanged(function (event) { if (!event || !event.key || event.key === DAYS_STORAGE_KEY) daysLoadEvents().then(function (items) { daysPageState.events = items; daysRenderPage(root); }); });
   }
-  Tapp.lifecycle.onDestroy(function () { if (daysPageState.off) daysPageState.off(); });
+  Tapp.lifecycle.onDestroy(function () { if (daysPageState.off) daysPageState.off(); if (daysThemeOff) daysThemeOff(); daysThemeOff = null; });
 }
 if (typeof Tapp !== 'undefined' && Tapp.lifecycle) {
   Tapp.lifecycle.onReady(function () { var root = document.querySelector('[data-days-page]'); if (root) daysMountPage(root).catch(console.error); });
