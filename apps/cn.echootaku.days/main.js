@@ -1,8 +1,10 @@
 var DAYS_STORAGE_KEY = 'days.events.v1';
+var DAYS_CATEGORIES_STORAGE_KEY = 'days.categories.v1';
 var DAYS_COLORS = ['#D97757', '#C6924B', '#66917A', '#6687A8', '#8D78A8', '#B56F83'];
 var DAYS_CATEGORY_LABELS = {
   life: '生活', birthday: '生日', anniversary: '纪念', study: '学习', travel: '旅行', other: '其他'
 };
+var DAYS_DEFAULT_CATEGORIES = Object.keys(DAYS_CATEGORY_LABELS).map(function (id) { return { id: id, label: DAYS_CATEGORY_LABELS[id], custom: false }; });
 
 function daysPad(value) { return String(value).padStart(2, '0'); }
 function daysTodayKey() {
@@ -32,16 +34,35 @@ function daysDifference(event, now) {
   if (!target) return 0;
   return Math.round(daysUtcDay(target) - daysUtcDay(now || new Date()));
 }
+function daysNormalizeCategories(value) {
+  if (!Array.isArray(value)) return [];
+  var seen = {};
+  return value.map(function (item) {
+    var label = String(item && item.label || '').trim().slice(0, 12); var id = String(item && item.id || '').trim().slice(0, 48);
+    if (!label || !id || DAYS_CATEGORY_LABELS[id] || seen[id]) return null;
+    seen[id] = true; return { id: id, label: label, custom: true };
+  }).filter(Boolean);
+}
+function daysCategoryLabel(category, fallback) { return DAYS_CATEGORY_LABELS[category] || String(fallback || '').trim().slice(0, 12) || '其他'; }
 function daysNormalizeEvents(value) {
   if (!Array.isArray(value)) return [];
   return value.filter(function (item) { return item && typeof item.title === 'string' && daysParseDate(item.date); }).map(function (item, index) {
+    var customLabel = String(item.categoryLabel || '').trim().slice(0, 12); var rawCategory = String(item.category || 'other').slice(0, 48);
     return {
       id: String(item.id || ('legacy-' + index)), title: item.title.trim().slice(0, 80), date: item.date,
-      category: DAYS_CATEGORY_LABELS[item.category] ? item.category : 'other', note: String(item.note || '').slice(0, 240),
+      category: (DAYS_CATEGORY_LABELS[rawCategory] || customLabel) ? rawCategory : 'other', categoryLabel: DAYS_CATEGORY_LABELS[rawCategory] ? '' : customLabel,
+      note: String(item.note || '').slice(0, 240),
       annual: Boolean(item.annual), color: /^#[0-9a-f]{6}$/i.test(item.color || '') ? item.color : DAYS_COLORS[index % DAYS_COLORS.length],
       createdAt: Number(item.createdAt) || Date.now()
     };
   });
+}
+function daysNormalizeStore(eventsValue, categoriesValue) {
+  var events = daysNormalizeEvents(Array.isArray(eventsValue) ? eventsValue : eventsValue && eventsValue.events);
+  var categories = daysNormalizeCategories(categoriesValue).concat(daysNormalizeCategories(eventsValue && eventsValue.categories));
+  categories = daysNormalizeCategories(categories);
+  events.forEach(function (event) { if (!event.categoryLabel || categories.some(function (item) { return item.id === event.category; })) return; categories.push({ id: event.category, label: event.categoryLabel, custom: true }); });
+  return { events: events, categories: categories };
 }
 function daysSortEvents(events) {
   var now = new Date();
@@ -52,11 +73,16 @@ function daysSortEvents(events) {
     return ar === 0 ? ad - bd : bd - ad;
   });
 }
-async function daysLoadEvents() {
-  try { return daysNormalizeEvents(await Tapp.storage.get(DAYS_STORAGE_KEY)); }
-  catch (error) { console.error('[Days] load failed', error); return []; }
+async function daysLoadStore() {
+  try {
+    var values = await Promise.all([Tapp.storage.get(DAYS_STORAGE_KEY), Tapp.storage.get(DAYS_CATEGORIES_STORAGE_KEY)]);
+    return daysNormalizeStore(values[0], values[1]);
+  }
+  catch (error) { console.error('[Days] load failed', error); return { events: [], categories: [] }; }
 }
+async function daysLoadEvents() { return (await daysLoadStore()).events; }
 async function daysSaveEvents(events) { await Tapp.storage.set(DAYS_STORAGE_KEY, daysNormalizeEvents(events)); }
+async function daysSaveCategories(categories) { await Tapp.storage.set(DAYS_CATEGORIES_STORAGE_KEY, daysNormalizeCategories(categories)); }
 function daysFormatDate(date, annual) {
   var options = annual ? { month: 'long', day: 'numeric' } : { year: 'numeric', month: 'long', day: 'numeric' };
   try { return new Intl.DateTimeFormat('zh-CN', options).format(date); } catch (_) { return date.toLocaleDateString(); }
@@ -104,7 +130,7 @@ function daysRenderWidget(root, events, props) {
   var primary = sorted[0];
   if (primary) {
     var target = daysOccurrence(primary, now); var diff = daysDifference(primary, now); var copy = daysCountCopy(diff);
-    daysSetText(root, '[data-widget-category]', DAYS_CATEGORY_LABELS[primary.category] || '重要日子');
+    daysSetText(root, '[data-widget-category]', daysCategoryLabel(primary.category, primary.categoryLabel));
     daysSetText(root, '[data-widget-title]', primary.title);
     daysSetText(root, '[data-widget-count]', copy.count);
     daysSetText(root, '[data-widget-unit]', copy.unit);
@@ -148,8 +174,37 @@ if (typeof Tapp !== 'undefined' && Tapp.widgets) {
 }
 
 // ========== Page Code ==========
-var daysPageState = { events: [], filter: 'all', query: '', editingId: null, off: null };
+var daysPageState = { events: [], categories: [], filter: 'all', query: '', editingId: null, off: null, editorToken: 0, saving: false };
 function daysElement(tag, className, text) { var el = document.createElement(tag); if (className) el.className = className; if (text != null) el.textContent = text; return el; }
+function daysAllCategories() { return DAYS_DEFAULT_CATEGORIES.concat(daysPageState.categories); }
+function daysFindCategory(id) { return daysAllCategories().find(function (item) { return item.id === id; }) || DAYS_DEFAULT_CATEGORIES[0]; }
+function daysSetCategoryPopover(root, open) {
+  var popover = root.querySelector('[data-category-popover]'); var trigger = root.querySelector('[data-action="toggle-category"]');
+  if (!popover || !trigger) return;
+  popover.hidden = !open; trigger.setAttribute('aria-expanded', open ? 'true' : 'false'); trigger.classList.toggle('is-open', open);
+  if (open) { var input = popover.querySelector('[data-category-input]'); if (input) setTimeout(function () { input.focus(); }, 40); }
+}
+function daysRenderCategoryPicker(root, selectedId) {
+  var form = root.querySelector('[data-event-form]'); if (!form) return;
+  var field = form.querySelector('[name="category"]'); var value = root.querySelector('[data-category-value]'); var options = root.querySelector('[data-category-options]');
+  if (!field || !value || !options) return;
+  var selected = daysFindCategory(selectedId || field.value); field.value = selected.id; value.textContent = selected.label; options.textContent = '';
+  daysAllCategories().forEach(function (category) {
+    var button = daysElement('button', 'category-option', category.label); button.type = 'button'; button.dataset.action = 'select-category'; button.dataset.categoryId = category.id;
+    button.setAttribute('role', 'option'); button.setAttribute('aria-selected', category.id === selected.id ? 'true' : 'false');
+    if (category.custom) { var badge = daysElement('small', '', '自定义'); button.appendChild(badge); }
+    options.appendChild(button);
+  });
+}
+async function daysAddCategory(root) {
+  var input = root.querySelector('[data-category-input]'); if (!input) return;
+  var label = input.value.trim().slice(0, 12); if (!label) { input.focus(); return; }
+  var existing = daysAllCategories().find(function (item) { return item.label.toLowerCase() === label.toLowerCase(); });
+  if (existing) { daysRenderCategoryPicker(root, existing.id); input.value = ''; daysSetCategoryPopover(root, false); return; }
+  var category = { id: 'custom-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6), label: label, custom: true };
+  daysPageState.categories = daysPageState.categories.concat(category); await daysSaveCategories(daysPageState.categories);
+  input.value = ''; daysRenderCategoryPicker(root, category.id); daysSetCategoryPopover(root, false); await daysNotify('分类“' + label + '”已添加');
+}
 function daysFilteredEvents() {
   var query = daysPageState.query.trim().toLowerCase(); var now = new Date();
   return daysSortEvents(daysPageState.events).filter(function (event) {
@@ -166,7 +221,7 @@ function daysRenderHero(root) {
     daysSetText(root, '[data-hero-date]', '从今天开始'); daysSetText(root, '[data-hero-count]', '0'); daysSetText(root, '[data-hero-unit]', '天'); return;
   }
   var target = daysOccurrence(event, new Date()); var copy = daysCountCopy(daysDifference(event, new Date()));
-  daysSetText(root, '[data-hero-category]', DAYS_CATEGORY_LABELS[event.category]); daysSetText(root, '[data-hero-title]', event.title);
+  daysSetText(root, '[data-hero-category]', daysCategoryLabel(event.category, event.categoryLabel)); daysSetText(root, '[data-hero-title]', event.title);
   daysSetText(root, '[data-hero-date]', daysFormatDate(target, event.annual) + (event.annual ? ' · 每年' : ''));
   daysSetText(root, '[data-hero-count]', copy.count); daysSetText(root, '[data-hero-unit]', copy.unit);
   var hero = root.querySelector('[data-hero]'); if (hero) hero.style.setProperty('--event-color', event.color);
@@ -177,7 +232,7 @@ function daysRenderPage(root) {
   events.forEach(function (event) {
     var diff = daysDifference(event, new Date()); var target = daysOccurrence(event, new Date()); var copy = daysCountCopy(diff);
     var card = daysElement('article', 'event-card'); card.style.setProperty('--event-color', event.color); card.tabIndex = 0; card.setAttribute('role', 'button'); card.setAttribute('aria-label', '编辑 ' + event.title); card.dataset.eventId = event.id;
-    var top = daysElement('div', 'event-card-top'); var category = daysElement('span', 'event-category', DAYS_CATEGORY_LABELS[event.category]);
+    var top = daysElement('div', 'event-card-top'); var category = daysElement('span', 'event-category', daysCategoryLabel(event.category, event.categoryLabel));
     var repeat = daysElement('span', 'event-repeat', event.annual ? '每年' : '单次'); top.appendChild(category); top.appendChild(repeat);
     var title = daysElement('h3', '', event.title); var note = daysElement('p', 'event-note', event.note || '这一天值得被记住。');
     var bottom = daysElement('div', 'event-card-bottom'); var date = daysElement('span', 'event-date', daysFormatDate(target, event.annual));
@@ -191,24 +246,37 @@ function daysOpenEditor(root, event) {
   var idField = form.querySelector('[name="id"]'); var titleField = form.querySelector('[name="title"]'); var dateField = form.querySelector('[name="date"]');
   var categoryField = form.querySelector('[name="category"]'); var noteField = form.querySelector('[name="note"]'); var annualField = form.querySelector('[name="annual"]'); var colorField = form.querySelector('[name="color"]');
   if (!idField || !titleField || !dateField || !categoryField || !noteField || !annualField || !colorField) throw new Error('[Days] editor fields are incomplete');
-  panel.hidden = false; panel.classList.add('is-open'); form.reset();
+  var token = ++daysPageState.editorToken; panel.hidden = false; panel.setAttribute('aria-hidden', 'false'); panel.classList.remove('is-open'); form.reset();
   daysPageState.editingId = event ? event.id : null; idField.value = event ? event.id : '';
   titleField.value = event ? event.title : ''; dateField.value = event ? event.date : daysTodayKey();
   categoryField.value = event ? event.category : 'life'; noteField.value = event ? event.note : '';
   annualField.checked = event ? event.annual : false; colorField.value = event ? event.color : DAYS_COLORS[daysPageState.events.length % DAYS_COLORS.length];
+  daysRenderCategoryPicker(root, categoryField.value); daysSetCategoryPopover(root, false);
   daysSetText(root, '[data-editor-title]', event ? '编辑日子' : '新建日子'); var deleteButton = root.querySelector('[data-action="delete-event"]'); if (deleteButton) deleteButton.hidden = !event;
-  setTimeout(function () { titleField.focus(); }, 0);
+  setTimeout(function () { if (daysPageState.editorToken !== token || panel.hidden) return; panel.classList.add('is-open'); titleField.focus(); }, 24);
 }
 function daysCloseEditor(root) {
-  var panel = root.querySelector('[data-editor]'); panel.classList.remove('is-open'); daysPageState.editingId = null;
-  setTimeout(function () { if (!panel.classList.contains('is-open')) panel.hidden = true; }, 180);
+  var panel = root.querySelector('[data-editor]'); ++daysPageState.editorToken; panel.classList.remove('is-open'); panel.setAttribute('aria-hidden', 'true'); daysPageState.editingId = null; daysSetCategoryPopover(root, false);
+  setTimeout(function () { if (!panel.classList.contains('is-open')) panel.hidden = true; }, 340);
 }
 async function daysSubmitEvent(root, form) {
-  var data = new FormData(form); var id = String(data.get('id') || ''); var existing = daysPageState.events.find(function (event) { return event.id === id; });
-  var next = { id: id || ('day-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7)), title: String(data.get('title') || '').trim(), date: String(data.get('date') || ''), category: String(data.get('category') || 'other'), note: String(data.get('note') || '').trim(), annual: data.get('annual') === 'on', color: String(data.get('color') || '#D97757'), createdAt: existing ? existing.createdAt : Date.now() };
-  if (!next.title || !daysParseDate(next.date)) return;
+  var idField = form.querySelector('[name="id"]'); var titleField = form.querySelector('[name="title"]'); var dateField = form.querySelector('[name="date"]'); var categoryField = form.querySelector('[name="category"]');
+  var noteField = form.querySelector('[name="note"]'); var annualField = form.querySelector('[name="annual"]'); var colorField = form.querySelector('[name="color"]');
+  if (!idField || !titleField || !dateField || !categoryField || !noteField || !annualField || !colorField) throw new Error('[Days] editor fields are incomplete');
+  if (typeof form.reportValidity === 'function' && !form.reportValidity()) return false;
+  var id = String(idField.value || ''); var existing = daysPageState.events.find(function (event) { return event.id === id; }); var selectedCategory = daysFindCategory(categoryField.value);
+  var next = { id: id || ('day-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7)), title: String(titleField.value || '').trim(), date: String(dateField.value || ''), category: selectedCategory.id, categoryLabel: selectedCategory.custom ? selectedCategory.label : '', note: String(noteField.value || '').trim(), annual: annualField.checked, color: String(colorField.value || '#D97757'), createdAt: existing ? existing.createdAt : Date.now() };
+  if (!next.title || !daysParseDate(next.date)) return false;
   daysPageState.events = existing ? daysPageState.events.map(function (event) { return event.id === id ? next : event; }) : daysPageState.events.concat(next);
-  await daysSaveEvents(daysPageState.events); daysCloseEditor(root); daysRenderPage(root); await daysNotify(existing ? '日子已更新' : '日子已保存');
+  await daysSaveEvents(daysPageState.events); daysCloseEditor(root); daysRenderPage(root); await daysNotify(existing ? '日子已更新' : '日子已保存'); return true;
+}
+async function daysHandleSave(root) {
+  if (daysPageState.saving) return;
+  var form = root.querySelector('[data-event-form]'); var button = root.querySelector('[data-action="save-event"]'); if (!form) throw new Error('[Days] editor form is missing');
+  daysPageState.saving = true; if (button) { button.disabled = true; button.textContent = '保存中…'; }
+  try { await daysSubmitEvent(root, form); }
+  catch (error) { console.error('[Days] save failed', error); await daysNotify('保存失败，请稍后重试', 'error'); }
+  finally { daysPageState.saving = false; if (button) { button.disabled = false; button.textContent = '保存日子'; } }
 }
 async function daysDeleteEvent(root) {
   var event = daysPageState.events.find(function (item) { return item.id === daysPageState.editingId; }); if (!event) return;
@@ -217,24 +285,37 @@ async function daysDeleteEvent(root) {
   await daysSaveEvents(daysPageState.events); daysCloseEditor(root); daysRenderPage(root); await daysNotify('日子已删除', 'info');
 }
 async function daysMountPage(root) {
-  if (root.dataset.ready === 'true') return; root.dataset.ready = 'true'; await daysInitTheme(); daysPageState.events = await daysLoadEvents(); daysRenderPage(root);
+  if (root.dataset.ready === 'true' || root.dataset.ready === 'mounting') return; root.dataset.ready = 'mounting'; await daysInitTheme(); var store = await daysLoadStore(); daysPageState.events = store.events; daysPageState.categories = store.categories; daysRenderPage(root);
   root.addEventListener('click', function (event) {
     var action = event.target.closest('[data-action]');
     if (action) {
       var name = action.dataset.action;
       if (name === 'new-event') { try { daysOpenEditor(root, null); } catch (error) { console.error(error); daysNotify('编辑器打开失败，请重新加载页面', 'error'); } }
-      if (name === 'close-editor') daysCloseEditor(root); if (name === 'delete-event') daysDeleteEvent(root).catch(console.error); return;
+      if (name === 'close-editor') daysCloseEditor(root);
+      if (name === 'delete-event') daysDeleteEvent(root).catch(console.error);
+      if (name === 'save-event') daysHandleSave(root).catch(console.error);
+      if (name === 'toggle-category') { var popover = root.querySelector('[data-category-popover]'); daysSetCategoryPopover(root, Boolean(popover && popover.hidden)); }
+      if (name === 'select-category') { daysRenderCategoryPicker(root, action.dataset.categoryId); daysSetCategoryPopover(root, false); }
+      if (name === 'add-category') daysAddCategory(root).catch(function (error) { console.error(error); daysNotify('分类添加失败，请稍后重试', 'error'); });
+      return;
     }
+    if (!event.target.closest('[data-category-picker]')) daysSetCategoryPopover(root, false);
     var filter = event.target.closest('[data-filter]'); if (filter) { daysPageState.filter = filter.dataset.filter; root.querySelectorAll('[data-filter]').forEach(function (button) { button.classList.toggle('is-active', button === filter); }); daysRenderPage(root); return; }
     var card = event.target.closest('[data-event-id]');
     if (card) { try { daysOpenEditor(root, daysPageState.events.find(function (item) { return item.id === card.dataset.eventId; })); } catch (error) { console.error(error); daysNotify('编辑器打开失败，请重新加载页面', 'error'); } }
   });
-  root.addEventListener('keydown', function (event) { var card = event.target.closest('[data-event-id]'); if (card && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); card.click(); } if (event.key === 'Escape') daysCloseEditor(root); });
+  root.addEventListener('keydown', function (event) {
+    var card = event.target.closest('[data-event-id]'); if (card && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); card.click(); return; }
+    if (event.key === 'Enter' && event.target.matches('[data-category-input]')) { event.preventDefault(); daysAddCategory(root).catch(console.error); return; }
+    if (event.key === 'Enter' && event.target.closest('[data-event-form]') && !event.target.matches('textarea, button')) { event.preventDefault(); daysHandleSave(root).catch(console.error); return; }
+    if (event.key === 'Escape') { var popover = root.querySelector('[data-category-popover]'); if (popover && !popover.hidden) daysSetCategoryPopover(root, false); else daysCloseEditor(root); }
+  });
   root.querySelector('[data-search]').addEventListener('input', function (event) { daysPageState.query = event.target.value; daysRenderPage(root); });
-  root.querySelector('[data-event-form]').addEventListener('submit', function (event) { event.preventDefault(); daysSubmitEvent(root, event.currentTarget).catch(function (error) { console.error(error); daysNotify('保存失败，请稍后重试', 'error'); }); });
+  root.querySelector('[data-event-form]').addEventListener('submit', function (event) { event.preventDefault(); event.stopPropagation(); daysHandleSave(root).catch(console.error); }, true);
   if (Tapp.storage && typeof Tapp.storage.onChanged === 'function') {
-    daysPageState.off = Tapp.storage.onChanged(function (event) { if (!event || !event.key || event.key === DAYS_STORAGE_KEY) daysLoadEvents().then(function (items) { daysPageState.events = items; daysRenderPage(root); }); });
+    daysPageState.off = Tapp.storage.onChanged(function (event) { if (!event || !event.key || event.key === DAYS_STORAGE_KEY || event.key === DAYS_CATEGORIES_STORAGE_KEY) daysLoadStore().then(function (nextStore) { daysPageState.events = nextStore.events; daysPageState.categories = nextStore.categories; daysRenderPage(root); }); });
   }
+  root.dataset.ready = 'true';
   Tapp.lifecycle.onDestroy(function () { if (daysPageState.off) daysPageState.off(); if (daysThemeOff) daysThemeOff(); daysThemeOff = null; });
 }
 if (typeof Tapp !== 'undefined' && Tapp.lifecycle) {

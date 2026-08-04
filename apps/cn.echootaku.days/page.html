@@ -69,21 +69,25 @@
         <input name="title" maxlength="80" required placeholder="例如：去看海的日子" />
       </label>
       <div class="field-row">
-        <label class="field">
+        <label class="field date-field">
           <span>日期</span>
           <input name="date" type="date" required />
         </label>
-        <label class="field">
+        <div class="field category-field" data-category-picker>
           <span>分类</span>
-          <select name="category">
-            <option value="life">生活</option>
-            <option value="birthday">生日</option>
-            <option value="anniversary">纪念</option>
-            <option value="study">学习</option>
-            <option value="travel">旅行</option>
-            <option value="other">其他</option>
-          </select>
-        </label>
+          <input name="category" type="hidden" value="life" />
+          <button class="category-trigger" type="button" data-action="toggle-category" aria-haspopup="listbox" aria-expanded="false">
+            <span data-category-value>生活</span>
+            <span class="category-chevron" aria-hidden="true">⌄</span>
+          </button>
+          <div class="category-popover" data-category-popover hidden>
+            <div class="category-options" data-category-options role="listbox" aria-label="选择分类"></div>
+            <div class="category-create">
+              <input type="text" data-category-input maxlength="12" placeholder="输入新分类" aria-label="新分类名称" />
+              <button type="button" data-action="add-category">添加</button>
+            </div>
+          </div>
+        </div>
       </div>
       <label class="field">
         <span>备注</span>
@@ -103,7 +107,7 @@
         <button class="danger-button" type="button" data-action="delete-event" hidden>删除</button>
         <span class="footer-spacer"></span>
         <button class="secondary-button" type="button" data-action="close-editor">取消</button>
-        <button class="primary-button" type="submit">保存日子</button>
+        <button class="primary-button" type="button" data-action="save-event">保存日子</button>
       </footer>
     </form>
   </section>
