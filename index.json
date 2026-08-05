@@ -1,10 +1,10 @@
 {
   "$schema": "https://myriad.you/schemas/tapp-store-v1.json",
   "name": "Myriad Official Tapp Store",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-08-05T13:29:34.128Z",
+  "updated_at": "2026-08-05T13:42:06.485Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.you",
@@ -250,9 +250,9 @@
     {
       "id": "com.myriad.doudizhu",
       "name": "斗地主",
-      "version": "1.0.0",
-      "description": "3 人斗地主：商业级贴图牌桌（绒毡/扑克/按钮），提示报牌，联邦联机与单机",
-      "long_description": "经典 3 人 54 张牌斗地主。商业级贴图牌桌：绒毡桌面、扑克牌面/牌背、按钮与徽章纹理、提示循环、报牌、分座行动。联邦联机与单机练习。",
+      "version": "1.0.1",
+      "description": "3 人斗地主：逐火十三英桀三语卡面、计时结算、可选 AI 单机与联邦联机",
+      "long_description": "经典 3 人 54 张牌斗地主。标准 52 张牌替换为逐火十三英桀主题卡面，并提供中文、英语、日语三套本地化牌面；Joker 使用全幅主题卡面。支持绒毡牌桌、30 秒回合计时、提示循环、报牌、倍率结算、累计分、分座行动、联邦联机与可选 Myriad AI 单机练习。",
       "locales": {
         "en-US": {
           "name": "Fight the Landlord",
@@ -276,10 +276,14 @@
         "斗地主",
         "联机",
         "联邦",
-        "牌类"
+        "牌类",
+        "逐火十三英桀",
+        "多语言",
+        "卡面"
       ],
       "permissions": [
         "storage",
+        "ai:chat",
         "federation:read",
         "federation:write",
         "federation:message"
@@ -313,13 +317,13 @@
         "page_styles": "apps/com.myriad.doudizhu/page.css",
         "page_template": "apps/com.myriad.doudizhu/page.html"
       },
-      "size": 3964466,
+      "size": 9462734,
       "downloads": 0,
       "rating": 0,
       "featured": true,
       "verified": true,
       "created_at": "2026-07-20T00:00:00Z",
-      "updated_at": "2026-07-21T05:00:00Z"
+      "updated_at": "2026-08-05T13:42:06.477Z"
     },
     {
       "id": "com.myriad.aro",
