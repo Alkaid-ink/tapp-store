@@ -1,0 +1,5 @@
+# Local wrangler dev secrets (copy to .dev.vars — never commit .dev.vars)
+# openssl rand -hex 32
+INGEST_HMAC_SECRET=
+# openssl rand -hex 24
+ADMIN_TOKEN=

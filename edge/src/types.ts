@@ -10,14 +10,16 @@ export interface Env {
   CATALOG_URL: string
   ALLOW_UNKNOWN_APPS: string
   HIT_RATE_LIMIT_PER_MIN: string
+  /** Anonymous browser/other clients (default 20). Backend uses HIT_RATE_LIMIT_PER_MIN. */
+  BROWSER_HIT_RATE_LIMIT_PER_MIN: string
   STATS_MAX_BATCH: string
   STATS_TOP_MAX: string
   CATALOG_IDS_TTL_SEC: string
-  /** Optional bearer for admin repair endpoints. Empty = disabled. */
+  /** Bearer for admin repair endpoints (secret). Empty = admin routes 404. */
   ADMIN_TOKEN?: string
   /**
-   * Optional HMAC secret. When set, `client=myriad-backend` hits must send
-   * `X-Stats-Signature: sha256=<hex>`. Browser clients stay unsigned.
+   * HMAC secret (secret). When set, `client=myriad-backend` hits must send
+   * `X-Stats-Signature: sha256=<hex>`. Browser clients stay unsigned + tighter rate limit.
    */
   INGEST_HMAC_SECRET?: string
 }
@@ -66,7 +68,7 @@ export interface ErrorBody {
   code?: string
 }
 
-export const SERVICE_VERSION = '1.2.0'
+export const SERVICE_VERSION = '1.2.1'
 export const COUNTER_KEY_PREFIX = 'c:v1:'
 export const DEDUPE_KEY_PREFIX = 'd:v1:'
 export const RATE_KEY_PREFIX = 'rl:v1:'

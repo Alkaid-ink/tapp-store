@@ -31,8 +31,16 @@ export async function handleHit(
     return jsonError(401, auth.error, auth.code)
   }
 
-  // Rate-limit only after validation so junk bodies do not burn the budget.
-  const limit = parsePositiveInt(env.HIT_RATE_LIMIT_PER_MIN, 60)
+  // Stricter limit for anonymous browser / other clients (HMAC backends use full limit).
+  const baseLimit = parsePositiveInt(env.HIT_RATE_LIMIT_PER_MIN, 60)
+  const browserLimit = parsePositiveInt(
+    env.BROWSER_HIT_RATE_LIMIT_PER_MIN,
+    Math.min(20, baseLimit),
+  )
+  const client = (validated.body.client || 'other').toString()
+  const limit =
+    client === 'myriad-backend' ? baseLimit : Math.min(baseLimit, browserLimit)
+
   const ip = clientIp(request)
   const allowedRate = await checkRateLimit(env, ip, limit)
   if (!allowedRate) {

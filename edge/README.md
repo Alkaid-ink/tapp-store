@@ -82,22 +82,37 @@ curl 'https://stats.store.myriad.you/v1/stats?top=10'
 
 `ranked` 仅 `?top=` 返回。`Cache-Control: public, max-age=30`。
 
-### 运维（可选）
-
-在 CF Worker 设置 **密钥** `ADMIN_TOKEN`（≥8 字符）后：
+### 密钥与运维（推荐生产必配）
 
 ```bash
-# 用已知 app 重建 top（修复 1.0 时代只写了 counter 的数据）
+cd edge
+./scripts/setup-secrets.sh          # 生成 + 写 .dev.vars；已 login 则推 CF secrets
+# 或手动：
+# npx wrangler secret put INGEST_HMAC_SECRET
+# npx wrangler secret put ADMIN_TOKEN
+npx wrangler deploy
+```
+
+Myriad 后端同步：
+
+```bash
+TAPP_STORE_STATS_URL=https://stats.store.myriad.you
+TAPP_STORE_STATS_ENABLED=true
+TAPP_STORE_STATS_HMAC=<与 INGEST_HMAC_SECRET 相同>
+```
+
+Admin：
+
+```bash
 curl -X POST https://stats.store.myriad.you/v1/admin/rebuild-top \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H 'content-type: application/json' \
   -d '{"seed_apps":["com.myriad.music-player"]}'
-
-curl -X POST https://stats.store.myriad.you/v1/admin/refresh-catalog \
-  -H "Authorization: Bearer $ADMIN_TOKEN"
 ```
 
-未配置 `ADMIN_TOKEN` 时 admin 路由返回 404。
+未配置 `ADMIN_TOKEN` 时 admin 路由 404。公开 `?seed=` **已移除**（防写放大）。
+
+风险与优化清单见 [RISKS.md](./RISKS.md)。
 
 ## 为何能扛 ~1 万应用 + v1.2 资源策略
 

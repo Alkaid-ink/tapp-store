@@ -94,6 +94,11 @@ async function route(request: Request, env: Env): Promise<Response> {
         kv,
         tracked_apps: tracked,
         catalog_size: catalog,
+        // Feature flags only — never echo secret values.
+        hmac_required_for_backend: Boolean(env.INGEST_HMAC_SECRET?.trim()),
+        admin_enabled: Boolean(
+          env.ADMIN_TOKEN && env.ADMIN_TOKEN.trim().length >= 8,
+        ),
       }),
       {
         status: 200,

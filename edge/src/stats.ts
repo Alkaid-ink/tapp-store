@@ -1,12 +1,8 @@
-/** GET /v1/stats — read-only (no KV writes). Repair only via admin or ?seed=. */
+/** GET /v1/stats — pure read. Repair only via authenticated admin. */
 
-import {
-  ensureTopIndex,
-  getCountersBatch,
-  seedTrackedFromApp,
-} from './kv.ts'
+import { ensureTopIndex, getCountersBatch } from './kv.ts'
 import type { Env, ErrorBody, StatsAppEntry, StatsResponse } from './types.ts'
-import { isValidAppId, parseAppIdList, parsePositiveInt } from './validate.ts'
+import { parseAppIdList, parsePositiveInt } from './validate.ts'
 
 export async function handleStats(
   request: Request,
@@ -23,19 +19,12 @@ export async function handleStats(
 
   const topParam = url.searchParams.get('top')
   if (topParam !== null) {
+    // Public seed removed — use POST /v1/admin/rebuild-top with Bearer token.
     const n = Math.min(
       topMax,
       Math.max(1, Number.parseInt(topParam, 10) || 20),
     )
-    let top = await ensureTopIndex(env, n)
-
-    // Explicit one-shot repair only (not on every list read).
-    const seedId = url.searchParams.get('seed')
-    if (top.length === 0 && seedId && isValidAppId(seedId)) {
-      await seedTrackedFromApp(env, seedId)
-      top = await ensureTopIndex(env, n)
-    }
-
+    const top = await ensureTopIndex(env, n)
     const ids = top.map((e) => e.id)
     const live = await getCountersBatch(env, ids)
     const apps: Record<string, StatsAppEntry> = {}
@@ -60,7 +49,6 @@ export async function handleStats(
     if (!parsed.ok) {
       return jsonError(400, parsed.error, parsed.code)
     }
-    // Pure read — no seed/track writes on the list path.
     const live = await getCountersBatch(env, parsed.ids)
     const apps: Record<string, StatsAppEntry> = {}
     for (const id of parsed.ids) {

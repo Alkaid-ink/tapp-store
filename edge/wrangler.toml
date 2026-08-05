@@ -24,16 +24,20 @@ crons = ["0 */6 * * *"]
 CATALOG_URL = "https://raw.githubusercontent.com/Myriad-You/tapp-store/main/index.json"
 # When false, unknown app_id hits are rejected (recommended in production).
 ALLOW_UNKNOWN_APPS = "false"
-# Soft rate limit: hits per IP per minute.
+# Soft rate limit: hits per IP per minute (trusted backend client).
 HIT_RATE_LIMIT_PER_MIN = "60"
+# Anonymous browser / other clients (stricter anti-spam).
+BROWSER_HIT_RATE_LIMIT_PER_MIN = "20"
 # Max app ids accepted by GET /v1/stats?apps=
 STATS_MAX_BATCH = "100"
 # Max apps returned by GET /v1/stats?top=
 STATS_TOP_MAX = "100"
 # How long (seconds) to cache the catalog allowlist in KV / isolate memory.
 CATALOG_IDS_TTL_SEC = "600"
-# Optional: set via CF dashboard secrets as ADMIN_TOKEN for repair endpoints.
-# ADMIN_TOKEN = ""
+# Secrets (do NOT put real values in git — use CF secrets or .dev.vars):
+#   npx wrangler secret put INGEST_HMAC_SECRET
+#   npx wrangler secret put ADMIN_TOKEN
+# Or: ./scripts/setup-secrets.sh
 
 # KV binding "STATS" (required for /v1/hit and /v1/stats).
 [[kv_namespaces]]
