@@ -1,6 +1,6 @@
-# Cloudflare Workers — Tapp store install stats
-# Deploy: npm i && npx wrangler login && npm run deploy
-# Secrets: ./scripts/setup-secrets.sh
+# Cloudflare Workers — Tapp store install stats (no secrets)
+# Deploy: npm i && npx wrangler deploy
+# Local:  npm run dev
 
 name = "tapp-store-stats"
 main = "src/index.ts"
@@ -15,24 +15,19 @@ crons = ["0 */6 * * *"]
 [vars]
 CATALOG_URL = "https://raw.githubusercontent.com/Myriad-You/tapp-store/main/index.json"
 ALLOW_UNKNOWN_APPS = "false"
-# Browser cannot write; Myriad backends write without shared secret by default.
 ALLOW_ANONYMOUS_HITS = "false"
-# Optional hardening: set true + INGEST_HMAC_SECRET only if you need signed hits.
-REQUIRE_HMAC = "false"
 HIT_RATE_LIMIT_PER_MIN = "120"
 BROWSER_HIT_RATE_LIMIT_PER_MIN = "20"
+INSTANCE_HIT_RATE_LIMIT_PER_MIN = "30"
 STATS_MAX_BATCH = "100"
 STATS_TOP_MAX = "100"
 CATALOG_IDS_TTL_SEC = "600"
-# Secrets (never commit):
-#   npx wrangler secret put INGEST_HMAC_SECRET
-#   npx wrangler secret put ADMIN_TOKEN
+# DEV_RELAXED only in local .dev.vars — never production.
 
 [[kv_namespaces]]
 binding = "STATS"
 id = "61b671eb8a2e446a91309f197ff60858"
 
-# Atomic per-app counters (SQLite-backed — required on Workers Free plan)
 [[durable_objects.bindings]]
 name = "APP_COUNTER"
 class_name = "AppCounter"

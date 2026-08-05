@@ -1,4 +1,4 @@
-/** GET /v1/stats — pure read. Repair only via authenticated admin. */
+/** GET /v1/stats — pure read (no secrets / no admin API). */
 
 import { ensureTopIndex, getCountersBatch } from './kv.ts'
 import type { Env, ErrorBody, StatsAppEntry, StatsResponse } from './types.ts'
@@ -19,8 +19,8 @@ export async function handleStats(
 
   const topParam = url.searchParams.get('top')
   if (topParam !== null) {
-    // Public seed removed — use POST /v1/admin/rebuild-top with Bearer token.
     const n = Math.min(
+
       topMax,
       Math.max(1, Number.parseInt(topParam, 10) || 20),
     )

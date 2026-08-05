@@ -1,13 +1,20 @@
-/** POST /v1/hit — no shared secret required by default.
- *  Cap: 1 count per instance / app / event / UTC day when instance_hash is sent.
+/** POST /v1/hit — no secrets.
+ *  Cap: 1 count / instance / app / event / UTC day.
+ *  Hardening: no browser Origin, Myriad UA, IP + instance rate limits.
  */
 
 import { isAppAllowed } from './catalog.ts'
-import { verifyHitAuth } from './hmac.ts'
 import { instanceDayIdempotencyKey } from './instance.ts'
-import { checkRateLimit, clientIp, incrementIfNew } from './kv.ts'
+import {
+  checkInstanceRateLimit,
+  checkRateLimit,
+  clientIp,
+  incrementIfNew,
+} from './kv.ts'
 import type { Env, ErrorBody, HitResponse } from './types.ts'
 import { parseBool, parsePositiveInt, validateHitBody } from './validate.ts'
+
+const MYRIAD_UA_RE = /^Myriad-Store-Stats\//i
 
 export async function handleHit(
   request: Request,
@@ -15,6 +22,17 @@ export async function handleHit(
 ): Promise<Response> {
   if (request.method !== 'POST') {
     return jsonError(405, 'method not allowed', 'method_not_allowed')
+  }
+
+  const devRelaxed = parseBool(env.DEV_RELAXED, false)
+
+  const origin = request.headers.get('Origin')
+  if (!devRelaxed && origin) {
+    return jsonError(
+      403,
+      'browser Origin not allowed on /v1/hit',
+      'browser_origin_forbidden',
+    )
   }
 
   let raw: unknown
@@ -39,18 +57,23 @@ export async function handleHit(
     )
   }
 
-  // Backend hits should identify the Myriad instance for day-cap.
   if (client === 'myriad-backend' && !validated.body.instance_hash) {
     return jsonError(
       400,
-      'instance_hash required for myriad-backend (1 count/instance/app/day)',
+      'instance_hash required (1 count/instance/app/day)',
       'missing_instance_hash',
     )
   }
 
-  const auth = await verifyHitAuth(request, env, validated.body)
-  if (!auth.ok) {
-    return jsonError(401, auth.error, auth.code)
+  if (!devRelaxed && client === 'myriad-backend') {
+    const ua = request.headers.get('User-Agent') || ''
+    if (!MYRIAD_UA_RE.test(ua)) {
+      return jsonError(
+        403,
+        'User-Agent must be Myriad-Store-Stats/*',
+        'invalid_user_agent',
+      )
+    }
   }
 
   const baseLimit = parsePositiveInt(env.HIT_RATE_LIMIT_PER_MIN, 120)
@@ -58,13 +81,19 @@ export async function handleHit(
     env.BROWSER_HIT_RATE_LIMIT_PER_MIN,
     Math.min(20, baseLimit),
   )
+  const instLimit = parsePositiveInt(env.INSTANCE_HIT_RATE_LIMIT_PER_MIN, 30)
   const limit =
     client === 'myriad-backend' ? baseLimit : Math.min(baseLimit, browserLimit)
 
   const ip = clientIp(request)
-  const allowedRate = await checkRateLimit(env, ip, limit)
-  if (!allowedRate) {
+  if (!(await checkRateLimit(env, ip, limit))) {
     return jsonError(429, 'rate limit exceeded', 'rate_limited')
+  }
+  if (
+    validated.body.instance_hash &&
+    !(await checkInstanceRateLimit(env, validated.body.instance_hash, instLimit))
+  ) {
+    return jsonError(429, 'instance rate limit exceeded', 'instance_rate_limited')
   }
 
   const allowUnknown = parseBool(env.ALLOW_UNKNOWN_APPS, false)
@@ -73,7 +102,6 @@ export async function handleHit(
     return jsonError(400, 'app_id not in official catalog', 'unknown_app')
   }
 
-  // Enforce: one install (or update) per instance per app per UTC day.
   let idem = validated.body.idempotency_key
   if (validated.body.instance_hash) {
     idem = await instanceDayIdempotencyKey(
@@ -98,9 +126,7 @@ export async function handleHit(
     updates: counters.updates,
   }
 
-  return json(200, body, {
-    'Cache-Control': 'no-store',
-  })
+  return json(200, body, { 'Cache-Control': 'no-store' })
 }
 
 function json(status: number, body: unknown, headers?: HeadersInit): Response {

@@ -1,5 +1,5 @@
-# Local wrangler dev secrets (copy to .dev.vars — never commit .dev.vars)
-# openssl rand -hex 32
-INGEST_HMAC_SECRET=
-# openssl rand -hex 24
-ADMIN_TOKEN=
+# Optional local-only overrides for `npm run dev` (gitignored as .dev.vars).
+# No secrets for install stats.
+
+# DEV_RELAXED=true
+# ALLOW_UNKNOWN_APPS=true

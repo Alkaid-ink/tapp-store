@@ -537,13 +537,14 @@ REST 商店安装仍是 body `source: "store"` + `storeSource: catalogRef`（源
 | 代码 | 商店仓库 [`edge/`](https://github.com/Myriad-You/tapp-store/tree/main/edge) |
 | 正式 URL | **`https://stats.store.myriad.you`** |
 | 计什么 | **安装成功**（`event=install`）；`update` 单独计数；不计 preview / 浏览 |
-| 真值 | `GET /v1/stats`；**不**写回 `index.json` |
-| 读路径 | **不写 KV**；历史修复用 admin `rebuild-top` |
-| 版本 | edge **1.2.1**（HMAC/Admin secrets、浏览器更严限流） |
+| 真值 | Edge 计数（DO + KV 镜像）；**不**写回 `index.json` |
+| 计数规则 | **每实例 / 每 app / 每 event / 每 UTC 日最多 +1**（`instance_hash`） |
+| 密钥 | **默认不需要**；HMAC 可选 |
+| 读路径 | 纯读；admin 可选修 top |
 
-Myriad：后端 store 成功 → `store_stats_beacon`；浏览器 fallback → FE beacon；UI overlay 展示安装次数。失败不影响安装。
+Myriad：store 安装成功 → `store_stats_beacon`（无密钥）；fallback → `/store/stats-report`（须已安装）。本地：`dev.sh` 写 BASE_URL；edge `npm run dev` 用 `TAPP_STORE_STATS_URL=http://127.0.0.1:8787`。
 
-详见 `edge/README.md`、`edge/RISKS.md`。
+详见 `edge/README.md`。
 
 ---
 

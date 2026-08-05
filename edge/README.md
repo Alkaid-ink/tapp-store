@@ -82,72 +82,79 @@ curl 'https://stats.store.myriad.you/v1/stats?top=10'
 
 `ranked` 仅 `?top=` 返回。`Cache-Control: public, max-age=30`。
 
-### 密钥与运维（推荐生产必配）
+### 密钥
 
-```bash
-cd edge
-./scripts/setup-secrets.sh          # 生成 + 写 .dev.vars；已 login 则推 CF secrets
-# 或手动：
-# npx wrangler secret put INGEST_HMAC_SECRET
-# npx wrangler secret put ADMIN_TOKEN
-npx wrangler deploy
-```
+**没有。** 不需要 CF Secret，也不需要 Myriad 密钥。
 
-Myriad 后端同步：
+计数只靠：Myriad 后端 POST + `instance_hash` + 日上限 + 白名单 + 限流。
 
-```bash
-TAPP_STORE_STATS_URL=https://stats.store.myriad.you
-TAPP_STORE_STATS_ENABLED=true
-TAPP_STORE_STATS_HMAC=<与 INGEST_HMAC_SECRET 相同>
-```
+见 [SECURITY.md](./SECURITY.md)、[RISKS.md](./RISKS.md)。
 
-Admin：
-
-```bash
-curl -X POST https://stats.store.myriad.you/v1/admin/rebuild-top \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H 'content-type: application/json' \
-  -d '{"seed_apps":["com.myriad.music-player"]}'
-```
-
-未配置 `ADMIN_TOKEN` 时 admin 路由 404。公开 `?seed=` **已移除**（防写放大）。
-
-风险与优化清单见 [RISKS.md](./RISKS.md)。
-
-## 为何能扛 ~1 万应用 + v1.3 准确性
+## 为何能扛 ~1 万应用
 
 | 路径 | 复杂度 |
 |------|--------|
-| 单次 hit | **AppCounter DO** 串行 +1；KV 镜像；top 条件写 |
-| rate limit | **始终 KV**（跨 edge 准确） |
-| stats 批量 | **纯读** KV 镜像，batch ≤ 100 |
-| 写权限 | 默认禁止匿名；仅 `myriad-backend` + HMAC |
-| catalog | isolate 内存 + KV；fail-closed |
-| 历史 | DO 首次用 KV seed，不覆盖旧计数 |
+| 单次 hit | AppCounter DO 串行 +1；KV 镜像；top 条件写 |
+| 限流 | IP + instance_hash |
+| stats 批量 | 纯读，batch ≤ 100 |
+| 写权限 | 仅服务端 `myriad-backend`（无浏览器 Origin） |
+| 计数帽 | 1 / instance / app / event / UTC day |
 
 安装 QPS 是瓶颈，不是「应用个数」。
 
 ## 本地开发
 
+### Edge（本仓库 `edge/`）
+
 ```bash
 cd edge
+cp .dev.vars.example .dev.vars   # 可选：DEV_RELAXED=true 便于 curl 调试
 npm install
 npm test
-npm run dev
-# 另开终端
+npm run dev                      # http://127.0.0.1:8787
+```
+
+合法 hit 示例（模拟 Myriad 后端，无浏览器 Origin）：
+
+```bash
 curl -s http://127.0.0.1:8787/health
 curl -s -X POST http://127.0.0.1:8787/v1/hit \
   -H 'content-type: application/json' \
-  -d '{"app_id":"com.myriad.music-player","event":"install","idempotency_key":"local-test-001"}'
+  -H 'user-agent: Myriad-Store-Stats/1.0' \
+  -d '{
+    "app_id":"com.myriad.music-player",
+    "event":"install",
+    "version":"1.0.0",
+    "idempotency_key":"local-dev-key-001",
+    "instance_hash":"devlocal01abcdef",
+    "client":"myriad-backend"
+  }'
 curl -s 'http://127.0.0.1:8787/v1/stats?app=com.myriad.music-player'
 ```
 
-本地 `wrangler dev` 使用模拟 KV。若白名单拉不到 GitHub，可临时：
+说明：
 
-```toml
-# wrangler.toml [vars]
-ALLOW_UNKNOWN_APPS = "true"
+- **无密钥**
+- 带 `Origin` 的 hit 会被拒；curl 不要加 Origin
+- `DEV_RELAXED=true`（仅本地 `.dev.vars`）可放宽 UA/Origin
+- 白名单拉不到 GitHub：`.dev.vars` 设 `ALLOW_UNKNOWN_APPS=true`
+
+### Myriad 本机 backend
+
+**本地默认不上报统计**（`TAPP_STORE_STATS_ENABLED=false` / 非 production），避免污染线上数字。
+
+只有要测统计时再开：
+
+```bash
+# backend/.env
+TAPP_STORE_STATS_ENABLED=true
+TAPP_STORE_STATS_URL=https://stats.store.myriad.you
+# 或本地 edge：
+# TAPP_STORE_STATS_URL=http://127.0.0.1:8787
+BASE_URL=http://127.0.0.1:1103
 ```
+
+`scripts/native/dev.sh` 默认写 `TAPP_STORE_STATS_ENABLED=false`。
 
 ## 部署到 Cloudflare
 

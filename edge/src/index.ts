@@ -1,15 +1,15 @@
 /**
- * tapp-store-stats — Cloudflare Worker v1.3.2
+ * tapp-store-stats — Cloudflare Worker v1.5
+ *
+ * No secrets. Install heat: 1 / instance / app / event / UTC day.
  *
  * Routes:
  *   GET  /health
  *   GET  /v1/stats?apps=a,b | ?app=id | ?top=N
- *   POST /v1/hit          (myriad-backend + HMAC by default)
- *   POST /v1/admin/*      (Bearer ADMIN_TOKEN)
+ *   POST /v1/hit
  *   OPTIONS *
  */
 
-import { handleAdmin } from './admin.ts'
 import { catalogSize, refreshCatalogIds } from './catalog.ts'
 import { preflight, withCors } from './cors.ts'
 import { handleHit } from './hit.ts'
@@ -93,12 +93,9 @@ async function route(request: Request, env: Env): Promise<Response> {
         durable_objects: Boolean(env.APP_COUNTER),
         tracked_apps: tracked,
         catalog_size: catalog,
-        hmac_required_for_backend: Boolean(env.INGEST_HMAC_SECRET?.trim()),
-        require_hmac: parseBool(env.REQUIRE_HMAC, false),
         allow_anonymous_hits: parseBool(env.ALLOW_ANONYMOUS_HITS, false),
-        admin_enabled: Boolean(
-          env.ADMIN_TOKEN && env.ADMIN_TOKEN.trim().length >= 16,
-        ),
+        dev_relaxed: parseBool(env.DEV_RELAXED, false),
+        model: 'instance-day',
       }),
       {
         status: 200,
@@ -120,12 +117,6 @@ async function route(request: Request, env: Env): Promise<Response> {
     const missing = requireStats(env)
     if (missing) return missing
     return handleStats(request, env)
-  }
-
-  if (path.startsWith('/v1/admin/')) {
-    const missing = requireStats(env)
-    if (missing) return missing
-    return handleAdmin(request, env, path)
   }
 
   return new Response(

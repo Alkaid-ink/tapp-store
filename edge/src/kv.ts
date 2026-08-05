@@ -241,10 +241,29 @@ export async function checkRateLimit(
   ip: string,
   limitPerMin: number,
 ): Promise<boolean> {
+  const ipHash = (await sha256Hex(ip)).slice(0, 16)
+  return checkRateLimitBucket(env, `ip:${ipHash}`, limitPerMin)
+}
+
+/** Soft limit per instance_hash (in addition to IP). */
+export async function checkInstanceRateLimit(
+  env: Env,
+  instanceHash: string,
+  limitPerMin: number,
+): Promise<boolean> {
+  const h = instanceHash.trim().toLowerCase().slice(0, 64)
+  if (!h) return true
+  return checkRateLimitBucket(env, `inst:${h}`, limitPerMin)
+}
+
+async function checkRateLimitBucket(
+  env: Env,
+  bucketId: string,
+  limitPerMin: number,
+): Promise<boolean> {
   if (limitPerMin <= 0) return true
   const minuteBucket = Math.floor(Date.now() / 60_000)
-  const ipHash = (await sha256Hex(ip)).slice(0, 16)
-  const key = rateKey(ipHash, minuteBucket)
+  const key = rateKey(bucketId, minuteBucket)
   const kv = statsKv(env)
   const raw = await kv.get(key)
   const count = raw ? Number.parseInt(raw, 10) || 0 : 0
