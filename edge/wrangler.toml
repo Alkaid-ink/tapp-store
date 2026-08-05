@@ -31,11 +31,11 @@ CATALOG_IDS_TTL_SEC = "600"
 binding = "STATS"
 id = "61b671eb8a2e446a91309f197ff60858"
 
-# Atomic per-app counters
+# Atomic per-app counters (SQLite-backed — required on Workers Free plan)
 [[durable_objects.bindings]]
 name = "APP_COUNTER"
 class_name = "AppCounter"
 
 [[migrations]]
-tag = "v1_app_counter"
-new_classes = ["AppCounter"]
+tag = "v1_app_counter_sqlite"
+new_sqlite_classes = ["AppCounter"]
