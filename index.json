@@ -1,10 +1,10 @@
 {
   "$schema": "https://myriad.you/schemas/tapp-store-v1.json",
   "name": "Myriad Official Tapp Store",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-08-05T07:47:50.806Z",
+  "updated_at": "2026-08-05T08:06:13.855Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.you",
@@ -798,7 +798,7 @@
     {
       "id": "cn.echootaku.days",
       "name": "朝夕",
-      "version": "0.1.3",
+      "version": "0.1.4",
       "description": "记录值得期待与纪念的日子，在主页随时查看最近倒数。",
       "long_description": "用朝夕记录生日、纪念日、旅行、考试和其他重要时刻。支持置顶、快捷日期、临近标识、每年重复、自定义分类与颜色、搜索筛选，以及 2x2、4x2、4x4 三种主页小组件；所有数据仅保存在当前用户的私有存储中。",
       "locales": {
@@ -870,13 +870,13 @@
           }
         }
       },
-      "size": 59606,
+      "size": 71248,
       "downloads": 0,
       "rating": 0,
       "featured": false,
       "verified": false,
       "created_at": "2026-08-04T05:52:10Z",
-      "updated_at": "2026-08-05T07:47:50.804Z"
+      "updated_at": "2026-08-05T08:06:13.853Z"
     },
     {
       "id": "org.smcresearchhk.math",
