@@ -114,16 +114,16 @@ curl -X POST https://stats.store.myriad.you/v1/admin/rebuild-top \
 
 风险与优化清单见 [RISKS.md](./RISKS.md)。
 
-## 为何能扛 ~1 万应用 + v1.2 资源策略
+## 为何能扛 ~1 万应用 + v1.3 准确性
 
 | 路径 | 复杂度 |
 |------|--------|
-| 单次 hit | dedupe + counter；tracked 仅首次；**top 条件写**（未上榜且低于尾部则跳过） |
-| rate limit | isolate 内存优先；近阈值才写 KV |
-| stats 批量 | **纯读**，batch ≤ 100，**禁止**读路径 seed 写 |
-| stats top | 维护索引 + live 再读；空 top 可用 `?seed=` 或 admin 修复 |
-| catalog | isolate 内存 + KV；加载成功后 **fail-closed** |
-| HMAC | 可选：`INGEST_HMAC_SECRET` 时 `myriad-backend` 必须带签名 |
+| 单次 hit | **AppCounter DO** 串行 +1；KV 镜像；top 条件写 |
+| rate limit | **始终 KV**（跨 edge 准确） |
+| stats 批量 | **纯读** KV 镜像，batch ≤ 100 |
+| 写权限 | 默认禁止匿名；仅 `myriad-backend` + HMAC |
+| catalog | isolate 内存 + KV；fail-closed |
+| 历史 | DO 首次用 KV seed，不覆盖旧计数 |
 
 安装 QPS 是瓶颈，不是「应用个数」。
 
