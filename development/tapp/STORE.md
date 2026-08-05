@@ -538,12 +538,12 @@ REST 商店安装仍是 body `source: "store"` + `storeSource: catalogRef`（源
 | 正式 URL | **`https://stats.store.myriad.you`** |
 | 计什么 | **安装成功**（`event=install`）；`update` 单独计数；不计 preview / 浏览 |
 | 真值 | `GET /v1/stats`；**不**写回 `index.json` |
-| 读路径 | **不写 KV**；历史修复用 admin 或 `?top=&seed=` |
-| 版本 | edge **1.2**（条件 top 写、内存限流、HMAC 可选） |
+| 读路径 | **不写 KV**；历史修复用 admin `rebuild-top` |
+| 版本 | edge **1.2.1**（HMAC/Admin secrets、浏览器更严限流） |
 
 Myriad：后端 store 成功 → `store_stats_beacon`；浏览器 fallback → FE beacon；UI overlay 展示安装次数。失败不影响安装。
 
-详细见 `edge/README.md`。
+详见 `edge/README.md`、`edge/RISKS.md`。
 
 ---
 
