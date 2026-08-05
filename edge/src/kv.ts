@@ -95,8 +95,8 @@ export async function incrementIfNew(
   else counters.updates += 1
 
   await kv.put(counterKey(appId), JSON.stringify(counters))
-  // Best-effort maintain a compact top-installs index for /v1/stats?top=
-  void touchTopIndex(env, appId, counters.installs)
+  // Must await: fire-and-forget is cancelled when the Worker request ends.
+  await touchTopIndex(env, appId, counters.installs)
 
   return { counted: true, counters }
 }
