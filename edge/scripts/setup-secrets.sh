@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
 # Generate + apply Cloudflare Worker secrets for tapp-store-stats.
+#
 # Usage:
-#   ./scripts/setup-secrets.sh           # generate + wrangler secret put
-#   ./scripts/setup-secrets.sh --print   # only print values (no CF API)
-#   ./scripts/setup-secrets.sh --from-env # use existing env vars
+#   ./scripts/setup-secrets.sh              # generate, write .dev.vars, apply if logged in
+#   ./scripts/setup-secrets.sh --print      # also print values to stdout (avoid in shared logs)
+#   ./scripts/setup-secrets.sh --from-env   # use existing INGEST_HMAC_SECRET + ADMIN_TOKEN
+#
+# NEVER commit .dev.vars or paste secrets into git / issues / chat.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-PRINT_ONLY=0
+PRINT=0
 FROM_ENV=0
 for a in "$@"; do
   case "$a" in
-    --print) PRINT_ONLY=1 ;;
+    --print) PRINT=1 ;;
     --from-env) FROM_ENV=1 ;;
   esac
 done
@@ -28,36 +31,40 @@ else
   ADMIN="$(openssl rand -hex 24)"
 fi
 
-echo "=== tapp-store-stats secrets ==="
-echo "INGEST_HMAC_SECRET=$HMAC"
-echo "ADMIN_TOKEN=$ADMIN"
-echo
-echo "Myriad backend (same HMAC):"
-echo "  TAPP_STORE_STATS_URL=https://stats.store.myriad.you"
-echo "  TAPP_STORE_STATS_ENABLED=true"
-echo "  TAPP_STORE_STATS_HMAC=$HMAC"
-echo
+if [[ ${#HMAC} -lt 32 || ${#ADMIN} -lt 16 ]]; then
+  echo "Secrets too short" >&2
+  exit 1
+fi
 
-# Write local .dev.vars (gitignored)
+umask 077
 cat > .dev.vars <<EOF
 INGEST_HMAC_SECRET=$HMAC
 ADMIN_TOKEN=$ADMIN
 EOF
-echo "Wrote edge/.dev.vars (local only, gitignored)"
+chmod 600 .dev.vars 2>/dev/null || true
+echo "Wrote edge/.dev.vars (mode 600, gitignored)"
 
-if [[ "$PRINT_ONLY" == "1" ]]; then
-  exit 0
+if [[ "$PRINT" == "1" ]]; then
+  echo "INGEST_HMAC_SECRET=$HMAC"
+  echo "ADMIN_TOKEN=$ADMIN"
+  echo "TAPP_STORE_STATS_HMAC=$HMAC"
+else
+  echo "Secrets generated (not printed). Use: cat .dev.vars"
+  echo "Myriad: set TAPP_STORE_STATS_HMAC from INGEST_HMAC_SECRET in .dev.vars"
 fi
 
 if ! npx wrangler whoami &>/dev/null; then
-  echo
-  echo "Wrangler not logged in. Apply secrets after 'npx wrangler login':"
-  echo "  printf '%s' '$HMAC' | npx wrangler secret put INGEST_HMAC_SECRET"
-  echo "  printf '%s' '$ADMIN' | npx wrangler secret put ADMIN_TOKEN"
-  echo "  npx wrangler deploy"
+  echo "Wrangler not logged in. After 'npx wrangler login':"
+  echo "  ./scripts/setup-secrets.sh --from-env   # re-read .dev.vars into env first"
+  echo "  # or: source <(sed 's/^/export /' .dev.vars) && ./scripts/setup-secrets.sh --from-env"
   exit 0
 fi
 
-printf '%s' "$HMAC" | npx wrangler secret put INGEST_HMAC_SECRET
-printf '%s' "$ADMIN" | npx wrangler secret put ADMIN_TOKEN
-echo "Secrets applied. Redeploy: npx wrangler deploy"
+# Apply without echoing secret values
+set -a
+# shellcheck disable=SC1091
+source .dev.vars
+set +a
+printf '%s' "$INGEST_HMAC_SECRET" | npx wrangler secret put INGEST_HMAC_SECRET
+printf '%s' "$ADMIN_TOKEN" | npx wrangler secret put ADMIN_TOKEN
+echo "Secrets applied to Cloudflare. Redeploy: npx wrangler deploy"

@@ -1,4 +1,4 @@
-/** Admin repair endpoints (optional ADMIN_TOKEN). */
+/** Admin repair endpoints (ADMIN_TOKEN secret — timing-safe compare). */
 
 import { refreshCatalogIds } from './catalog.ts'
 import {
@@ -14,13 +14,15 @@ export async function handleAdmin(
   env: Env,
   path: string,
 ): Promise<Response> {
-  if (!env.ADMIN_TOKEN || env.ADMIN_TOKEN.length < 8) {
+  const expected = env.ADMIN_TOKEN?.trim() || ''
+  if (expected.length < 16) {
+    // Require a strong token when enabled; short/missing → 404 (no oracle).
     return jsonError(404, 'not found', 'not_found')
   }
 
   const auth = request.headers.get('Authorization') || ''
   const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
-  if (token !== env.ADMIN_TOKEN) {
+  if (!timingSafeEqualString(token, expected)) {
     return jsonError(401, 'unauthorized', 'unauthorized')
   }
 
@@ -33,9 +35,11 @@ export async function handleAdmin(
     try {
       const body = (await request.json()) as { seed_apps?: string[] }
       if (Array.isArray(body.seed_apps)) {
-        seedIds = body.seed_apps.filter(
-          (id): id is string => typeof id === 'string' && isValidAppId(id),
-        )
+        seedIds = body.seed_apps
+          .filter(
+            (id): id is string => typeof id === 'string' && isValidAppId(id),
+          )
+          .slice(0, 200)
       }
     } catch {
       // empty body ok
@@ -60,6 +64,15 @@ export async function handleAdmin(
   }
 
   return jsonError(404, 'not found', 'not_found')
+}
+
+function timingSafeEqualString(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let out = 0
+  for (let i = 0; i < a.length; i++) {
+    out |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  }
+  return out === 0
 }
 
 function json(status: number, body: unknown): Response {

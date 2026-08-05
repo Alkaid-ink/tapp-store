@@ -97,7 +97,7 @@ async function route(request: Request, env: Env): Promise<Response> {
         require_hmac: parseBool(env.REQUIRE_HMAC, false),
         allow_anonymous_hits: parseBool(env.ALLOW_ANONYMOUS_HITS, false),
         admin_enabled: Boolean(
-          env.ADMIN_TOKEN && env.ADMIN_TOKEN.trim().length >= 8,
+          env.ADMIN_TOKEN && env.ADMIN_TOKEN.trim().length >= 16,
         ),
       }),
       {

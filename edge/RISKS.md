@@ -1,14 +1,26 @@
-# tapp-store-stats — 风险与优化（v1.3.0）
+# tapp-store-stats — 风险与优化（v1.3.1）
 
-## 全部残余项状态
+## 密钥泄露审计
 
-| 原残余 | 状态 | 实现 |
-|--------|------|------|
-| 浏览器匿名 hit 刷榜 | ✅ | `ALLOW_ANONYMOUS_HITS=false`；FE 改走 Myriad `/api/tapps/store/stats-report` |
-| KV 并发丢 +1 | ✅ | 每 app **Durable Object** 串行计数；KV 仅镜像 |
-| 多 edge 限流松 | ✅ | 限流 **始终写 KV**（跨 colo） |
-| HMAC 密钥不同步 | ✅ | 401 只 warn 一次；health 暴露 `hmac_required_for_backend` |
-| 公开 seed 写放大 | ✅ | 已删除；仅 admin |
+| 检查项 | 结果 |
+|--------|------|
+| 真实 HMAC/Admin 值进 Git？ | **否**（`.dev.vars` gitignore） |
+| 示例文件含真密钥？ | **否**（空占位） |
+| 聊天/历史中曾打印过密钥？ | **是（本会话）→ 必须轮换** |
+| KV namespace id 公开？ | 可接受（非凭据） |
+
+轮换：`cd edge && ./scripts/setup-secrets.sh` → deploy → 更新 Myriad `TAPP_STORE_STATS_HMAC`。
+
+## 全部状态
+
+| 项 | 状态 | 实现 |
+|----|------|------|
+| 浏览器匿名 hit | ✅ | `ALLOW_ANONYMOUS_HITS=false` |
+| FE 刷数 | ✅ | 经后端 + CSRF + 日级用户幂等键 |
+| KV 并发丢 +1 | ✅ | AppCounter DO |
+| 跨 edge 限流 | ✅ | 始终 KV |
+| HMAC 不同步 | ✅ | warn 一次，不打密钥 |
+| Admin 时序比较 | ✅ | timing-safe；token ≥16 |
 | 读路径写 KV | ✅ | 纯读 |
 
 ## 生产默认

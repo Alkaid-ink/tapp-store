@@ -1,12 +1,12 @@
-/** Optional HMAC verification for trusted backend hits. */
+/** HMAC verification for trusted backend hits. */
 
 import type { Env, HitRequestBody } from './types.ts'
 
 /**
  * When `INGEST_HMAC_SECRET` is set:
- * - `client=myriad-backend` MUST send header `X-Stats-Signature: sha256=<hex>`
- *   over canonical string: `${app_id}\n${event}\n${idempotency_key}\n${version||''}`
- * - browser / other clients remain anonymous (no signature required).
+ * - `client=myriad-backend` MUST send `X-Stats-Signature: sha256=<hex>`
+ *   over: `${app_id}\n${event}\n${idempotency_key}\n${version||''}`
+ * - Other clients are rejected by hit.ts when ALLOW_ANONYMOUS_HITS=false.
  */
 export async function verifyHitAuth(
   request: Request,
@@ -18,7 +18,7 @@ export async function verifyHitAuth(
 
   const client = (body.client || 'other').toString()
   if (client !== 'myriad-backend') {
-    // Anonymous path still allowed for browser fallback; rate limit + allowlist apply.
+    // Anonymous path: no HMAC (and usually blocked by ALLOW_ANONYMOUS_HITS).
     return { ok: true }
   }
 
