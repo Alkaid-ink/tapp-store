@@ -1,12 +1,14 @@
-/** HMAC verification for trusted backend hits. */
+/** Optional HMAC — only when REQUIRE_HMAC or a signature is presented. */
 
 import type { Env, HitRequestBody } from './types.ts'
+import { parseBool } from './validate.ts'
 
 /**
- * When `INGEST_HMAC_SECRET` is set:
- * - `client=myriad-backend` MUST send `X-Stats-Signature: sha256=<hex>`
- *   over: `${app_id}\n${event}\n${idempotency_key}\n${version||''}`
- * - Other clients are rejected by hit.ts when ALLOW_ANONYMOUS_HITS=false.
+ * Default (REQUIRE_HMAC=false): no secret needed; open to Myriad backends with
+ * instance-day idempotency + allowlist + rate limit.
+ *
+ * If INGEST_HMAC_SECRET is set AND (REQUIRE_HMAC or client sent a signature),
+ * verify signature for client=myriad-backend.
  */
 export async function verifyHitAuth(
   request: Request,
@@ -14,16 +16,31 @@ export async function verifyHitAuth(
   body: HitRequestBody,
 ): Promise<{ ok: true } | { ok: false; error: string; code: string }> {
   const secret = env.INGEST_HMAC_SECRET?.trim()
-  if (!secret) return { ok: true }
-
+  const requireHmac = parseBool(env.REQUIRE_HMAC, false)
+  const sigHeader = (request.headers.get('X-Stats-Signature') || '').trim()
   const client = (body.client || 'other').toString()
-  if (client !== 'myriad-backend') {
-    // Anonymous path: no HMAC (and usually blocked by ALLOW_ANONYMOUS_HITS).
+
+  if (!secret) {
+    if (requireHmac) {
+      return {
+        ok: false,
+        error: 'REQUIRE_HMAC set but INGEST_HMAC_SECRET missing',
+        code: 'hmac_not_configured',
+      }
+    }
     return { ok: true }
   }
 
-  const sigHeader = request.headers.get('X-Stats-Signature') || ''
-  const match = /^sha256=([a-f0-9]{64})$/i.exec(sigHeader.trim())
+  // Secret configured but not required: only verify if client sent a signature.
+  if (!requireHmac && !sigHeader) {
+    return { ok: true }
+  }
+
+  if (client !== 'myriad-backend') {
+    return { ok: true }
+  }
+
+  const match = /^sha256=([a-f0-9]{64})$/i.exec(sigHeader)
   if (!match) {
     return {
       ok: false,

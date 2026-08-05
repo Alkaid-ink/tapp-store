@@ -1,7 +1,10 @@
-/** POST /v1/hit handler. */
+/** POST /v1/hit — no shared secret required by default.
+ *  Cap: 1 count per instance / app / event / UTC day when instance_hash is sent.
+ */
 
 import { isAppAllowed } from './catalog.ts'
 import { verifyHitAuth } from './hmac.ts'
+import { instanceDayIdempotencyKey } from './instance.ts'
 import { checkRateLimit, clientIp, incrementIfNew } from './kv.ts'
 import type { Env, ErrorBody, HitResponse } from './types.ts'
 import { parseBool, parsePositiveInt, validateHitBody } from './validate.ts'
@@ -31,8 +34,17 @@ export async function handleHit(
   if (client !== 'myriad-backend' && !allowAnonymous) {
     return jsonError(
       403,
-      'anonymous hits disabled — report via Myriad backend /api/tapps/store/stats-report',
+      'browser cannot write stats directly — use Myriad install path',
       'anonymous_hits_disabled',
+    )
+  }
+
+  // Backend hits should identify the Myriad instance for day-cap.
+  if (client === 'myriad-backend' && !validated.body.instance_hash) {
+    return jsonError(
+      400,
+      'instance_hash required for myriad-backend (1 count/instance/app/day)',
+      'missing_instance_hash',
     )
   }
 
@@ -41,20 +53,7 @@ export async function handleHit(
     return jsonError(401, auth.error, auth.code)
   }
 
-  // When HMAC is configured, myriad-backend must sign (verifyHitAuth).
-  // Also require HMAC secret in production-style deploys if REQUIRE_HMAC=true.
-  if (
-    parseBool(env.REQUIRE_HMAC, false) &&
-    !env.INGEST_HMAC_SECRET?.trim()
-  ) {
-    return jsonError(
-      503,
-      'REQUIRE_HMAC set but INGEST_HMAC_SECRET missing',
-      'hmac_not_configured',
-    )
-  }
-
-  const baseLimit = parsePositiveInt(env.HIT_RATE_LIMIT_PER_MIN, 60)
+  const baseLimit = parsePositiveInt(env.HIT_RATE_LIMIT_PER_MIN, 120)
   const browserLimit = parsePositiveInt(
     env.BROWSER_HIT_RATE_LIMIT_PER_MIN,
     Math.min(20, baseLimit),
@@ -74,11 +73,21 @@ export async function handleHit(
     return jsonError(400, 'app_id not in official catalog', 'unknown_app')
   }
 
+  // Enforce: one install (or update) per instance per app per UTC day.
+  let idem = validated.body.idempotency_key
+  if (validated.body.instance_hash) {
+    idem = await instanceDayIdempotencyKey(
+      validated.body.instance_hash,
+      validated.body.app_id,
+      validated.body.event,
+    )
+  }
+
   const { counted, counters } = await incrementIfNew(
     env,
     validated.body.app_id,
     validated.body.event,
-    validated.body.idempotency_key,
+    idem,
   )
 
   const body: HitResponse = {

@@ -15,10 +15,11 @@ crons = ["0 */6 * * *"]
 [vars]
 CATALOG_URL = "https://raw.githubusercontent.com/Myriad-You/tapp-store/main/index.json"
 ALLOW_UNKNOWN_APPS = "false"
-# Production: only Myriad backend (HMAC) may POST /v1/hit
+# Browser cannot write; Myriad backends write without shared secret by default.
 ALLOW_ANONYMOUS_HITS = "false"
-REQUIRE_HMAC = "true"
-HIT_RATE_LIMIT_PER_MIN = "60"
+# Optional hardening: set true + INGEST_HMAC_SECRET only if you need signed hits.
+REQUIRE_HMAC = "false"
+HIT_RATE_LIMIT_PER_MIN = "120"
 BROWSER_HIT_RATE_LIMIT_PER_MIN = "20"
 STATS_MAX_BATCH = "100"
 STATS_TOP_MAX = "100"
