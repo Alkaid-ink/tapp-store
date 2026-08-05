@@ -1,9 +1,8 @@
-/** KV counter / dedupe / rate / top / tracked-app helpers. */
+/** KV helpers: rate limit, top, tracked, counter mirror. Atomic +1 via Durable Object. */
 
 import {
   COUNTER_KEY_PREFIX,
   DEDUPE_KEY_PREFIX,
-  DEDUPE_TTL_SEC,
   META_TOP_INDEX,
   META_TRACKED_APPS,
   RATE_KEY_PREFIX,
@@ -22,9 +21,6 @@ import {
   shouldUpdateTopIndex,
   type TopEntry,
 } from './top.ts'
-
-/** Isolate-local soft rate counters (reduce KV reads on hot path). */
-const memRate = new Map<string, { count: number; bucket: number }>()
 
 export function counterKey(appId: string): string {
   return `${COUNTER_KEY_PREFIX}${appId}`
@@ -62,12 +58,34 @@ function statsKv(env: Env): KVNamespace {
   return env.STATS
 }
 
+/** Fast path: KV mirror (written after every successful DO increment). */
 export async function getCounters(
   env: Env,
   appId: string,
 ): Promise<AppCounters> {
   const raw = await statsKv(env).get(counterKey(appId))
-  return parseCounters(raw)
+  const fromKv = parseCounters(raw)
+  if (fromKv.installs > 0 || fromKv.updates > 0 || raw !== null) {
+    return fromKv
+  }
+  // Cold / pre-DO migration: try Durable Object as source of truth.
+  if (env.APP_COUNTER) {
+    try {
+      const id = env.APP_COUNTER.idFromName(appId)
+      const stub = env.APP_COUNTER.get(id)
+      const res = await stub.fetch('https://do/counters', { method: 'GET' })
+      if (res.ok) {
+        const c = (await res.json()) as AppCounters
+        return {
+          installs: Math.max(0, Math.floor(c.installs || 0)),
+          updates: Math.max(0, Math.floor(c.updates || 0)),
+        }
+      }
+    } catch {
+      // fall through
+    }
+  }
+  return emptyCounters()
 }
 
 export async function getCountersBatch(
@@ -84,8 +102,7 @@ export async function getCountersBatch(
 }
 
 /**
- * Increment counters if idempotency key is new.
- * Dedupe claimed first. Top index written only when it can affect ranking.
+ * Atomic increment via per-app Durable Object, then mirror to KV for batch reads.
  */
 export async function incrementIfNew(
   env: Env,
@@ -93,34 +110,89 @@ export async function incrementIfNew(
   event: 'install' | 'update',
   idempotencyKey: string,
 ): Promise<{ counted: boolean; counters: AppCounters }> {
+  if (!env.APP_COUNTER) {
+    // Fallback pure KV (dev without DO) — same as v1.2 semantics.
+    return incrementKvOnly(env, appId, event, idempotencyKey)
+  }
+
+  // Seed DO from KV mirror so pre-DO history is preserved on first atomic hit.
+  const seedRaw = await statsKv(env).get(counterKey(appId))
+  const seed = parseCounters(seedRaw)
+
+  const id = env.APP_COUNTER.idFromName(appId)
+  const stub = env.APP_COUNTER.get(id)
+  const res = await stub.fetch('https://do/increment', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      event,
+      idempotency_key: idempotencyKey,
+      seed:
+        seed.installs > 0 || seed.updates > 0
+          ? { installs: seed.installs, updates: seed.updates }
+          : undefined,
+    }),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`AppCounter DO failed: ${res.status} ${text}`)
+  }
+  const data = (await res.json()) as {
+    counted: boolean
+    counters: AppCounters
+  }
+  const counters = {
+    installs: Math.max(0, Math.floor(data.counters?.installs || 0)),
+    updates: Math.max(0, Math.floor(data.counters?.updates || 0)),
+  }
+
+  // Mirror for cheap multi-get / top rebuild.
+  await statsKv(env).put(counterKey(appId), JSON.stringify(counters))
+  // Keep KV dedupe in sync for any legacy readers / fallback path.
+  await statsKv(env).put(dedupeKey(idempotencyKey), `${appId}:${event}`, {
+    expirationTtl: 48 * 60 * 60,
+  })
+
+  if (data.counted) {
+    await trackApp(env, appId)
+    if (event === 'install') {
+      await touchTopIndexConditional(env, appId, counters.installs)
+    }
+  }
+
+  return { counted: Boolean(data.counted), counters }
+}
+
+/** Legacy KV path when DO binding is missing. */
+async function incrementKvOnly(
+  env: Env,
+  appId: string,
+  event: 'install' | 'update',
+  idempotencyKey: string,
+): Promise<{ counted: boolean; counters: AppCounters }> {
   const kv = statsKv(env)
   const dKey = dedupeKey(idempotencyKey)
-
   const existing = await kv.get(dKey)
   if (existing !== null) {
     return { counted: false, counters: await getCounters(env, appId) }
   }
-
-  await kv.put(dKey, `${appId}:${event}`, { expirationTtl: DEDUPE_TTL_SEC })
-
+  await kv.put(dKey, `${appId}:${event}`, { expirationTtl: 48 * 60 * 60 })
   const current = await getCounters(env, appId)
   const counters: AppCounters = {
     installs: current.installs + (event === 'install' ? 1 : 0),
     updates: current.updates + (event === 'update' ? 1 : 0),
   }
   await kv.put(counterKey(appId), JSON.stringify(counters))
-
   await trackApp(env, appId)
   if (event === 'install') {
     await touchTopIndexConditional(env, appId, counters.installs)
   }
-
   return { counted: true, counters }
 }
 
 /**
- * Soft rate limit: isolate memory first, KV only when near limit or multi-edge.
- * Returns false when over limit.
+ * Cross-edge rate limit — always uses KV (accurate under multi-colo).
+ * Memory only for instant local reject after local overage.
  */
 export async function checkRateLimit(
   env: Env,
@@ -130,29 +202,6 @@ export async function checkRateLimit(
   if (limitPerMin <= 0) return true
   const minuteBucket = Math.floor(Date.now() / 60_000)
   const ipHash = (await sha256Hex(ip)).slice(0, 16)
-  const memKey = `${ipHash}:${minuteBucket}`
-
-  let local = memRate.get(memKey)
-  if (!local || local.bucket !== minuteBucket) {
-    local = { count: 0, bucket: minuteBucket }
-  }
-  if (local.count >= limitPerMin) return false
-  local.count += 1
-  memRate.set(memKey, local)
-
-  // Prune old buckets occasionally
-  if (memRate.size > 2000) {
-    for (const [k, v] of memRate) {
-      if (v.bucket < minuteBucket - 1) memRate.delete(k)
-    }
-  }
-
-  // Cheap path: under 75% of limit → skip KV entirely (best-effort per edge).
-  if (local.count < Math.ceil(limitPerMin * 0.75)) {
-    return true
-  }
-
-  // Near limit: consult KV for cross-edge aggregation.
   const key = rateKey(ipHash, minuteBucket)
   const kv = statsKv(env)
   const raw = await kv.get(key)
@@ -193,7 +242,6 @@ async function touchTopIndexConditional(
   await kv.put(META_TOP_INDEX, JSON.stringify(merged))
 }
 
-/** Force top update (admin seed / rebuild path). */
 export async function forceTouchTopIndex(
   env: Env,
   appId: string,
@@ -238,7 +286,6 @@ export async function ensureTopIndex(
 ): Promise<TopEntry[]> {
   const top = await readTopIndex(env, limit)
   if (top.length > 0) return top
-  // Rebuild from tracked only — never invent counters on the read path.
   const rebuilt = await rebuildTopIndex(env, TOP_INDEX_CAP)
   return rebuilt.slice(0, limit)
 }

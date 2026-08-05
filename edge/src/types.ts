@@ -7,11 +7,17 @@ export type HitClient = 'myriad-backend' | 'myriad-browser' | 'other'
 export interface Env {
   /** Required for hit/stats; optional until bound. */
   STATS?: KVNamespace
+  /** Per-app atomic counters (Durable Object). */
+  APP_COUNTER?: DurableObjectNamespace
   CATALOG_URL: string
   ALLOW_UNKNOWN_APPS: string
   HIT_RATE_LIMIT_PER_MIN: string
-  /** Anonymous browser/other clients (default 20). Backend uses HIT_RATE_LIMIT_PER_MIN. */
+  /** Anonymous browser/other clients (default 20). Only if ALLOW_ANONYMOUS_HITS. */
   BROWSER_HIT_RATE_LIMIT_PER_MIN: string
+  /** When false (default), only client=myriad-backend is accepted. */
+  ALLOW_ANONYMOUS_HITS: string
+  /** When true, refuse to serve hits if INGEST_HMAC_SECRET is unset. */
+  REQUIRE_HMAC: string
   STATS_MAX_BATCH: string
   STATS_TOP_MAX: string
   CATALOG_IDS_TTL_SEC: string
@@ -19,7 +25,7 @@ export interface Env {
   ADMIN_TOKEN?: string
   /**
    * HMAC secret (secret). When set, `client=myriad-backend` hits must send
-   * `X-Stats-Signature: sha256=<hex>`. Browser clients stay unsigned + tighter rate limit.
+   * `X-Stats-Signature: sha256=<hex>`.
    */
   INGEST_HMAC_SECRET?: string
 }
@@ -68,7 +74,7 @@ export interface ErrorBody {
   code?: string
 }
 
-export const SERVICE_VERSION = '1.2.1'
+export const SERVICE_VERSION = '1.3.0'
 export const COUNTER_KEY_PREFIX = 'c:v1:'
 export const DEDUPE_KEY_PREFIX = 'd:v1:'
 export const RATE_KEY_PREFIX = 'rl:v1:'

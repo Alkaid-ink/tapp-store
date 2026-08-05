@@ -1,15 +1,12 @@
 /**
- * tapp-store-stats — Cloudflare Worker v1.2
+ * tapp-store-stats — Cloudflare Worker v1.3
  *
  * Routes:
  *   GET  /health
- *   GET  /v1/stats?apps=a,b | ?app=id | ?top=N[&seed=app_id][&omit_zero=1]
- *   POST /v1/hit
- *   POST /v1/admin/rebuild-top   (Bearer ADMIN_TOKEN)
- *   POST /v1/admin/refresh-catalog
+ *   GET  /v1/stats?apps=a,b | ?app=id | ?top=N
+ *   POST /v1/hit          (myriad-backend + HMAC by default)
+ *   POST /v1/admin/*      (Bearer ADMIN_TOKEN)
  *   OPTIONS *
- *
- * Resource rules: stats reads never write KV (except explicit ?seed= on empty top).
  */
 
 import { handleAdmin } from './admin.ts'
@@ -19,6 +16,9 @@ import { handleHit } from './hit.ts'
 import { kvPing, trackedCount } from './kv.ts'
 import { handleStats } from './stats.ts'
 import { SERVICE_VERSION, type Env, type ErrorBody } from './types.ts'
+import { parseBool } from './validate.ts'
+
+export { AppCounter } from './app-counter.ts'
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -41,7 +41,6 @@ export default {
     }
   },
 
-  /** Refresh official catalog allowlist every 6 hours. */
   async scheduled(
     _controller: ScheduledController,
     env: Env,
@@ -57,8 +56,7 @@ function requireStats(env: Env): Response | null {
   if (env.STATS) return null
   const body: ErrorBody = {
     ok: false,
-    error:
-      'STATS KV binding missing — add binding STATS in CF Worker settings (or wrangler.toml [[kv_namespaces]])',
+    error: 'STATS KV binding missing',
     code: 'kv_not_configured',
   }
   return new Response(JSON.stringify(body), {
@@ -92,10 +90,12 @@ async function route(request: Request, env: Env): Promise<Response> {
         service: 'tapp-store-stats',
         version: SERVICE_VERSION,
         kv,
+        durable_objects: Boolean(env.APP_COUNTER),
         tracked_apps: tracked,
         catalog_size: catalog,
-        // Feature flags only — never echo secret values.
         hmac_required_for_backend: Boolean(env.INGEST_HMAC_SECRET?.trim()),
+        require_hmac: parseBool(env.REQUIRE_HMAC, false),
+        allow_anonymous_hits: parseBool(env.ALLOW_ANONYMOUS_HITS, false),
         admin_enabled: Boolean(
           env.ADMIN_TOKEN && env.ADMIN_TOKEN.trim().length >= 8,
         ),

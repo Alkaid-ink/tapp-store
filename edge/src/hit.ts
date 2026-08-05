@@ -26,18 +26,39 @@ export async function handleHit(
     return jsonError(400, validated.error, validated.code)
   }
 
+  const client = (validated.body.client || 'other').toString()
+  const allowAnonymous = parseBool(env.ALLOW_ANONYMOUS_HITS, false)
+  if (client !== 'myriad-backend' && !allowAnonymous) {
+    return jsonError(
+      403,
+      'anonymous hits disabled — report via Myriad backend /api/tapps/store/stats-report',
+      'anonymous_hits_disabled',
+    )
+  }
+
   const auth = await verifyHitAuth(request, env, validated.body)
   if (!auth.ok) {
     return jsonError(401, auth.error, auth.code)
   }
 
-  // Stricter limit for anonymous browser / other clients (HMAC backends use full limit).
+  // When HMAC is configured, myriad-backend must sign (verifyHitAuth).
+  // Also require HMAC secret in production-style deploys if REQUIRE_HMAC=true.
+  if (
+    parseBool(env.REQUIRE_HMAC, false) &&
+    !env.INGEST_HMAC_SECRET?.trim()
+  ) {
+    return jsonError(
+      503,
+      'REQUIRE_HMAC set but INGEST_HMAC_SECRET missing',
+      'hmac_not_configured',
+    )
+  }
+
   const baseLimit = parsePositiveInt(env.HIT_RATE_LIMIT_PER_MIN, 60)
   const browserLimit = parsePositiveInt(
     env.BROWSER_HIT_RATE_LIMIT_PER_MIN,
     Math.min(20, baseLimit),
   )
-  const client = (validated.body.client || 'other').toString()
   const limit =
     client === 'myriad-backend' ? baseLimit : Math.min(baseLimit, browserLimit)
 

@@ -8,7 +8,7 @@
 | 存储 | Workers KV（计数 + 去重 + 限流 + catalog 白名单 + top 索引） |
 | 正式域名 | **`https://stats.store.myriad.you`** |
 | 备用 | `https://tapp-store-stats.<account>.workers.dev` |
-| 协议版本 | **1.2.0**（`/health` 的 `version` 字段） |
+| 协议版本 | **1.3.0**（Durable Object 原子计数 + 禁止匿名 hit） |
 
 ## API
 

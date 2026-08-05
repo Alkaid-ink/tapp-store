@@ -1,48 +1,41 @@
 # Cloudflare Workers — Tapp store install stats
 # Deploy: npm i && npx wrangler login && npm run deploy
-# Local:  npm run dev
-#
-# First-time KV:
-#   npx wrangler kv namespace create tapp-store-stats
-#   npx wrangler kv namespace create tapp-store-stats --preview
-# Then paste the ids below into [[kv_namespaces]].
+# Secrets: ./scripts/setup-secrets.sh
 
 name = "tapp-store-stats"
 main = "src/index.ts"
 compatibility_date = "2025-08-01"
 workers_dev = true
 
-# Custom domain is attached in CF dashboard (stats.store.myriad.you).
-# workers.dev remains available as a fallback URL.
+# Custom domain: stats.store.myriad.you (CF dashboard)
 
-# Refresh official catalog allowlist periodically (in-memory + KV).
 [triggers]
 crons = ["0 */6 * * *"]
 
 [vars]
-# Official catalog used to refresh the app_id allowlist.
 CATALOG_URL = "https://raw.githubusercontent.com/Myriad-You/tapp-store/main/index.json"
-# When false, unknown app_id hits are rejected (recommended in production).
 ALLOW_UNKNOWN_APPS = "false"
-# Soft rate limit: hits per IP per minute (trusted backend client).
+# Production: only Myriad backend (HMAC) may POST /v1/hit
+ALLOW_ANONYMOUS_HITS = "false"
+REQUIRE_HMAC = "true"
 HIT_RATE_LIMIT_PER_MIN = "60"
-# Anonymous browser / other clients (stricter anti-spam).
 BROWSER_HIT_RATE_LIMIT_PER_MIN = "20"
-# Max app ids accepted by GET /v1/stats?apps=
 STATS_MAX_BATCH = "100"
-# Max apps returned by GET /v1/stats?top=
 STATS_TOP_MAX = "100"
-# How long (seconds) to cache the catalog allowlist in KV / isolate memory.
 CATALOG_IDS_TTL_SEC = "600"
-# Secrets (do NOT put real values in git — use CF secrets or .dev.vars):
+# Secrets (never commit):
 #   npx wrangler secret put INGEST_HMAC_SECRET
 #   npx wrangler secret put ADMIN_TOKEN
-# Or: ./scripts/setup-secrets.sh
 
-# KV binding "STATS" (required for /v1/hit and /v1/stats).
 [[kv_namespaces]]
 binding = "STATS"
 id = "61b671eb8a2e446a91309f197ff60858"
-# Optional: separate preview namespace for `wrangler dev --remote` / CF preview.
-# preview_id = "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
 
+# Atomic per-app counters
+[[durable_objects.bindings]]
+name = "APP_COUNTER"
+class_name = "AppCounter"
+
+[[migrations]]
+tag = "v1_app_counter"
+new_classes = ["AppCounter"]
