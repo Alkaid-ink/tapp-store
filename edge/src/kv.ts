@@ -13,7 +13,6 @@ import {
   type Env,
 } from './types.ts'
 import {
-  addTrackedApp,
   mergeTopEntry,
   parseTopList,
   parseTrackedApps,
@@ -21,6 +20,11 @@ import {
   shouldUpdateTopIndex,
   type TopEntry,
 } from './top.ts'
+
+const MIRROR_PUT_RETRIES = 3
+/** Skip expensive rebuild storms when top is empty. */
+let emptyTopUntil = 0
+const EMPTY_TOP_COOLDOWN_MS = 60_000
 
 export function counterKey(appId: string): string {
   return `${COUNTER_KEY_PREFIX}${appId}`
@@ -58,17 +62,31 @@ function statsKv(env: Env): KVNamespace {
   return env.STATS
 }
 
-/** Fast path: KV mirror (written after every successful DO increment). */
+async function putWithRetry(
+  kv: KVNamespace,
+  key: string,
+  value: string,
+  options?: KVNamespacePutOptions,
+): Promise<void> {
+  let lastErr: unknown
+  for (let i = 0; i < MIRROR_PUT_RETRIES; i++) {
+    try {
+      await kv.put(key, value, options)
+      return
+    } catch (e) {
+      lastErr = e
+    }
+  }
+  throw lastErr instanceof Error
+    ? lastErr
+    : new Error(`KV put failed for ${key}`)
+}
+
+/** Prefer DO when bound (source of truth); fall back to KV mirror. */
 export async function getCounters(
   env: Env,
   appId: string,
 ): Promise<AppCounters> {
-  const raw = await statsKv(env).get(counterKey(appId))
-  const fromKv = parseCounters(raw)
-  if (fromKv.installs > 0 || fromKv.updates > 0 || raw !== null) {
-    return fromKv
-  }
-  // Cold / pre-DO migration: try Durable Object as source of truth.
   if (env.APP_COUNTER) {
     try {
       const id = env.APP_COUNTER.idFromName(appId)
@@ -76,16 +94,33 @@ export async function getCounters(
       const res = await stub.fetch('https://do/counters', { method: 'GET' })
       if (res.ok) {
         const c = (await res.json()) as AppCounters
-        return {
+        const fromDo = {
           installs: Math.max(0, Math.floor(c.installs || 0)),
           updates: Math.max(0, Math.floor(c.updates || 0)),
         }
+        // Heal stale/missing mirror when DO has data.
+        if (fromDo.installs > 0 || fromDo.updates > 0) {
+          void putWithRetry(
+            statsKv(env),
+            counterKey(appId),
+            JSON.stringify(fromDo),
+          ).catch(() => {})
+        }
+        // If DO is empty, still check KV seed history (pre-DO era without seed yet).
+        if (fromDo.installs === 0 && fromDo.updates === 0) {
+          const raw = await statsKv(env).get(counterKey(appId))
+          const fromKv = parseCounters(raw)
+          if (fromKv.installs > 0 || fromKv.updates > 0) return fromKv
+        }
+        return fromDo
       }
     } catch {
-      // fall through
+      // fall through to KV
     }
   }
-  return emptyCounters()
+
+  const raw = await statsKv(env).get(counterKey(appId))
+  return parseCounters(raw)
 }
 
 export async function getCountersBatch(
@@ -93,8 +128,14 @@ export async function getCountersBatch(
   appIds: string[],
 ): Promise<Record<string, AppCounters>> {
   const out: Record<string, AppCounters> = {}
+  // Prefer KV mirror for batch (cheap). Heal from DO only when KV empty.
   await Promise.all(
     appIds.map(async (id) => {
+      const raw = await statsKv(env).get(counterKey(id))
+      if (raw !== null) {
+        out[id] = parseCounters(raw)
+        return
+      }
       out[id] = await getCounters(env, id)
     }),
   )
@@ -102,7 +143,7 @@ export async function getCountersBatch(
 }
 
 /**
- * Atomic increment via per-app Durable Object, then mirror to KV for batch reads.
+ * Atomic increment via per-app Durable Object, then mirror to KV (with retry).
  */
 export async function incrementIfNew(
   env: Env,
@@ -111,11 +152,9 @@ export async function incrementIfNew(
   idempotencyKey: string,
 ): Promise<{ counted: boolean; counters: AppCounters }> {
   if (!env.APP_COUNTER) {
-    // Fallback pure KV (dev without DO) — same as v1.2 semantics.
     return incrementKvOnly(env, appId, event, idempotencyKey)
   }
 
-  // Seed DO from KV mirror so pre-DO history is preserved on first atomic hit.
   const seedRaw = await statsKv(env).get(counterKey(appId))
   const seed = parseCounters(seedRaw)
 
@@ -146,24 +185,28 @@ export async function incrementIfNew(
     updates: Math.max(0, Math.floor(data.counters?.updates || 0)),
   }
 
-  // Mirror for cheap multi-get / top rebuild.
-  await statsKv(env).put(counterKey(appId), JSON.stringify(counters))
-  // Keep KV dedupe in sync for any legacy readers / fallback path.
-  await statsKv(env).put(dedupeKey(idempotencyKey), `${appId}:${event}`, {
-    expirationTtl: 48 * 60 * 60,
-  })
+  // Mirror must succeed for read accuracy — retry; log-worthy if still fails.
+  const kv = statsKv(env)
+  try {
+    await putWithRetry(kv, counterKey(appId), JSON.stringify(counters))
+    await putWithRetry(kv, dedupeKey(idempotencyKey), `${appId}:${event}`, {
+      expirationTtl: 48 * 60 * 60,
+    })
+  } catch {
+    // DO already committed; next getCounters prefers DO and will re-heal mirror.
+  }
 
   if (data.counted) {
     await trackApp(env, appId)
     if (event === 'install') {
       await touchTopIndexConditional(env, appId, counters.installs)
+      emptyTopUntil = 0 // top may have data now
     }
   }
 
   return { counted: Boolean(data.counted), counters }
 }
 
-/** Legacy KV path when DO binding is missing. */
 async function incrementKvOnly(
   env: Env,
   appId: string,
@@ -176,24 +219,23 @@ async function incrementKvOnly(
   if (existing !== null) {
     return { counted: false, counters: await getCounters(env, appId) }
   }
-  await kv.put(dKey, `${appId}:${event}`, { expirationTtl: 48 * 60 * 60 })
-  const current = await getCounters(env, appId)
+  await putWithRetry(kv, dKey, `${appId}:${event}`, {
+    expirationTtl: 48 * 60 * 60,
+  })
+  const current = parseCounters(await kv.get(counterKey(appId)))
   const counters: AppCounters = {
     installs: current.installs + (event === 'install' ? 1 : 0),
     updates: current.updates + (event === 'update' ? 1 : 0),
   }
-  await kv.put(counterKey(appId), JSON.stringify(counters))
+  await putWithRetry(kv, counterKey(appId), JSON.stringify(counters))
   await trackApp(env, appId)
   if (event === 'install') {
     await touchTopIndexConditional(env, appId, counters.installs)
+    emptyTopUntil = 0
   }
   return { counted: true, counters }
 }
 
-/**
- * Cross-edge rate limit — always uses KV (accurate under multi-colo).
- * Memory only for instant local reject after local overage.
- */
 export async function checkRateLimit(
   env: Env,
   ip: string,
@@ -223,9 +265,15 @@ async function trackApp(env: Env, appId: string): Promise<void> {
   const kv = statsKv(env)
   const raw = await kv.get(META_TRACKED_APPS)
   const existing = parseTrackedApps(raw)
-  if (existing.includes(appId)) return
-  const next = addTrackedApp(existing, appId, TRACKED_APPS_CAP)
-  await kv.put(META_TRACKED_APPS, JSON.stringify(next))
+  // O(1) membership via Set
+  const set = new Set(existing)
+  if (set.has(appId)) return
+  set.add(appId)
+  let next = [...set]
+  if (next.length > TRACKED_APPS_CAP) {
+    next = next.slice(next.length - TRACKED_APPS_CAP)
+  }
+  await putWithRetry(kv, META_TRACKED_APPS, JSON.stringify(next))
 }
 
 async function touchTopIndexConditional(
@@ -239,7 +287,7 @@ async function touchTopIndexConditional(
     return
   }
   const merged = mergeTopEntry(list, appId, installs, TOP_INDEX_CAP)
-  await kv.put(META_TOP_INDEX, JSON.stringify(merged))
+  await putWithRetry(kv, META_TOP_INDEX, JSON.stringify(merged))
 }
 
 export async function forceTouchTopIndex(
@@ -250,7 +298,8 @@ export async function forceTouchTopIndex(
   const kv = statsKv(env)
   const list = parseTopList(await kv.get(META_TOP_INDEX))
   const merged = mergeTopEntry(list, appId, installs, TOP_INDEX_CAP)
-  await kv.put(META_TOP_INDEX, JSON.stringify(merged))
+  await putWithRetry(kv, META_TOP_INDEX, JSON.stringify(merged))
+  emptyTopUntil = 0
 }
 
 export async function readTopIndex(
@@ -276,7 +325,8 @@ export async function rebuildTopIndex(
     installs: live[id]?.installs ?? 0,
   }))
   const top = rebuildTopFromCounters(pairs, cap)
-  await kv.put(META_TOP_INDEX, JSON.stringify(top))
+  await putWithRetry(kv, META_TOP_INDEX, JSON.stringify(top))
+  emptyTopUntil = top.length === 0 ? Date.now() + EMPTY_TOP_COOLDOWN_MS : 0
   return top
 }
 
@@ -286,6 +336,8 @@ export async function ensureTopIndex(
 ): Promise<TopEntry[]> {
   const top = await readTopIndex(env, limit)
   if (top.length > 0) return top
+  // Avoid rebuild storms when catalog has no installs yet.
+  if (Date.now() < emptyTopUntil) return []
   const rebuilt = await rebuildTopIndex(env, TOP_INDEX_CAP)
   return rebuilt.slice(0, limit)
 }

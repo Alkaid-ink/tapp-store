@@ -74,7 +74,7 @@ export interface ErrorBody {
   code?: string
 }
 
-export const SERVICE_VERSION = '1.3.1'
+export const SERVICE_VERSION = '1.3.2'
 export const COUNTER_KEY_PREFIX = 'c:v1:'
 export const DEDUPE_KEY_PREFIX = 'd:v1:'
 export const RATE_KEY_PREFIX = 'rl:v1:'

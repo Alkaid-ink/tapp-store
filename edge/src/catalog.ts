@@ -87,7 +87,7 @@ export async function refreshCatalogIds(
     const res = await fetch(url, {
       headers: {
         Accept: 'application/json',
-        'User-Agent': 'tapp-store-stats/1.2',
+        'User-Agent': 'tapp-store-stats/1.3.2',
       },
       cf: { cacheTtl: 300, cacheEverything: true },
     } as RequestInit)

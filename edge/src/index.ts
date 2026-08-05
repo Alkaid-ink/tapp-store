@@ -1,5 +1,5 @@
 /**
- * tapp-store-stats — Cloudflare Worker v1.3
+ * tapp-store-stats — Cloudflare Worker v1.3.2
  *
  * Routes:
  *   GET  /health
