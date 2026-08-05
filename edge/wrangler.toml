@@ -31,21 +31,9 @@ STATS_TOP_MAX = "100"
 CATALOG_IDS_TTL_SEC = "600"
 
 # KV binding "STATS" (required for /v1/hit and /v1/stats).
-#
-# Recommended for first CF Git deploy:
-#   1. Deploy without this block (so build succeeds).
-#   2. In CF dashboard → Worker → Settings → Bindings → Add KV namespace
-#      Variable name: STATS  → Create namespace "tapp-store-stats"
-#   3. Or create via CLI and paste ids below, then redeploy:
-#        npx wrangler kv namespace create tapp-store-stats
-#        npx wrangler kv namespace create tapp-store-stats --preview
-#
-# [[kv_namespaces]]
-# binding = "STATS"
-# id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+[[kv_namespaces]]
+binding = "STATS"
+id = "61b671eb8a2e446a91309f197ff60858"
+# Optional: separate preview namespace for `wrangler dev --remote` / CF preview.
 # preview_id = "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
-#
-# Local: `wrangler dev` can use `--persist` / remote bindings once STATS exists.
-# Uncomment the block above after you have real namespace ids if you prefer
-# wrangler.toml as source of truth (recommended once ids are known).
 
