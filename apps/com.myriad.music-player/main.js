@@ -1597,12 +1597,48 @@ function demoteActiveLyricLineForInterlude() {
   }
 }
 
+/** 间奏三点的四态。只由播放位置决定，所以 seek 回退能自然退回前一态 */
+var DOTS_STAGE_IDLE = 0;   // 未到：隐身占位
+var DOTS_STAGE_ON = 1;     // 间奏中
+var DOTS_STAGE_OUT = 2;    // 收尾中（鼓起→被重力吸走）
+var DOTS_STAGE_SPENT = 3;  // 已收尾：永久退出，不回常驻态
+
+function interludeStage(it, posSec, animate) {
+  if (posSec < it.start) return DOTS_STAGE_IDLE;
+  // end-0.4 之后一律 spent 且不设上界：旧实现只把收尾态留到 end+2.5，
+  // 过了这个窗口三点会弹回常驻暗态——看着就是「消失完又冒出来」
+  if (posSec >= it.end - 0.4) return DOTS_STAGE_SPENT;
+  if (animate && posSec >= it.end - 0.4 - LYRIC_DOTS_OUTRO) return DOTS_STAGE_OUT;
+  return DOTS_STAGE_ON;
+}
+
+/** 把三点当前呼吸相位的实测 scale 交给 dotOutro 的 0%，让收尾从原地起跑 */
+function captureDotScales(el) {
+  var ds = el.children;
+  for (var i = 0; i < ds.length; i++) {
+    var s = 1;
+    try {
+      var tr = getComputedStyle(ds[i]).transform;
+      var m = tr && tr !== 'none' ? tr.match(/matrix\(\s*([-\d.eE]+)/) : null;
+      if (m) s = parseFloat(m[1]);
+    } catch (e) {}
+    if (!isFinite(s) || s <= 0) s = 1;
+    ds[i].style.setProperty('--dot-s0', s.toFixed(3));
+  }
+}
+
+function clearDotsLit(el) {
+  var ds = el.children;
+  for (var i = 0; i < ds.length; i++) ds[i].classList.remove('on');
+}
+
 // 间奏呼吸点更新（由 eqTick 15fps 驱动）：进度点亮 + 焦点跟随
 function updateInterludeDots() {
   if (!lyricFx.measured) return;
   var dots = lyricFx.dotsItems;
   if (!dots || dots.length === 0) return; // 无间奏的歌零开销
   var posSec = getLyricPosition();
+  var animate = shouldAnimate();
   for (var d0 = 0; d0 < dots.length; d0++) {
     var it = dots[d0];
     // 防御：循环体内的 renderLyrics/demote 可能重建歌词结构，条目失效则跳过
@@ -1611,22 +1647,28 @@ function updateInterludeDots() {
       continue;
     }
     var k = it._k;
-    var inGap = posSec >= it.start && posSec < it.end - 0.4;
+    var stage = interludeStage(it, posSec, animate);
+    var inGap = stage === DOTS_STAGE_ON || stage === DOTS_STAGE_OUT;
+    var cl = it.el.classList;
 
-    // 收尾动效：间奏末尾三点先鼓一下，再被「重力」吸走塌陷消失。
-    // ⚠️ 不能在 inGap 转 false 时就摘掉 .finishing——塌陷才跑到一半，
-    // 点会当场弹回常驻态。一直留到明显离开本段（或 seek 回来）再撤。
-    var wantFin = shouldAnimate() &&
-      posSec >= it.start &&
-      posSec >= it.end - 0.4 - LYRIC_DOTS_OUTRO &&
-      posSec < it.end + 2.5;
-    if (wantFin !== !!it._fin) {
-      it._fin = wantFin;
-      it.el.classList.toggle('finishing', wantFin);
+    // 收尾动效：间奏末尾三点先鼓一下，再被「重力」吸走塌陷消失
+    var wantFin = stage === DOTS_STAGE_OUT;
+    if (wantFin !== cl.contains('finishing')) {
+      // 起跑前先抓住当前呼吸相位，dotOutro 才能从原地鼓起而不是先缩回 1
+      if (wantFin) captureDotScales(it.el);
+      cl.toggle('finishing', wantFin);
     }
 
-    if (inGap !== it.el.classList.contains('active')) {
-      it.el.classList.toggle('active', inGap);
+    // 永久退出：塌陷跑完就定格，之后无论播多久都不再现身（seek 回退才复活）
+    var wantSpent = stage === DOTS_STAGE_SPENT;
+    if (wantSpent !== cl.contains('spent')) {
+      cl.toggle('spent', wantSpent);
+      if (wantSpent) clearDotsLit(it.el);
+    }
+
+    if (inGap !== cl.contains('active')) {
+      cl.toggle('active', inGap);
+      if (!inGap) clearDotsLit(it.el);
       if (inGap) {
         demoteActiveLyricLineForInterlude();
       } else if (posSec >= it.end - 0.45) {
