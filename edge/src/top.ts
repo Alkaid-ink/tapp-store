@@ -23,6 +23,26 @@ export function mergeTopEntry(
   return filtered.slice(0, Math.max(1, cap))
 }
 
+/**
+ * Whether a top-index write is worth the KV cost.
+ * - Always write if app is already on the board (rank may change).
+ * - Always write if board has free slots.
+ * - Otherwise only if installs beats the current tail.
+ */
+export function shouldUpdateTopIndex(
+  list: TopEntry[],
+  appId: string,
+  installs: number,
+  cap: number,
+): boolean {
+  if (installs <= 0) return false
+  if (list.some((e) => e.id === appId)) return true
+  if (list.length < cap) return true
+  const tail = list[list.length - 1]
+  if (!tail) return true
+  return installs > tail.installs
+}
+
 export function parseTopList(raw: string | null): TopEntry[] {
   if (!raw) return []
   try {
@@ -61,7 +81,6 @@ export function addTrackedApp(
   if (existing.includes(appId)) return existing
   const next = [...existing, appId]
   if (next.length <= cap) return next
-  // Prefer keeping head; rare overflow at 50k.
   return next.slice(next.length - cap)
 }
 

@@ -15,6 +15,11 @@ export interface Env {
   CATALOG_IDS_TTL_SEC: string
   /** Optional bearer for admin repair endpoints. Empty = disabled. */
   ADMIN_TOKEN?: string
+  /**
+   * Optional HMAC secret. When set, `client=myriad-backend` hits must send
+   * `X-Stats-Signature: sha256=<hex>`. Browser clients stay unsigned.
+   */
+  INGEST_HMAC_SECRET?: string
 }
 
 export interface AppCounters {
@@ -61,7 +66,7 @@ export interface ErrorBody {
   code?: string
 }
 
-export const SERVICE_VERSION = '1.1.0'
+export const SERVICE_VERSION = '1.2.0'
 export const COUNTER_KEY_PREFIX = 'c:v1:'
 export const DEDUPE_KEY_PREFIX = 'd:v1:'
 export const RATE_KEY_PREFIX = 'rl:v1:'

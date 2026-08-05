@@ -1,4 +1,4 @@
-/** Official catalog allowlist — memory + KV cache for ~10k app ids. */
+/** Official catalog allowlist — memory + KV; fail-closed after first success. */
 
 import {
   META_CATALOG_IDS,
@@ -11,9 +11,10 @@ interface MemoryCache {
   ids: Set<string>
   loadedAt: number
   ttlMs: number
+  /** True once we have ever successfully loaded a non-empty catalog. */
+  authoritative: boolean
 }
 
-/** Per-isolate memory cache — avoids KV/GitHub on every hit. */
 let memory: MemoryCache | null = null
 
 export function clearCatalogMemoryCache(): void {
@@ -27,14 +28,14 @@ export async function isAppAllowed(
 ): Promise<boolean> {
   if (allowUnknown) return true
   const ids = await getCatalogIds(env)
-  // Never successfully cached: fail open so catalog outage does not block installs.
-  if (ids === null) return true
+  // Never successfully loaded: fail open (catalog outage must not brick installs).
+  if (ids === null) {
+    if (memory?.authoritative) return false
+    return true
+  }
   return ids.has(appId)
 }
 
-/**
- * Returns Set of allowed app ids, or null if no list is available yet.
- */
 export async function getCatalogIds(env: Env): Promise<Set<string> | null> {
   const ttlSec = parsePositiveInt(env.CATALOG_IDS_TTL_SEC, 600)
   const ttlMs = ttlSec * 1000
@@ -53,19 +54,25 @@ export async function getCatalogIds(env: Env): Promise<Set<string> | null> {
 
   if (cached && ageMs < ttlMs) {
     const set = parseIdSet(cached)
-    memory = { ids: set, loadedAt: now, ttlMs }
+    memory = {
+      ids: set,
+      loadedAt: now,
+      ttlMs,
+      authoritative: set.size > 0 || Boolean(memory?.authoritative),
+    }
     return set
   }
 
   const fresh = await refreshCatalogIds(env)
-  if (fresh) {
-    memory = { ids: fresh, loadedAt: now, ttlMs }
-    return fresh
-  }
+  if (fresh) return fresh
   if (cached) {
     const set = parseIdSet(cached)
-    // Stale but usable
-    memory = { ids: set, loadedAt: now, ttlMs: Math.min(ttlMs, 60_000) }
+    memory = {
+      ids: set,
+      loadedAt: now,
+      ttlMs: Math.min(ttlMs, 60_000),
+      authoritative: set.size > 0 || Boolean(memory?.authoritative),
+    }
     return set
   }
   return null
@@ -80,7 +87,7 @@ export async function refreshCatalogIds(
     const res = await fetch(url, {
       headers: {
         Accept: 'application/json',
-        'User-Agent': 'tapp-store-stats/1.1',
+        'User-Agent': 'tapp-store-stats/1.2',
       },
       cf: { cacheTtl: 300, cacheEverything: true },
     } as RequestInit)
@@ -95,6 +102,8 @@ export async function refreshCatalogIds(
       }
     }
     if (ids.size > 50_000) return null
+    // Empty catalog is suspicious — do not mark authoritative empty.
+    if (ids.size === 0) return null
     const arr = [...ids]
     await env.STATS.put(META_CATALOG_IDS, JSON.stringify(arr))
     await env.STATS.put(META_CATALOG_TS, String(Date.now()))
@@ -102,6 +111,7 @@ export async function refreshCatalogIds(
       ids,
       loadedAt: Date.now(),
       ttlMs: parsePositiveInt(env.CATALOG_IDS_TTL_SEC, 600) * 1000,
+      authoritative: true,
     }
     return ids
   } catch {

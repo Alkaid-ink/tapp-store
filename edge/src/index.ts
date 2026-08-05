@@ -1,5 +1,5 @@
 /**
- * tapp-store-stats — Cloudflare Worker v1.1
+ * tapp-store-stats — Cloudflare Worker v1.2
  *
  * Routes:
  *   GET  /health
@@ -8,6 +8,8 @@
  *   POST /v1/admin/rebuild-top   (Bearer ADMIN_TOKEN)
  *   POST /v1/admin/refresh-catalog
  *   OPTIONS *
+ *
+ * Resource rules: stats reads never write KV (except explicit ?seed= on empty top).
  */
 
 import { handleAdmin } from './admin.ts'

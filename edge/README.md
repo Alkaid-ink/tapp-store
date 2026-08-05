@@ -8,7 +8,7 @@
 | 存储 | Workers KV（计数 + 去重 + 限流 + catalog 白名单 + top 索引） |
 | 正式域名 | **`https://stats.store.myriad.you`** |
 | 备用 | `https://tapp-store-stats.<account>.workers.dev` |
-| 协议版本 | 1.1（`/health` 的 `version` 字段） |
+| 协议版本 | **1.2.0**（`/health` 的 `version` 字段） |
 
 ## API
 
@@ -99,17 +99,18 @@ curl -X POST https://stats.store.myriad.you/v1/admin/refresh-catalog \
 
 未配置 `ADMIN_TOKEN` 时 admin 路由返回 404。
 
-## 为何能扛 ~1 万应用
+## 为何能扛 ~1 万应用 + v1.2 资源策略
 
 | 路径 | 复杂度 |
 |------|--------|
-| 单次 hit | O(1) KV 读/写（计数键 + 去重键） |
-| stats 批量 | O(batch)，batch ≤ 100，并行 get |
-| stats top | O(top)，单 KV 维护 top 列表，**不** list 全部 key |
-| catalog 白名单 | 整表 JSON 数组缓存在一个 KV value（1 万 id ≈ 数百 KB） |
-| 写回 Git | **不做** — 避免 Catalog Sync 与 commit 风暴 |
+| 单次 hit | dedupe + counter；tracked 仅首次；**top 条件写**（未上榜且低于尾部则跳过） |
+| rate limit | isolate 内存优先；近阈值才写 KV |
+| stats 批量 | **纯读**，batch ≤ 100，**禁止**读路径 seed 写 |
+| stats top | 维护索引 + live 再读；空 top 可用 `?seed=` 或 admin 修复 |
+| catalog | isolate 内存 + KV；加载成功后 **fail-closed** |
+| HMAC | 可选：`INGEST_HMAC_SECRET` 时 `myriad-backend` 必须带签名 |
 
-安装 QPS 是瓶颈，不是「应用个数」。万级 catalog + 中等安装量在 Workers 免费/付费档都足够。
+安装 QPS 是瓶颈，不是「应用个数」。
 
 ## 本地开发
 

@@ -6,6 +6,7 @@ import {
   mergeTopEntry,
   parseTopList,
   rebuildTopFromCounters,
+  shouldUpdateTopIndex,
 } from '../src/top.ts'
 
 describe('mergeTopEntry', () => {
@@ -43,6 +44,19 @@ describe('parseTopList', () => {
     ])
     const list = parseTopList(raw)
     assert.deepEqual(list, [{ id: 'com.a.b', installs: 2 }])
+  })
+})
+
+describe('shouldUpdateTopIndex', () => {
+  it('writes for free slots and board members only when needed', () => {
+    const board = [
+      { id: 'com.a', installs: 10 },
+      { id: 'com.b', installs: 5 },
+    ]
+    assert.equal(shouldUpdateTopIndex(board, 'com.c', 3, 5), true) // free slot
+    assert.equal(shouldUpdateTopIndex(board, 'com.c', 3, 2), false) // below tail
+    assert.equal(shouldUpdateTopIndex(board, 'com.c', 6, 2), true) // beats tail
+    assert.equal(shouldUpdateTopIndex(board, 'com.a', 11, 2), true) // on board
   })
 })
 

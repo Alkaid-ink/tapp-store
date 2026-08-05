@@ -1,6 +1,7 @@
 /** POST /v1/hit handler. */
 
 import { isAppAllowed } from './catalog.ts'
+import { verifyHitAuth } from './hmac.ts'
 import { checkRateLimit, clientIp, incrementIfNew } from './kv.ts'
 import type { Env, ErrorBody, HitResponse } from './types.ts'
 import { parseBool, parsePositiveInt, validateHitBody } from './validate.ts'
@@ -23,6 +24,11 @@ export async function handleHit(
   const validated = validateHitBody(raw)
   if (!validated.ok) {
     return jsonError(400, validated.error, validated.code)
+  }
+
+  const auth = await verifyHitAuth(request, env, validated.body)
+  if (!auth.ok) {
+    return jsonError(401, auth.error, auth.code)
   }
 
   // Rate-limit only after validation so junk bodies do not burn the budget.

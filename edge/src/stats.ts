@@ -1,4 +1,4 @@
-/** GET /v1/stats handler — batch / single / top (10k-safe, no full dump). */
+/** GET /v1/stats — read-only (no KV writes). Repair only via admin or ?seed=. */
 
 import {
   ensureTopIndex,
@@ -6,7 +6,7 @@ import {
   seedTrackedFromApp,
 } from './kv.ts'
 import type { Env, ErrorBody, StatsAppEntry, StatsResponse } from './types.ts'
-import { parseAppIdList, parsePositiveInt } from './validate.ts'
+import { isValidAppId, parseAppIdList, parsePositiveInt } from './validate.ts'
 
 export async function handleStats(
   request: Request,
@@ -21,7 +21,6 @@ export async function handleStats(
   const topMax = parsePositiveInt(env.STATS_TOP_MAX, 100, 200)
   const omitZero = url.searchParams.get('omit_zero') === '1'
 
-  // Leaderboard: maintained top index; auto-heal if empty.
   const topParam = url.searchParams.get('top')
   if (topParam !== null) {
     const n = Math.min(
@@ -30,13 +29,11 @@ export async function handleStats(
     )
     let top = await ensureTopIndex(env, n)
 
-    // One-shot heal for early production hits that never wrote top/tracked.
-    if (top.length === 0) {
-      const seedId = url.searchParams.get('seed')
-      if (seedId) {
-        await seedTrackedFromApp(env, seedId)
-        top = await ensureTopIndex(env, n)
-      }
+    // Explicit one-shot repair only (not on every list read).
+    const seedId = url.searchParams.get('seed')
+    if (top.length === 0 && seedId && isValidAppId(seedId)) {
+      await seedTrackedFromApp(env, seedId)
+      top = await ensureTopIndex(env, n)
     }
 
     const ids = top.map((e) => e.id)
@@ -50,14 +47,12 @@ export async function handleStats(
       apps[id] = entry
       ranked.push({ id, ...entry })
     }
-    // Re-sort by live installs (top index may lag slightly)
     ranked.sort(
       (a, b) => b.installs - a.installs || a.id.localeCompare(b.id),
     )
     return jsonStats(apps, ranked)
   }
 
-  // Explicit app list (UI overlay path).
   const single = url.searchParams.get('app')
   const appsParam = url.searchParams.get('apps')
   if (single || appsParam || url.searchParams.getAll('app').length > 0) {
@@ -65,20 +60,13 @@ export async function handleStats(
     if (!parsed.ok) {
       return jsonError(400, parsed.error, parsed.code)
     }
+    // Pure read — no seed/track writes on the list path.
     const live = await getCountersBatch(env, parsed.ids)
     const apps: Record<string, StatsAppEntry> = {}
-    // Lazy heal: counters written before tracked/top existed get re-indexed.
-    const heal: Promise<unknown>[] = []
     for (const id of parsed.ids) {
       const c = live[id] ?? { installs: 0, updates: 0 }
-      if (c.installs > 0 || c.updates > 0) {
-        heal.push(seedTrackedFromApp(env, id))
-      }
       if (omitZero && c.installs <= 0 && c.updates <= 0) continue
       apps[id] = toEntry(c.installs, c.updates)
-    }
-    if (heal.length > 0) {
-      await Promise.all(heal)
     }
     return jsonStats(apps)
   }
@@ -107,7 +95,7 @@ function jsonStats(
     status: 200,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'public, max-age=30',
+      'Cache-Control': 'public, max-age=60',
     },
   })
 }

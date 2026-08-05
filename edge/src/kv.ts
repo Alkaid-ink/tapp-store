@@ -19,8 +19,12 @@ import {
   parseTopList,
   parseTrackedApps,
   rebuildTopFromCounters,
+  shouldUpdateTopIndex,
   type TopEntry,
 } from './top.ts'
+
+/** Isolate-local soft rate counters (reduce KV reads on hot path). */
+const memRate = new Map<string, { count: number; bucket: number }>()
 
 export function counterKey(appId: string): string {
   return `${COUNTER_KEY_PREFIX}${appId}`
@@ -81,9 +85,7 @@ export async function getCountersBatch(
 
 /**
  * Increment counters if idempotency key is new.
- * Dedupe is claimed first so retries of the same install never double-count.
- * Concurrent *different* installs on the same app may rarely lose one under
- * pure KV RMW (eventual); acceptable for store popularity, not billing.
+ * Dedupe claimed first. Top index written only when it can affect ranking.
  */
 export async function incrementIfNew(
   env: Env,
@@ -99,7 +101,6 @@ export async function incrementIfNew(
     return { counted: false, counters: await getCounters(env, appId) }
   }
 
-  // Claim idempotency first (value records app+event for forensics).
   await kv.put(dKey, `${appId}:${event}`, { expirationTtl: DEDUPE_TTL_SEC })
 
   const current = await getCounters(env, appId)
@@ -110,15 +111,17 @@ export async function incrementIfNew(
   await kv.put(counterKey(appId), JSON.stringify(counters))
 
   await trackApp(env, appId)
-  // downloads leaderboard is install-only
   if (event === 'install') {
-    await touchTopIndex(env, appId, counters.installs)
+    await touchTopIndexConditional(env, appId, counters.installs)
   }
 
   return { counted: true, counters }
 }
 
-/** Soft IP rate limit. Returns false when over limit. */
+/**
+ * Soft rate limit: isolate memory first, KV only when near limit or multi-edge.
+ * Returns false when over limit.
+ */
 export async function checkRateLimit(
   env: Env,
   ip: string,
@@ -127,6 +130,29 @@ export async function checkRateLimit(
   if (limitPerMin <= 0) return true
   const minuteBucket = Math.floor(Date.now() / 60_000)
   const ipHash = (await sha256Hex(ip)).slice(0, 16)
+  const memKey = `${ipHash}:${minuteBucket}`
+
+  let local = memRate.get(memKey)
+  if (!local || local.bucket !== minuteBucket) {
+    local = { count: 0, bucket: minuteBucket }
+  }
+  if (local.count >= limitPerMin) return false
+  local.count += 1
+  memRate.set(memKey, local)
+
+  // Prune old buckets occasionally
+  if (memRate.size > 2000) {
+    for (const [k, v] of memRate) {
+      if (v.bucket < minuteBucket - 1) memRate.delete(k)
+    }
+  }
+
+  // Cheap path: under 75% of limit → skip KV entirely (best-effort per edge).
+  if (local.count < Math.ceil(limitPerMin * 0.75)) {
+    return true
+  }
+
+  // Near limit: consult KV for cross-edge aggregation.
   const key = rateKey(ipHash, minuteBucket)
   const kv = statsKv(env)
   const raw = await kv.get(key)
@@ -153,7 +179,22 @@ async function trackApp(env: Env, appId: string): Promise<void> {
   await kv.put(META_TRACKED_APPS, JSON.stringify(next))
 }
 
-async function touchTopIndex(
+async function touchTopIndexConditional(
+  env: Env,
+  appId: string,
+  installs: number,
+): Promise<void> {
+  const kv = statsKv(env)
+  const list = parseTopList(await kv.get(META_TOP_INDEX))
+  if (!shouldUpdateTopIndex(list, appId, installs, TOP_INDEX_CAP)) {
+    return
+  }
+  const merged = mergeTopEntry(list, appId, installs, TOP_INDEX_CAP)
+  await kv.put(META_TOP_INDEX, JSON.stringify(merged))
+}
+
+/** Force top update (admin seed / rebuild path). */
+export async function forceTouchTopIndex(
   env: Env,
   appId: string,
   installs: number,
@@ -172,10 +213,6 @@ export async function readTopIndex(
   return list.slice(0, limit)
 }
 
-/**
- * Rebuild top index from tracked app counters.
- * Used when top is empty (legacy hits) or admin repair.
- */
 export async function rebuildTopIndex(
   env: Env,
   cap: number = TOP_INDEX_CAP,
@@ -195,29 +232,17 @@ export async function rebuildTopIndex(
   return top
 }
 
-/** Ensure top index is usable when legacy counters exist without top writes. */
 export async function ensureTopIndex(
   env: Env,
   limit: number,
 ): Promise<TopEntry[]> {
-  let top = await readTopIndex(env, limit)
+  const top = await readTopIndex(env, limit)
   if (top.length > 0) return top
-
-  // Seed tracked from any existing counter keys we know via a synthetic path:
-  // if tracked is empty but music-player etc. have counters, top stays empty
-  // until next hit. Admin rebuild + track on hit fixes forward.
-  // Also try rebuild from tracked (may still be empty for pre-1.1 hits).
+  // Rebuild from tracked only — never invent counters on the read path.
   const rebuilt = await rebuildTopIndex(env, TOP_INDEX_CAP)
-  if (rebuilt.length > 0) return rebuilt.slice(0, limit)
-
-  return top
+  return rebuilt.slice(0, limit)
 }
 
-/**
- * One-shot seed: ensure app is tracked and top reflects its live counters.
- * Called from admin repair or when?top=auto-heals a known empty index with
- * a single explicit app list is not available — keep for admin.
- */
 export async function seedTrackedFromApp(
   env: Env,
   appId: string,
@@ -226,7 +251,7 @@ export async function seedTrackedFromApp(
   if (counters.installs > 0 || counters.updates > 0) {
     await trackApp(env, appId)
     if (counters.installs > 0) {
-      await touchTopIndex(env, appId, counters.installs)
+      await forceTouchTopIndex(env, appId, counters.installs)
     }
   }
   return counters
