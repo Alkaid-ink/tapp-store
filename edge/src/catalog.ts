@@ -1,4 +1,4 @@
-/** Official catalog allowlist — cached in KV for ~10k app ids. */
+/** Official catalog allowlist — memory + KV cache for ~10k app ids. */
 
 import {
   META_CATALOG_IDS,
@@ -7,6 +7,19 @@ import {
 } from './types.ts'
 import { parsePositiveInt } from './validate.ts'
 
+interface MemoryCache {
+  ids: Set<string>
+  loadedAt: number
+  ttlMs: number
+}
+
+/** Per-isolate memory cache — avoids KV/GitHub on every hit. */
+let memory: MemoryCache | null = null
+
+export function clearCatalogMemoryCache(): void {
+  memory = null
+}
+
 export async function isAppAllowed(
   env: Env,
   appId: string,
@@ -14,32 +27,47 @@ export async function isAppAllowed(
 ): Promise<boolean> {
   if (allowUnknown) return true
   const ids = await getCatalogIds(env)
-  // Empty allowlist (first boot / fetch failure): fail open only if we have never
-  // successfully stored a list; otherwise fail closed.
+  // Never successfully cached: fail open so catalog outage does not block installs.
   if (ids === null) return true
   return ids.has(appId)
 }
 
 /**
- * Returns Set of allowed app ids, or null if no cached list exists yet
- * (caller may fail-open). On stale cache, refreshes in background when possible.
+ * Returns Set of allowed app ids, or null if no list is available yet.
  */
 export async function getCatalogIds(env: Env): Promise<Set<string> | null> {
   const ttlSec = parsePositiveInt(env.CATALOG_IDS_TTL_SEC, 600)
-  if (!env.STATS) return null
-  const tsRaw = await env.STATS.get(META_CATALOG_TS)
-  const ts = tsRaw ? Number.parseInt(tsRaw, 10) : 0
-  const ageMs = Date.now() - (Number.isFinite(ts) ? ts : 0)
-  const cached = await env.STATS.get(META_CATALOG_IDS)
+  const ttlMs = ttlSec * 1000
+  const now = Date.now()
 
-  if (cached && ageMs < ttlSec * 1000) {
-    return parseIdSet(cached)
+  if (memory && now - memory.loadedAt < memory.ttlMs) {
+    return memory.ids
   }
 
-  // Stale or missing: try refresh (await so first hit after deploy gets list).
+  if (!env.STATS) return null
+
+  const tsRaw = await env.STATS.get(META_CATALOG_TS)
+  const ts = tsRaw ? Number.parseInt(tsRaw, 10) : 0
+  const ageMs = now - (Number.isFinite(ts) ? ts : 0)
+  const cached = await env.STATS.get(META_CATALOG_IDS)
+
+  if (cached && ageMs < ttlMs) {
+    const set = parseIdSet(cached)
+    memory = { ids: set, loadedAt: now, ttlMs }
+    return set
+  }
+
   const fresh = await refreshCatalogIds(env)
-  if (fresh) return fresh
-  if (cached) return parseIdSet(cached)
+  if (fresh) {
+    memory = { ids: fresh, loadedAt: now, ttlMs }
+    return fresh
+  }
+  if (cached) {
+    const set = parseIdSet(cached)
+    // Stale but usable
+    memory = { ids: set, loadedAt: now, ttlMs: Math.min(ttlMs, 60_000) }
+    return set
+  }
   return null
 }
 
@@ -52,7 +80,7 @@ export async function refreshCatalogIds(
     const res = await fetch(url, {
       headers: {
         Accept: 'application/json',
-        'User-Agent': 'tapp-store-stats/1',
+        'User-Agent': 'tapp-store-stats/1.1',
       },
       cf: { cacheTtl: 300, cacheEverything: true },
     } as RequestInit)
@@ -66,17 +94,24 @@ export async function refreshCatalogIds(
         }
       }
     }
-    // Cap defensive size (10k apps is fine; 100k would be abuse of catalog)
-    if (ids.size > 50_000) {
-      return null
-    }
+    if (ids.size > 50_000) return null
     const arr = [...ids]
     await env.STATS.put(META_CATALOG_IDS, JSON.stringify(arr))
     await env.STATS.put(META_CATALOG_TS, String(Date.now()))
+    memory = {
+      ids,
+      loadedAt: Date.now(),
+      ttlMs: parsePositiveInt(env.CATALOG_IDS_TTL_SEC, 600) * 1000,
+    }
     return ids
   } catch {
     return null
   }
+}
+
+export async function catalogSize(env: Env): Promise<number | null> {
+  const ids = await getCatalogIds(env)
+  return ids ? ids.size : null
 }
 
 function parseIdSet(raw: string): Set<string> {

@@ -13,13 +13,6 @@ export async function handleHit(
     return jsonError(405, 'method not allowed', 'method_not_allowed')
   }
 
-  const limit = parsePositiveInt(env.HIT_RATE_LIMIT_PER_MIN, 60)
-  const ip = clientIp(request)
-  const allowedRate = await checkRateLimit(env, ip, limit)
-  if (!allowedRate) {
-    return jsonError(429, 'rate limit exceeded', 'rate_limited')
-  }
-
   let raw: unknown
   try {
     raw = await request.json()
@@ -30,6 +23,14 @@ export async function handleHit(
   const validated = validateHitBody(raw)
   if (!validated.ok) {
     return jsonError(400, validated.error, validated.code)
+  }
+
+  // Rate-limit only after validation so junk bodies do not burn the budget.
+  const limit = parsePositiveInt(env.HIT_RATE_LIMIT_PER_MIN, 60)
+  const ip = clientIp(request)
+  const allowedRate = await checkRateLimit(env, ip, limit)
+  if (!allowedRate) {
+    return jsonError(429, 'rate limit exceeded', 'rate_limited')
   }
 
   const allowUnknown = parseBool(env.ALLOW_UNKNOWN_APPS, false)

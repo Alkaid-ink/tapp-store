@@ -5,9 +5,10 @@
 | 项 | 值 |
 | -- | -- |
 | 运行时 | Cloudflare Workers |
-| 存储 | Workers KV（计数 + 去重 + 限流 + catalog 白名单） |
-| 默认入口 | `https://tapp-store-stats.<account>.workers.dev`（**不需要自有域名**） |
-| 可选正式域名 | `store-stats.myriad.you` 等（CF 托管 zone 后绑 route） |
+| 存储 | Workers KV（计数 + 去重 + 限流 + catalog 白名单 + top 索引） |
+| 正式域名 | **`https://stats.store.myriad.you`** |
+| 备用 | `https://tapp-store-stats.<account>.workers.dev` |
+| 协议版本 | 1.1（`/health` 的 `version` 字段） |
 
 ## API
 
@@ -48,12 +49,14 @@
 | 查询 | 含义 | 上限 |
 |------|------|------|
 | `?apps=id1,id2` | 批量 | 默认 100 |
-| `?app=id` | 单应用 | — |
-| `?top=20` | 安装量排行（维护中的 top 索引，不扫全库） | 默认 100 |
+| `?app=id` | 单应用（会 lazy 修复 tracked/top） | — |
+| `?top=20` | 安装量排行 + `ranked[]` | 默认 100 |
+| `?top=20&seed=com.app.id` | 空 top 时用该 app 计数种子修复 | — |
+| `omit_zero=1` | 不返回 0 计数项 | — |
 
 ```bash
-curl 'https://tapp-store-stats.example.workers.dev/v1/stats?apps=com.myriad.music-player'
-curl 'https://tapp-store-stats.example.workers.dev/v1/stats?top=10'
+curl 'https://stats.store.myriad.you/v1/stats?apps=com.myriad.music-player'
+curl 'https://stats.store.myriad.you/v1/stats?top=10'
 ```
 
 ```json
@@ -65,11 +68,36 @@ curl 'https://tapp-store-stats.example.workers.dev/v1/stats?top=10'
       "updates": 3,
       "downloads": 42
     }
-  }
+  },
+  "ranked": [
+    {
+      "id": "com.myriad.music-player",
+      "installs": 42,
+      "updates": 3,
+      "downloads": 42
+    }
+  ]
 }
 ```
 
-`Cache-Control: public, max-age=60`。
+`ranked` 仅 `?top=` 返回。`Cache-Control: public, max-age=30`。
+
+### 运维（可选）
+
+在 CF Worker 设置 **密钥** `ADMIN_TOKEN`（≥8 字符）后：
+
+```bash
+# 用已知 app 重建 top（修复 1.0 时代只写了 counter 的数据）
+curl -X POST https://stats.store.myriad.you/v1/admin/rebuild-top \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"seed_apps":["com.myriad.music-player"]}'
+
+curl -X POST https://stats.store.myriad.you/v1/admin/refresh-catalog \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+未配置 `ADMIN_TOKEN` 时 admin 路由返回 404。
 
 ## 为何能扛 ~1 万应用
 

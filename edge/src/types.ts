@@ -5,7 +5,7 @@ export type HitEvent = 'install' | 'update'
 export type HitClient = 'myriad-backend' | 'myriad-browser' | 'other'
 
 export interface Env {
-  /** Required for hit/stats; optional until bound in CF dashboard. */
+  /** Required for hit/stats; optional until bound. */
   STATS?: KVNamespace
   CATALOG_URL: string
   ALLOW_UNKNOWN_APPS: string
@@ -13,6 +13,8 @@ export interface Env {
   STATS_MAX_BATCH: string
   STATS_TOP_MAX: string
   CATALOG_IDS_TTL_SEC: string
+  /** Optional bearer for admin repair endpoints. Empty = disabled. */
+  ADMIN_TOKEN?: string
 }
 
 export interface AppCounters {
@@ -49,6 +51,8 @@ export interface StatsAppEntry {
 export interface StatsResponse {
   updated_at: string
   apps: Record<string, StatsAppEntry>
+  /** Present for `?top=` — stable rank order (object key order alone is not enough for all clients). */
+  ranked?: Array<{ id: string } & StatsAppEntry>
 }
 
 export interface ErrorBody {
@@ -57,12 +61,16 @@ export interface ErrorBody {
   code?: string
 }
 
-export const SERVICE_VERSION = '1'
+export const SERVICE_VERSION = '1.1.0'
 export const COUNTER_KEY_PREFIX = 'c:v1:'
 export const DEDUPE_KEY_PREFIX = 'd:v1:'
 export const RATE_KEY_PREFIX = 'rl:v1:'
 export const META_CATALOG_IDS = 'meta:v1:catalog_ids'
 export const META_CATALOG_TS = 'meta:v1:catalog_ids_ts'
 export const META_TOP_INDEX = 'meta:v1:top_installs'
+/** Set of app ids that have ever received a counted hit (for top rebuild). */
+export const META_TRACKED_APPS = 'meta:v1:tracked_apps'
 export const DEDUPE_TTL_SEC = 48 * 60 * 60
 export const RATE_TTL_SEC = 70
+export const TOP_INDEX_CAP = 200
+export const TRACKED_APPS_CAP = 50_000

@@ -12,9 +12,12 @@ main = "src/index.ts"
 compatibility_date = "2025-08-01"
 workers_dev = true
 
-# Public preview URL: https://tapp-store-stats.<account>.workers.dev
-# Optional custom domain (after zone is on CF):
-# routes = [{ pattern = "store-stats.myriad.you/*", zone_name = "myriad.you" }]
+# Custom domain is attached in CF dashboard (stats.store.myriad.you).
+# workers.dev remains available as a fallback URL.
+
+# Refresh official catalog allowlist periodically (in-memory + KV).
+[triggers]
+crons = ["0 */6 * * *"]
 
 [vars]
 # Official catalog used to refresh the app_id allowlist.
@@ -27,8 +30,10 @@ HIT_RATE_LIMIT_PER_MIN = "60"
 STATS_MAX_BATCH = "100"
 # Max apps returned by GET /v1/stats?top=
 STATS_TOP_MAX = "100"
-# How long (seconds) to cache the catalog allowlist in KV.
+# How long (seconds) to cache the catalog allowlist in KV / isolate memory.
 CATALOG_IDS_TTL_SEC = "600"
+# Optional: set via CF dashboard secrets as ADMIN_TOKEN for repair endpoints.
+# ADMIN_TOKEN = ""
 
 # KV binding "STATS" (required for /v1/hit and /v1/stats).
 [[kv_namespaces]]

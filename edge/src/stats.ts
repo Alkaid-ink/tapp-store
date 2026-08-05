@@ -1,6 +1,10 @@
 /** GET /v1/stats handler — batch / single / top (10k-safe, no full dump). */
 
-import { getCounters, getCountersBatch, readTopIndex } from './kv.ts'
+import {
+  ensureTopIndex,
+  getCountersBatch,
+  seedTrackedFromApp,
+} from './kv.ts'
 import type { Env, ErrorBody, StatsAppEntry, StatsResponse } from './types.ts'
 import { parseAppIdList, parsePositiveInt } from './validate.ts'
 
@@ -15,24 +19,42 @@ export async function handleStats(
   const url = new URL(request.url)
   const maxBatch = parsePositiveInt(env.STATS_MAX_BATCH, 100, 200)
   const topMax = parsePositiveInt(env.STATS_TOP_MAX, 100, 200)
+  const omitZero = url.searchParams.get('omit_zero') === '1'
 
-  // Leaderboard: never scans all KV keys — uses maintained top index.
+  // Leaderboard: maintained top index; auto-heal if empty.
   const topParam = url.searchParams.get('top')
   if (topParam !== null) {
     const n = Math.min(
       topMax,
       Math.max(1, Number.parseInt(topParam, 10) || 20),
     )
-    const top = await readTopIndex(env, n)
-    const apps: Record<string, StatsAppEntry> = {}
-    // Re-read live counters so top list stays accurate after concurrent hits.
+    let top = await ensureTopIndex(env, n)
+
+    // One-shot heal for early production hits that never wrote top/tracked.
+    if (top.length === 0) {
+      const seedId = url.searchParams.get('seed')
+      if (seedId) {
+        await seedTrackedFromApp(env, seedId)
+        top = await ensureTopIndex(env, n)
+      }
+    }
+
     const ids = top.map((e) => e.id)
     const live = await getCountersBatch(env, ids)
+    const apps: Record<string, StatsAppEntry> = {}
+    const ranked: Array<{ id: string } & StatsAppEntry> = []
     for (const id of ids) {
       const c = live[id] ?? { installs: 0, updates: 0 }
-      apps[id] = toEntry(c.installs, c.updates)
+      if (omitZero && c.installs <= 0 && c.updates <= 0) continue
+      const entry = toEntry(c.installs, c.updates)
+      apps[id] = entry
+      ranked.push({ id, ...entry })
     }
-    return jsonStats(apps)
+    // Re-sort by live installs (top index may lag slightly)
+    ranked.sort(
+      (a, b) => b.installs - a.installs || a.id.localeCompare(b.id),
+    )
+    return jsonStats(apps, ranked)
   }
 
   // Explicit app list (UI overlay path).
@@ -45,22 +67,22 @@ export async function handleStats(
     }
     const live = await getCountersBatch(env, parsed.ids)
     const apps: Record<string, StatsAppEntry> = {}
+    // Lazy heal: counters written before tracked/top existed get re-indexed.
+    const heal: Promise<unknown>[] = []
     for (const id of parsed.ids) {
       const c = live[id] ?? { installs: 0, updates: 0 }
-      // Only include apps that have ever been counted — keeps payload small
-      // and UI can treat missing as "no data" (do not show 0).
       if (c.installs > 0 || c.updates > 0) {
-        apps[id] = toEntry(c.installs, c.updates)
-      } else {
-        // Still return zeros when explicitly asked so clients can merge easily;
-        // FE decides not to display 0.
-        apps[id] = toEntry(0, 0)
+        heal.push(seedTrackedFromApp(env, id))
       }
+      if (omitZero && c.installs <= 0 && c.updates <= 0) continue
+      apps[id] = toEntry(c.installs, c.updates)
+    }
+    if (heal.length > 0) {
+      await Promise.all(heal)
     }
     return jsonStats(apps)
   }
 
-  // Unbounded full dump is rejected at 10k scale — force clients to batch.
   return jsonError(
     400,
     'provide apps=id1,id2, app=id, or top=N (full dump disabled for scale)',
@@ -72,17 +94,20 @@ function toEntry(installs: number, updates: number): StatsAppEntry {
   return { installs, updates, downloads: installs }
 }
 
-function jsonStats(apps: Record<string, StatsAppEntry>): Response {
+function jsonStats(
+  apps: Record<string, StatsAppEntry>,
+  ranked?: Array<{ id: string } & StatsAppEntry>,
+): Response {
   const body: StatsResponse = {
     updated_at: new Date().toISOString(),
     apps,
   }
+  if (ranked) body.ranked = ranked
   return new Response(JSON.stringify(body), {
     status: 200,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
-      // Short CDN/browser cache — counters are near-real-time, not live tick.
-      'Cache-Control': 'public, max-age=60',
+      'Cache-Control': 'public, max-age=30',
     },
   })
 }
@@ -97,6 +122,3 @@ function jsonError(status: number, error: string, code: string): Response {
     },
   })
 }
-
-// re-export for tests that want single-app read without HTTP
-export { getCounters }
