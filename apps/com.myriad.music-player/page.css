@@ -809,6 +809,17 @@ html.mp-has-lyrics .track-title {
 .lyrics-inner {
   position: absolute;
   inset: 0;
+  transition: opacity 0.22s ease;
+}
+
+/* 首测之前每一行的 y 都还是 0 —— 全叠在 top:0 糊成一坨。
+   打开侧栏时这段能持续整个列宽过渡（测量被 suspendLyricMeasure 挡着），
+   所以「首次打开歌词」必然先看到一坨再散开。这里先藏，测出布局再淡入。
+   JS 侧只在 DOM 重建后到首测落地之间挂这个类（见 setLyricPremeasure）；
+   面板已展开时首测与重建同帧完成，不会闪。 */
+#lyrics-container.lyrics-premeasure .lyrics-inner {
+  opacity: 0;
+  transition: none;
 }
 
 .lyric-line {
