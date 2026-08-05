@@ -26,6 +26,7 @@ export async function isAppAllowed(
  */
 export async function getCatalogIds(env: Env): Promise<Set<string> | null> {
   const ttlSec = parsePositiveInt(env.CATALOG_IDS_TTL_SEC, 600)
+  if (!env.STATS) return null
   const tsRaw = await env.STATS.get(META_CATALOG_TS)
   const ts = tsRaw ? Number.parseInt(tsRaw, 10) : 0
   const ageMs = Date.now() - (Number.isFinite(ts) ? ts : 0)
@@ -46,7 +47,7 @@ export async function refreshCatalogIds(
   env: Env,
 ): Promise<Set<string> | null> {
   const url = env.CATALOG_URL?.trim()
-  if (!url) return null
+  if (!url || !env.STATS) return null
   try {
     const res = await fetch(url, {
       headers: {

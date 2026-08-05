@@ -40,11 +40,18 @@ export function parseCounters(raw: string | null): AppCounters {
   }
 }
 
+function statsKv(env: Env): KVNamespace {
+  if (!env.STATS) {
+    throw new Error('STATS KV binding missing')
+  }
+  return env.STATS
+}
+
 export async function getCounters(
   env: Env,
   appId: string,
 ): Promise<AppCounters> {
-  const raw = await env.STATS.get(counterKey(appId))
+  const raw = await statsKv(env).get(counterKey(appId))
   return parseCounters(raw)
 }
 
@@ -72,21 +79,22 @@ export async function incrementIfNew(
   event: 'install' | 'update',
   idempotencyKey: string,
 ): Promise<{ counted: boolean; counters: AppCounters }> {
+  const kv = statsKv(env)
   const dKey = dedupeKey(idempotencyKey)
-  const existing = await env.STATS.get(dKey)
+  const existing = await kv.get(dKey)
   if (existing !== null) {
     const counters = await getCounters(env, appId)
     return { counted: false, counters }
   }
 
   // Mark dedupe first to reduce double-count under race (second writer sees key).
-  await env.STATS.put(dKey, '1', { expirationTtl: DEDUPE_TTL_SEC })
+  await kv.put(dKey, '1', { expirationTtl: DEDUPE_TTL_SEC })
 
   const counters = await getCounters(env, appId)
   if (event === 'install') counters.installs += 1
   else counters.updates += 1
 
-  await env.STATS.put(counterKey(appId), JSON.stringify(counters))
+  await kv.put(counterKey(appId), JSON.stringify(counters))
   // Best-effort maintain a compact top-installs index for /v1/stats?top=
   void touchTopIndex(env, appId, counters.installs)
 
@@ -103,10 +111,11 @@ export async function checkRateLimit(
   const minuteBucket = Math.floor(Date.now() / 60_000)
   const ipHash = await sha256Hex(ip).then((h) => h.slice(0, 16))
   const key = rateKey(ipHash, minuteBucket)
-  const raw = await env.STATS.get(key)
+  const kv = statsKv(env)
+  const raw = await kv.get(key)
   const count = raw ? Number.parseInt(raw, 10) || 0 : 0
   if (count >= limitPerMin) return false
-  await env.STATS.put(key, String(count + 1), { expirationTtl: RATE_TTL_SEC })
+  await kv.put(key, String(count + 1), { expirationTtl: RATE_TTL_SEC })
   return true
 }
 
@@ -133,7 +142,8 @@ async function touchTopIndex(
   installs: number,
 ): Promise<void> {
   try {
-    const raw = await env.STATS.get(META_TOP_INDEX)
+    const kv = statsKv(env)
+    const raw = await kv.get(META_TOP_INDEX)
     let list: TopEntry[] = []
     if (raw) {
       try {
@@ -148,7 +158,7 @@ async function touchTopIndex(
     filtered.sort((a, b) => b.installs - a.installs || a.id.localeCompare(b.id))
     // Keep headroom above STATS_TOP_MAX for concurrent churn
     const trimmed = filtered.slice(0, 200)
-    await env.STATS.put(META_TOP_INDEX, JSON.stringify(trimmed))
+    await kv.put(META_TOP_INDEX, JSON.stringify(trimmed))
   } catch {
     // non-fatal
   }
@@ -158,7 +168,7 @@ export async function readTopIndex(
   env: Env,
   limit: number,
 ): Promise<TopEntry[]> {
-  const raw = await env.STATS.get(META_TOP_INDEX)
+  const raw = await statsKv(env).get(META_TOP_INDEX)
   if (!raw) return []
   try {
     const list = JSON.parse(raw) as TopEntry[]

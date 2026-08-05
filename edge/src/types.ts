@@ -5,7 +5,8 @@ export type HitEvent = 'install' | 'update'
 export type HitClient = 'myriad-backend' | 'myriad-browser' | 'other'
 
 export interface Env {
-  STATS: KVNamespace
+  /** Required for hit/stats; optional until bound in CF dashboard. */
+  STATS?: KVNamespace
   CATALOG_URL: string
   ALLOW_UNKNOWN_APPS: string
   HIT_RATE_LIMIT_PER_MIN: string

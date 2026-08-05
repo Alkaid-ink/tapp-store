@@ -107,7 +107,24 @@ ALLOW_UNKNOWN_APPS = "true"
 
 ## 部署到 Cloudflare
 
-### 1. 登录与创建 KV
+### 方式 A：控制台 Git 连接（你现在用的）
+
+| 项 | 值 |
+|----|-----|
+| 仓库 | `Myriad-You/tapp-store` |
+| 分支 | **`main`**（已含 `edge/`） |
+| 项目名称 | `tapp-store-stats` |
+| 根目录 | `edge` |
+| 构建命令 | `npm ci` |
+| 部署命令 | `npx wrangler deploy` |
+
+1. 点 **部署**（先不配 KV 也能成功；`/health` 可用）。
+2. 打开 Worker → **设置 → 绑定** → 添加 **KV 命名空间**  
+   - 变量名：`STATS`  
+   - 新建命名空间：`tapp-store-stats`
+3. 再点一次部署（或等下次 Git 推送），然后测 `/v1/hit`。
+
+### 方式 B：本机 wrangler
 
 ```bash
 cd edge
@@ -115,42 +132,26 @@ npm install
 npx wrangler login
 npx wrangler kv namespace create tapp-store-stats
 npx wrangler kv namespace create tapp-store-stats --preview
-```
-
-把输出的 id 填进 `wrangler.toml`：
-
-```toml
-[[kv_namespaces]]
-binding = "STATS"
-id = "<production id>"
-preview_id = "<preview id>"
-```
-
-### 2. 部署
-
-```bash
+# 把 id 写入 wrangler.toml 的 [[kv_namespaces]] 后：
 npm run deploy
 ```
 
-成功后会打印 `workers.dev` URL，例如：
+成功后 URL 类似：
 
 ```text
 https://tapp-store-stats.<subdomain>.workers.dev
 ```
 
-**此时不需要自己的域名** 即可给 Myriad 配置：
+**不需要自有域名。** Myriad 后续配置：
 
 ```bash
-# Myriad backend（后续接入）
 TAPP_STORE_STATS_URL=https://tapp-store-stats.<subdomain>.workers.dev
-
-# 前端（后续接入）
 VITE_TAPP_STORE_STATS_URL=https://tapp-store-stats.<subdomain>.workers.dev
 ```
 
-### 3.（可选）自定义域名
+### （可选）自定义域名
 
-在 Cloudflare 仪表盘 → Workers → tapp-store-stats → Triggers → Custom Domains，添加例如 `store-stats.myriad.you`（zone 需已接入 CF）。
+Workers → tapp-store-stats → 触发器 / 自定义域，例如 `store-stats.myriad.you`。
 
 ## 配置（`[vars]`）
 

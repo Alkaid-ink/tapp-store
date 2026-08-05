@@ -16,7 +16,6 @@ import { SERVICE_VERSION, type Env, type ErrorBody } from './types.ts'
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     try {
-      assertEnv(env)
       const response = await route(request, env)
       return withCors(request, response)
     } catch (err) {
@@ -33,10 +32,22 @@ export default {
   },
 }
 
-function assertEnv(env: Env): void {
-  if (!env.STATS) {
-    throw new Error('STATS KV binding missing — configure [[kv_namespaces]]')
+/** hit/stats need KV; /health works without it so first deploy can succeed. */
+function requireStats(env: Env): Response | null {
+  if (env.STATS) return null
+  const body: ErrorBody = {
+    ok: false,
+    error:
+      'STATS KV binding missing — add binding STATS in CF Worker settings (or wrangler.toml [[kv_namespaces]])',
+    code: 'kv_not_configured',
   }
+  return new Response(JSON.stringify(body), {
+    status: 503,
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+    },
+  })
 }
 
 async function route(request: Request, env: Env): Promise<Response> {
@@ -65,10 +76,14 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
 
   if (path === '/v1/hit') {
+    const missing = requireStats(env)
+    if (missing) return missing
     return handleHit(request, env)
   }
 
   if (path === '/v1/stats') {
+    const missing = requireStats(env)
+    if (missing) return missing
     return handleStats(request, env)
   }
 
