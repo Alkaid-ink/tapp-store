@@ -535,15 +535,15 @@ REST 商店安装仍是 body `source: "store"` + `storeSource: catalogRef`（源
 | 项 | 说明 |
 | -- | ---- |
 | 代码 | 商店仓库 [`edge/`](https://github.com/Myriad-You/tapp-store/tree/main/edge) |
+| 正式 URL | **`https://stats.store.myriad.you`** |
 | 计什么 | **安装成功**（`event=install`）；`update` 单独计数；不计 preview / 浏览 |
-| 真值 | `GET /v1/stats`；**不**由 Catalog Sync 写回 `index.json` |
-| `index.json` `downloads` | 仅占位/降级；UI 优先 edge overlay |
-| 部署 | `wrangler deploy` → `*.workers.dev` 即可；自定义域名可选 |
-| 万级应用 | stats 必须 `apps=` / `app=` / `top=`；禁止无参全量 dump |
+| 真值 | `GET /v1/stats`；**不**写回 `index.json` |
+| 读路径 | **不写 KV**；历史修复用 admin 或 `?top=&seed=` |
+| 版本 | edge **1.2**（条件 top 写、内存限流、HMAC 可选） |
 
-Myriad 接入（后续）：后端/前端在安装成功路径 fire-and-forget `POST /v1/hit`；商店 UI 批量拉 stats 展示。失败不影响安装。
+Myriad：后端 store 成功 → `store_stats_beacon`；浏览器 fallback → FE beacon；UI overlay 展示安装次数。失败不影响安装。
 
-详细部署与 API 见商店仓库 `edge/README.md`。
+详细见 `edge/README.md`。
 
 ---
 
