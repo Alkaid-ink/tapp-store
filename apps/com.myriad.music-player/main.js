@@ -1,8 +1,14 @@
 // Music Player Tapp v1.1.5
 
+// 排查线上问题用：在 tapp 的 iframe 控制台里 `__mpDebug = true` 即可开，
+// 不必改源码重发版（切歌 / 拉词 / 自愈的关键节点都会打点）
 var MP_DEBUG = false;
+function mpDebugOn() {
+  if (MP_DEBUG) return true;
+  try { return !!window.__mpDebug; } catch (e) { return false; }
+}
 function mpDebug() {
-  if (!MP_DEBUG || !console || !console.debug) return;
+  if (!mpDebugOn() || !console || !console.debug) return;
   try { console.debug.apply(console, arguments); } catch (e) {}
 }
 
@@ -805,11 +811,12 @@ function measureLyricLayout(force) {
   lyricFx.total = y;
   lyricFx.viewH = h;
   lyricFx.viewW = w;
-  // 首测落地：解除「重建后先藏起来」，此后 resize / 翻译开关的重测都不再遮
-  if (!lyricFx.everMeasured) {
-    lyricFx.everMeasured = true;
-    setLyricPremeasure(false);
-  }
+  // 有了有效布局就一定要放出来。
+  // ⚠️ 这里刻意不写成 `if (!everMeasured)`：那样一旦漏掉一次清除，歌词就会一直
+  // 隐身且再也没人来解——「藏起来」的坏法比「叠一坨」难查得多，宁可每次多调一次
+  // classList.toggle（无变化时是 no-op）
+  lyricFx.everMeasured = true;
+  setLyricPremeasure(false);
   var first = lyricFx.items[0];
   var last = lyricFx.items[lyricFx.items.length - 1];
   var minS = first.y - h * LYRIC_FOCAL + first.h / 2;
@@ -2920,6 +2927,45 @@ function ensureLyricWordLoop() {
   }
 }
 
+// ——— 歌词加载自愈 ———
+// 拉歌词只挂在 trackChanged / significantChange 上，而 trackChanged 是靠
+// lastStateSnapshot.trackId 一次性判定的：快照在 updatePlayerUI **之前**就推进了
+// （见 handleStateChange），所以那一拍只要中途抛一次异常、或宿主漏推一次切歌事件，
+// 这首歌的 getLyrics 就永远不会再发起——之后只剩进度流，而进度流不带
+// significantChange。表现就是「有歌词也不显示」，且只能靠再切一次歌才恢复。
+// 这里在进度流上做一次有界兜底：只在「明显不一致」时补发。
+var LYRIC_RECONCILE_MS = 1500;   // 两次补发的最小间隔
+var LYRIC_RECONCILE_MAX = 3;     // 同一首最多补发几次，避免异常态下打死宿主
+var lyricReconcile = { at: 0, trackId: null, tries: 0 };
+
+function reconcileLyricsForCurrentTrack(state) {
+  var track = state && state.currentTrack;
+  if (!track || !track.id) return;
+  // 有请求在飞 / 已确认本曲无词：都不是「卡住」，别插手
+  if (pageState.lyricsLoadingTrackId != null) return;
+  if (isConfirmedEmptyForCurrentTrack()) return;
+  // 展示中的歌词已归属本曲 → 一切正常
+  if (pageState.lyricsSongId != null &&
+      String(pageState.lyricsSongId) === String(track.id)) {
+    return;
+  }
+  if (!needsLyricsLoad(track)) return;
+
+  var id = String(track.id);
+  if (lyricReconcile.trackId !== id) {
+    lyricReconcile.trackId = id;
+    lyricReconcile.tries = 0;
+    lyricReconcile.at = 0;
+  }
+  if (lyricReconcile.tries >= LYRIC_RECONCILE_MAX) return;
+  var now = nowMs();
+  if (now - lyricReconcile.at < LYRIC_RECONCILE_MS) return;
+  lyricReconcile.at = now;
+  lyricReconcile.tries++;
+  mpDebug('[music-player] 歌词自愈补发', id, 'try', lyricReconcile.tries);
+  loadLyricsForTrack(track);
+}
+
 /** 是否需要为该曲拉歌词（已在飞 / 已确认则 false） */
 function needsLyricsLoad(track) {
   if (!track || !track.id) return false;
@@ -4539,6 +4585,10 @@ async function initPage() {
       // 旧曲的目标时间当作播放位置，歌词时钟直接落在几十秒处，约 1.5s 才回正
       seekIntent = null;
       bindTrackFromStatus(state);
+      mpDebug('[music-player] 切歌', prevTrackId, '→', nextTrackId,
+        'loadState=', pageState.lyricsLoadState, 'songId=', pageState.lyricsSongId,
+        'inFlight=', pageState.lyricsLoadingTrackId, 'hostLines=',
+        state.lyrics ? state.lyrics.length : 0);
       // 同曲已在飞（常见：init 已 load，首帧 state 仍报 trackChanged）→ 绝不能 gen++ 作废
       var alreadyLoadingSame = nextTrackId != null &&
         pageState.lyricsLoadingTrackId != null &&
@@ -4619,6 +4669,9 @@ async function initPage() {
         loadLyricsForTrack(state.currentTrack);
       }
       if (trackChanged) loadBeatGridForTrack(state.currentTrack);
+    } else {
+      // 纯进度流：只有在切歌那一拍确实漏了的时候才补发（内部自带一致性判断与节流）
+      reconcileLyricsForCurrentTrack(state);
     }
 
     // 有词/无词 verdict：仅切歌
