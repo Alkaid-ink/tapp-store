@@ -6042,16 +6042,15 @@ var EQ_INTERVAL = 66;       // ~15fps 频谱/间奏数据块
 var EQ_MAINT_MS = 125;      // ~8fps 零消费方维护
 var EQ_LIGHT_MS = 50;       // ~20fps light 级 Aurora
 var EQ_BG_MS = 50;          // 背景漂移 ~20fps（仅 standard + 非移动端）
-// getSpectrum 单飞：上一次 bridge Promise 未 settle 时跳过本拍，不排队
-var spectrumInFlight = false;
-
-// ——— 频谱数据来源 ———
-// 首选宿主推流（Tapp.media.onSpectrum）：宿主每帧 emit，tapp 零请求。
-// 逐帧 request 一次 getSpectrum 会在几秒内打满 TappBridge 的入站限速
-// （240 条/分钟 ≈ 4 条/秒），此后**同一个桥上的所有请求**都被静默丢弃——
-// 包括 media.control，表现就是「点下一首没反应」，以及切歌时 getLyrics
-// 被拒后判成「本曲无词」。
-// 宿主较旧（没有 onSpectrum）时回落到原来的逐帧轮询，功能不降级。
+// ——— 频谱数据来源：只走宿主推流 ———
+// 宿主每帧 emit（Tapp.media.onSpectrum），tapp 订阅一次之后零请求。
+//
+// ⚠️ 不要退回「每帧 getSpectrum」：逐帧 request 会在几秒内打满 TappBridge 的
+// 入站限速（240 条/分钟 ≈ 4 条/秒），此后**同一个桥上的所有请求**都被静默丢弃
+// ——包括 media.control（点下一首没反应）与切歌时的 getLyrics（被拒后判成
+// 「本曲无词」）。轮询兜底就是这个 bug 本身，所以整条删掉，不留回落。
+// 宿主没有 onSpectrum（前端 bundle 未更新）时：无频谱，EQ/Aurora 静默降级，
+// 其余功能不受影响。
 var spectrumPush = { active: false, frame: null, unsub: null };
 
 function startSpectrumStream() {
@@ -6077,7 +6076,7 @@ function stopSpectrumStream() {
   spectrumPush.frame = null;
 }
 
-/** 消费一帧频谱（推流与轮询共用） */
+/** 消费一帧频谱 */
 function applySpectrumFrame(r, needEq, eqEl, needFx, ts) {
   var s = (r && r.spectrum && r.spectrum.length >= 4) ? r.spectrum : [0, 0, 0, 0];
   if (needEq) updateListEq(s, eqEl);
@@ -6222,25 +6221,9 @@ function eqTickBody(ts) {
     var needEq = !!(eq && isLaidOut(eq));
     if (needEq || needFx) {
       startSpectrumStream(); // 幂等；宿主没有 onSpectrum 时是空操作
-      if (spectrumPush.active) {
-        // 推流：直接吃最新一帧，本拍零请求
-        if (spectrumPush.frame) {
-          applySpectrumFrame(spectrumPush.frame, needEq, eq, needFx, ts);
-        }
-      } else if (!spectrumInFlight) {
-        // 旧宿主回落：单飞轮询，上一次未 settle 则跳过本拍（不排队堆积）
-        spectrumInFlight = true;
-        var pollNeedEq = needEq;
-        var pollNeedFx = needFx;
-        var pollEq = eq;
-        var pollTs = ts;
-        Tapp.media.getSpectrum().then(function(r) {
-          spectrumInFlight = false;
-          applySpectrumFrame(r, pollNeedEq, pollEq, pollNeedFx, pollTs);
-        }).catch(function(e) {
-          spectrumInFlight = false;
-          logTickError('spectrumPoll', e);
-        });
+      // 直接吃宿主推来的最新一帧，本拍零请求
+      if (spectrumPush.frame) {
+        applySpectrumFrame(spectrumPush.frame, needEq, eq, needFx, ts);
       }
     }
   }
@@ -6342,7 +6325,6 @@ function cleanup() {
   }
   // 清理视觉/EQ 循环（rAF + 低帧率 timer）
   cancelEqSchedule();
-  spectrumInFlight = false;
   stopSpectrumStream();
   // 清理歌词波浪引擎
   stopLyricWave();
