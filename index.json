@@ -1,10 +1,10 @@
 {
   "$schema": "https://myriad.you/schemas/tapp-store-v1.json",
   "name": "Myriad Official Tapp Store",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-08-08T03:25:15.873Z",
+  "updated_at": "2026-08-08T05:52:52.230Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.you",
@@ -802,9 +802,9 @@
     {
       "id": "cn.echootaku.days",
       "name": "朝夕",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "description": "记录值得期待与纪念的日子，在主页随时查看最近倒数。",
-      "long_description": "用朝夕记录生日、纪念日、旅行、考试和其他重要时刻。支持置顶、快捷日期、临近标识、每年重复、自定义分类与颜色、搜索筛选，以及 2x2、4x2、4x4 三种主页小组件。主题工作室可按界面区域启用 Glass、调整配色与圆角，并通过不含日期数据的主题码分享外观；小组件还可独立配置主题、Glass 范围、密度和显示内容。所有数据仅保存在当前用户的私有存储中。",
+      "long_description": "用朝夕记录生日、纪念日、旅行、考试和其他重要时刻。支持置顶、快捷日期、临近标识、每年重复、自定义分类与颜色、搜索筛选，以及 2x2、4x2、4x4 三种主页小组件。主题工作室默认跟随 Myriad 主色，提供实时预览、三种 Glass 布局、精细分区、圆角和主题码；小组件可选择 Glass/纯色材质、日子范围和显示密度。所有数据仅保存在当前用户的私有存储中。",
       "locales": {
         "en-US": {
           "name": "Days",
@@ -836,7 +836,6 @@
       "permissions": [
         "storage",
         "ui:notification",
-        "ui:theme",
         "ui:confirm",
         "widget:register"
       ],
@@ -874,15 +873,20 @@
             "4x2": "apps/cn.echootaku.days/templates/widget-4x2.html",
             "4x4": "apps/cn.echootaku.days/templates/widget-4x4.html"
           }
+        },
+        "i18n": {
+          "en-US": "apps/cn.echootaku.days/i18n/en-US.json",
+          "ja-JP": "apps/cn.echootaku.days/i18n/ja-JP.json",
+          "zh-CN": "apps/cn.echootaku.days/i18n/zh-CN.json"
         }
       },
-      "size": 103944,
+      "size": 143830,
       "downloads": 0,
       "rating": 0,
       "featured": false,
       "verified": false,
       "created_at": "2026-08-04T05:52:10Z",
-      "updated_at": "2026-08-05T13:42:22.830Z"
+      "updated_at": "2026-08-08T05:52:52.228Z"
     },
     {
       "id": "org.smcresearchhk.math",
