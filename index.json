@@ -1,10 +1,10 @@
 {
   "$schema": "https://myriad.you/schemas/tapp-store-v1.json",
   "name": "Myriad Official Tapp Store",
-  "version": "1.0.18",
+  "version": "1.0.19",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-08-10T22:09:40.336Z",
+  "updated_at": "2026-08-10T22:16:30.796Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.you",
@@ -1037,6 +1037,179 @@
       "verified": false,
       "created_at": "2026-08-05T02:21:21.976Z",
       "updated_at": "2026-08-05T02:21:21.976Z"
+    },
+    {
+      "id": "cn.echootaku.github-workbench",
+      "name": "GitHub 工作台",
+      "version": "0.1.1",
+      "description": "集中查看待审 PR、分配给我的 Issue、失败 Actions 与仓库发布动态。",
+      "long_description": "面向程序员的只读 GitHub 工作台：集中查看请求你审阅的 Pull Request、分配给你的 Issue，以及所选仓库最近失败的 GitHub Actions 和 Releases。支持 2x2、4x2、4x4 桌面小组件。GitHub Token 使用 Myriad 安装级只写凭据保存，沙箱无法读取；所有 GitHub API 均限制为安装 owner / 管理员调用。首版不提供合并、评论、关闭 Issue 或重跑工作流等写操作。",
+      "locales": {
+        "en-US": {
+          "name": "GitHub Workbench",
+          "description": "Review pull requests, assigned issues, failed Actions, and releases in one place."
+        },
+        "ja-JP": {
+          "name": "GitHub ワークベンチ",
+          "description": "レビュー待ちPR、担当Issue、失敗したActions、リリースをまとめて確認できます。"
+        }
+      },
+      "author": {
+        "name": "EchoOtaku",
+        "url": "https://echootaku.cn"
+      },
+      "license": "MIT",
+      "homepage": "https://echootaku.cn",
+      "repository": "https://github.com/Myriad-You/tapp-store",
+      "category": "developer",
+      "tags": [
+        "GitHub",
+        "Pull Request",
+        "Issue",
+        "Actions",
+        "Release",
+        "开发者",
+        "小组件"
+      ],
+      "permissions": [
+        "network:fetch",
+        "storage",
+        "ui:notification",
+        "ui:openUrl",
+        "ui:theme",
+        "widget:register"
+      ],
+      "icon_svg": "<svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M9 19c-4.2 1.3-4.2-2.2-6-2.7M15 21v-3.4c0-1 .1-1.4-.5-2 2.8-.3 5.7-1.4 5.7-6.2A4.8 4.8 0 0 0 19 6.1a4.5 4.5 0 0 0-.1-3.3s-1-.3-3.4 1.3a11.7 11.7 0 0 0-6.2 0C6.9 2.5 5.9 2.8 5.9 2.8a4.5 4.5 0 0 0-.1 3.3 4.8 4.8 0 0 0-1.2 3.3c0 4.8 2.9 5.9 5.7 6.2-.5.5-.6 1-.6 2V21' stroke='currentColor' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/></svg>",
+      "theme_color": "#6E5EA8",
+      "screenshots": [],
+      "preview": {
+        "version": 1,
+        "type": "snapshot",
+        "html": "apps/cn.echootaku.github-workbench/preview.html",
+        "styles": [
+          "apps/cn.echootaku.github-workbench/preview.css"
+        ],
+        "viewport": {
+          "width": 1280,
+          "height": 720
+        },
+        "fit": "cover",
+        "focus": {
+          "x": 0.5,
+          "y": 0.48
+        },
+        "theme": "dark"
+      },
+      "download": {
+        "manifest": "apps/cn.echootaku.github-workbench/manifest.json",
+        "code": "apps/cn.echootaku.github-workbench/main.js",
+        "readme": "apps/cn.echootaku.github-workbench/README.md",
+        "widget_styles": "apps/cn.echootaku.github-workbench/widget.css",
+        "page_styles": "apps/cn.echootaku.github-workbench/page.css",
+        "page_template": "apps/cn.echootaku.github-workbench/page.html",
+        "widget_templates": {
+          "github-workbench-overview": {
+            "2x2": "apps/cn.echootaku.github-workbench/templates/widget-2x2.html",
+            "4x2": "apps/cn.echootaku.github-workbench/templates/widget-4x2.html",
+            "4x4": "apps/cn.echootaku.github-workbench/templates/widget-4x4.html"
+          }
+        },
+        "i18n": {
+          "en-US": "apps/cn.echootaku.github-workbench/i18n/en-US.json",
+          "ja-JP": "apps/cn.echootaku.github-workbench/i18n/ja-JP.json",
+          "zh-CN": "apps/cn.echootaku.github-workbench/i18n/zh-CN.json"
+        }
+      },
+      "size": 55397,
+      "downloads": 0,
+      "rating": 0,
+      "featured": false,
+      "verified": false,
+      "created_at": "2026-08-10T22:16:30.796Z",
+      "updated_at": "2026-08-10T22:16:30.796Z"
+    },
+    {
+      "id": "cn.echootaku.gomoku",
+      "name": "联邦五子棋",
+      "version": "0.1.9",
+      "description": "15×15 五子棋，支持本地双人和跨实例联邦房间对战",
+      "long_description": "一款遵循自由五子棋规则的 15×15 棋盘游戏。可在同一设备上双人对弈，也可创建 Myriad 联邦房间，通过房间 ID 跨实例加入或邀请联邦 Actor。房主负责验证落子并广播完整棋局快照，支持准备、认输、再来一局、历史恢复和本地战绩。",
+      "locales": {
+        "en-US": {
+          "name": "Federated Gomoku",
+          "description": "15×15 Gomoku for local play and cross-instance federation rooms"
+        },
+        "ja-JP": {
+          "name": "連合五目並べ",
+          "description": "ローカル対戦とインスタンス間の連合ルームに対応した15×15五目並べ"
+        }
+      },
+      "author": {
+        "name": "EchoOtaku",
+        "url": "https://echootaku.cn"
+      },
+      "license": "MIT",
+      "homepage": "https://github.com/Myriad-You/tapp-store/tree/main/apps/cn.echootaku.gomoku",
+      "repository": "https://github.com/Myriad-You/tapp-store",
+      "category": "game",
+      "tags": [
+        "游戏",
+        "五子棋",
+        "联邦",
+        "联机",
+        "双人",
+        "棋类",
+        "多语言"
+      ],
+      "permissions": [
+        "storage",
+        "ui:theme",
+        "ui:confirm",
+        "federation:read",
+        "federation:write",
+        "federation:message"
+      ],
+      "icon_svg": "<svg viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\" stroke=\"currentColor\" stroke-width=\"1.5\"/><path d=\"M7.5 3v18M12 3v18M16.5 3v18M3 7.5h18M3 12h18M3 16.5h18\" stroke=\"currentColor\" stroke-width=\".75\" opacity=\".55\"/><circle cx=\"9.75\" cy=\"9.75\" r=\"2.1\" fill=\"currentColor\"/><circle cx=\"14.25\" cy=\"14.25\" r=\"2.1\" stroke=\"currentColor\" stroke-width=\"1.2\"/></svg>",
+      "theme_color": "#7257c7",
+      "screenshots": [],
+      "preview": {
+        "version": 1,
+        "type": "snapshot",
+        "html": "apps/cn.echootaku.gomoku/preview.html",
+        "styles": [
+          "apps/cn.echootaku.gomoku/page.css",
+          "apps/cn.echootaku.gomoku/preview.css"
+        ],
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "fit": "cover",
+        "focus": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "theme": "dark"
+      },
+      "download": {
+        "manifest": "apps/cn.echootaku.gomoku/manifest.json",
+        "code": "apps/cn.echootaku.gomoku/main.js",
+        "readme": "apps/cn.echootaku.gomoku/README.md",
+        "page_styles": "apps/cn.echootaku.gomoku/page.css",
+        "page_template": "apps/cn.echootaku.gomoku/page.html",
+        "i18n": {
+          "en-US": "apps/cn.echootaku.gomoku/i18n/en-US.json",
+          "ja-JP": "apps/cn.echootaku.gomoku/i18n/ja-JP.json",
+          "zh-CN": "apps/cn.echootaku.gomoku/i18n/zh-CN.json"
+        }
+      },
+      "size": 88052,
+      "downloads": 0,
+      "rating": 0,
+      "featured": false,
+      "verified": false,
+      "created_at": "2026-08-10T22:16:30.796Z",
+      "updated_at": "2026-08-10T22:16:30.796Z"
     }
   ],
   "last_updated": "2026-08-04T09:47:35Z"
