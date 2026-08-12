@@ -1,10 +1,10 @@
 {
   "$schema": "https://myriad.you/schemas/tapp-store-v1.json",
   "name": "Myriad Official Tapp Store",
-  "version": "1.0.20",
+  "version": "1.0.21",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-08-11T06:51:21.041Z",
+  "updated_at": "2026-08-12T03:33:17.432Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.you",
@@ -543,7 +543,7 @@
     {
       "id": "cn.wyyzxzyg.minecraft-hub",
       "name": "Minecraft 服务器与 Wiki",
-      "version": "1.0.5",
+      "version": "1.0.6",
       "description": "面向玩家的 Java/基岩版服务器查询、收藏与 Minecraft Wiki 搜索工具",
       "long_description": "面向玩家的 Java/基岩版服务器查询、收藏与 Minecraft Wiki 搜索工具。支持主页小组件轮询展示多台服务器状态。",
       "author": {
@@ -603,13 +603,13 @@
           }
         }
       },
-      "size": 48556,
+      "size": 52797,
       "downloads": 0,
       "rating": 0,
       "featured": false,
       "verified": false,
       "created_at": "2026-08-04T16:25:05Z",
-      "updated_at": "2026-08-05T13:42:55.581Z"
+      "updated_at": "2026-08-12T03:33:17.425Z"
     },
     {
       "id": "site.abloom.meliora",
