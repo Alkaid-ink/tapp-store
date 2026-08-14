@@ -1,10 +1,10 @@
 {
   "$schema": "https://myriad.you/schemas/tapp-store-v1.json",
   "name": "Myriad Official Tapp Store",
-  "version": "1.0.22",
+  "version": "1.0.23",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-08-14T09:55:45.239Z",
+  "updated_at": "2026-08-14T09:58:26.559Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.you",
@@ -510,15 +510,55 @@
     {
       "id": "com.myriad.aro",
       "name": "Aro",
-      "version": "1.0.56",
+      "version": "1.0.57",
       "description": "社交中心，统一管理消息、时间线、环网与个人资料",
-      "long_description": "1.0.56: chat fixes — a confirmed send no longer shows as a sending/sent pair, the avatar sits on the last bubble of a burst, sidebar timestamps and group member counts refresh on their own, and a late joiner now receives the full room roster (so earlier members’ messages and keys reach them).\n\n1.0.54: stop the chat repaint storm (poll now compares the server window against itself, not against the merged list), keep reading position across full re-renders via a row anchor that survives media layout, and stop labelling permanently sealed messages as \"decrypting…\".\n\n1.0.50: room chat header — default-collapse meta badges/room id; history & files move into ⋯ menu.\n\n1.0.49: fix feed page scroll/interaction — harden .feed-main scrollport (min-height, -webkit-overflow-scrolling, pan-y), seal fixed overlay click shields on boot/view switch, sticker-target-overlay PE defaults.\n\n1.0.48: mobile text overflow hardening — bubbles, headers, feed cards, share/file names, long URLs wrap on narrow screens.\n\n1.0.47: modular page split (msgUi/feedUi/mentionUi/roomUi/…), chat perf (windowing, optimistic send, scroll smart, feed load-more), room stickers/admin/@ mentions UI, setMemberRole.\n\n1.0.39: click post for detail modal; list cards truncate with show more.\n\n1.0.38: quote/repost full body + click to open original (no follow required).\n\n1.0.37: E2E decrypt race fix + soft delivery banners.\n\n1.0.36: inline composer icon styles for reinstall resilience.\n\n1.0.35: fix emoji button gray plate.\n\n1.0.34: full emoji picker + sticker packs complete.\n\n社交中心：统一管理联邦消息（Channel/Room）、时间线、环网与个人资料。支持后台新消息通知、附件与多语言（中/英/日）。\n\n1.0.33: room avatar + invite policy in edit/create.\n\n1.0.32: sticker button click + panel polish.\n\n1.0.31: fix store install missing page/stickers.js — stickers UI inlined into attachments.js (pageModules must stay in sync with index download.page_modules).\n\n1.0.30: sticker entry + add stickers from chat images (group/personal packs).\n\n1.0.29: composer sticker panel (group pack via host API; personal local).\n\n1.0.28: lock composer during optimistic room open (no false active membership).\n\n1.0.27: snappier view/chat/tab switching — no re-slide on A→B, same-chat no-op, shorter motion.\n\n1.0.26: polish messenger UX — open skeleton, empty CTAs, busy buttons, send spinner, join toast.\n\n1.0.25: debounce list refresh; remove unguarded member fallbacks.\n\n1.0.24: proactive roster confirm burst after join/leave (0–6s retries + 2.5s poll boost).\n\n1.0.23: room member roster refreshes on join/leave (WS + poll), live member_count, optimistic member_joined.\n\n1.0.22: fix large inline chat images falling back to filename only (safeMessageImageUrl).\n\n1.0.21: declare network:fetch so sandbox CSP allows remote https avatars/covers/federation media.\n\n1.0.11: thin main (background-only), close pageModules file boundaries.\n\n1.0.10: harden federation share rendering, safer store install and downloads.\n\n1.0.9: centered Accept/Reject invite CTAs in chat body.\n\n1.0.8: timeline share (X intent only), follow-graph mutual/domain badges.",
+      "long_description": "Aro 是 Myriad 官方社交中心，把联邦私信与群聊、时间线、环网和个人资料收在同一处。信使支持 Channel / Room、端到端加密、群共享与本机贴纸包、表情、附件（图片、文件、Tapp、Brew、资料库与报告）、@ 提及、置顶与转发，以及后台轮询新消息通知。时间线可发帖、引用转发、收藏与关注；环网用于实例目录、Brew 推荐、资料交换和 Tapp 商店等节点协作。设置页可查看出站投递队列（取消 / 重试）并轮换联邦签名密钥。聊天记录可在本机导出或导入 JSON 备份。界面支持中英日与宿主明暗主题。",
       "locales": {
         "en-US": {
-          "description": "Social hub for messages, timeline, ring network and profile in one place"
+          "description": "Social hub for messages, timeline, ring network and profile in one place",
+          "long_description": "Aro is the official Myriad social hub: federated direct messages and group rooms, a timeline, the ring network, and your profile in one place. Messenger covers Channel / Room chats, end-to-end encryption, shared and personal sticker packs, emoji, attachments (images, files, Tapps, Brew, library, and reports), @mentions, pins, forwards, and background new-message notifications. The timeline supports posts, quote-reposts, bookmarks, and follows; rings connect instance directories, Brew picks, library exchange, and Tapp store peers. Settings show the outbound delivery queue (cancel / retry) and can rotate federation signing keys. Chat history can be exported or imported as a local JSON backup. The UI follows Chinese, English, and Japanese, plus the host light/dark theme.",
+          "preview": {
+            "version": 1,
+            "type": "snapshot",
+            "html": "apps/com.myriad.aro/preview.en-US.html",
+            "styles": [
+              "apps/com.myriad.aro/page.css",
+              "apps/com.myriad.aro/preview.css"
+            ],
+            "viewport": {
+              "width": 1440,
+              "height": 900
+            },
+            "fit": "cover",
+            "focus": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "theme": "dark"
+          }
         },
         "ja-JP": {
-          "description": "メッセージ・タイムライン・リングネット・プロフィールをまとめるソーシャルハブ"
+          "description": "メッセージ・タイムライン・リングネット・プロフィールをまとめるソーシャルハブ",
+          "long_description": "Aro は Myriad 公式のソーシャルハブです。連邦のダイレクトメッセージとグループ、タイムライン、リングネット、プロフィールをひとつにまとめます。メッセンジャーは Channel / Room、エンドツーエンド暗号化、グループ共有と端末内のステッカーパック、絵文字、添付（画像・ファイル・Tapp・Brew・ライブラリ・レポート）、@メンション、ピン留め、転送、バックグラウンドの新着通知に対応します。タイムラインでは投稿、引用リポスト、ブックマーク、フォローができ、リングはインスタンス一覧、Brew おすすめ、資料交換、Tapp ストアなどのノード連携に使います。設定では送信キューの確認（キャンセル / 再試行）と連邦署名鍵のローテーションができます。チャット履歴は端末上の JSON バックアップとして書き出し・読み込みできます。UI は中・英・日とホストのライト / ダークテーマに追従します。",
+          "preview": {
+            "version": 1,
+            "type": "snapshot",
+            "html": "apps/com.myriad.aro/preview.ja-JP.html",
+            "styles": [
+              "apps/com.myriad.aro/page.css",
+              "apps/com.myriad.aro/preview.css"
+            ],
+            "viewport": {
+              "width": 1440,
+              "height": 900
+            },
+            "fit": "cover",
+            "focus": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "theme": "dark"
+          }
         }
       },
       "author": {
@@ -613,13 +653,13 @@
           "index.js": "apps/com.myriad.aro/page/index.js"
         }
       },
-      "size": 1412866,
+      "size": 1412405,
       "downloads": 0,
       "rating": 0,
       "featured": true,
       "verified": true,
       "created_at": "2025-12-01T00:00:00Z",
-      "updated_at": "2026-08-08T11:36:18.231Z"
+      "updated_at": "2026-08-14T09:58:26.551Z"
     },
     {
       "id": "cn.wyyzxzyg.cdn-cache",
