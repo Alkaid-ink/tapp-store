@@ -178,7 +178,7 @@ Manifest 的 `permissions` 是申请集合；安装批准后写入 `approved_per
 
 ```json
 {
-  "permissions": ["storage", "ui:theme", "platform:read"]
+  "permissions": ["storage:read", "storage:write", "ui:theme", "platform:read"]
 }
 ```
 

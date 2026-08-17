@@ -1,7 +1,7 @@
 {
   "id": "com.myriad.aro",
   "name": "Aro",
-  "version": "1.0.57",
+  "version": "1.0.58",
   "description": "社交中心，统一管理消息、时间线、环网与个人资料",
   "locales": {
     "en-US": {
@@ -21,7 +21,8 @@
   "pageTemplate": "page.html",
   "cssMode": "separated",
   "permissions": [
-    "storage",
+    "storage:read",
+    "storage:write",
     "ui:notification",
     "ui:theme",
     "federation:read",

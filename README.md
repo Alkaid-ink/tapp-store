@@ -136,7 +136,7 @@ Manifest 若声明了 `pageStyles` / `pageTemplate`，索引必须提供对应 `
       "description": "Notes Tapp",
       "author": { "name": "Example" },
       "category": "productivity",
-      "permissions": ["storage", "widget:register"],
+      "permissions": ["storage:read", "storage:write", "widget:register"],
       "download": {
         "manifest": "apps/com.example.notes/manifest.json",
         "code": "apps/com.example.notes/main.js"

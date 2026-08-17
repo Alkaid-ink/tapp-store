@@ -217,7 +217,7 @@ PUT body 只写调用者个人行：`{ "sizes": { "<tappId>": "1x1"|"2x1" }, "or
   "source": "store",
   "storeSource": "1",
   "tappId": "com.example.app",
-  "permissions": ["storage"]
+  "permissions": ["storage:read", "storage:write"]
 }
 ```
 

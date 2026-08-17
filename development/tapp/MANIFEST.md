@@ -213,7 +213,8 @@ Page、Widget 和 headless core 是运行形态，由 `hasPage`、`widgets` 和
   "icon": "🚀",
   "themeColor": "#6366f1",
   "permissions": [
-    "storage",
+    "storage:read",
+    "storage:write",
     "ui:notification",
     "platform:read",
     "network:fetch"

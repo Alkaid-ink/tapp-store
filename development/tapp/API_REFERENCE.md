@@ -1126,7 +1126,7 @@ await Tapp.tappList.install({
   source: "store",
   storeSource: "1", // 或完整 index.json URL；禁止 "store"/"direct"
   tappId: "com.example.app",
-  permissions: ["storage"],
+  permissions: ["storage:read", "storage:write"],
 });
 // 等价：source 为 http(s) catalog URL（可省略 storeSource）
 // await Tapp.tappList.install({
@@ -1141,7 +1141,7 @@ await Tapp.tappList.install({
 //   manifest: { id: "com.example.app", name: "App", version: "1.0.0",
 //               category: "utility", main: "main.js", permissions: [] },
 //   code: "/* ... */",
-//   permissions: ["storage"],
+//   permissions: ["storage:read", "storage:write"],
 // });
 // ❌ 无效：source:"direct" 且缺少 manifest 或 code
 
