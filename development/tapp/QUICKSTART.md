@@ -390,8 +390,8 @@ Widget: render() 里 Tapp.storage.get(key)   （或 onChanged 局部更新）
 }
 ```
 
-> 权限字符串必须是宿主白名单里的完整 token。存储请声明 **`storage:read`**
-> 和/或 **`storage:write`**（不要再用已移除的 `storage`）；定时任务权限是 **`scheduler:register`**
+> 权限字符串必须是宿主白名单里的完整 token。存储读取使用 **`storage:read`**，写入使用
+> **`storage:write`**；定时任务权限是 **`scheduler:register`**
 > （`backgroundRequirements` 里的 `"scheduler"` 是后台能力类型，不是权限 token）。
 > 未知权限会在安装时被拒绝或过滤。
 
