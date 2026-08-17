@@ -1,10 +1,10 @@
 {
   "$schema": "https://myriad.you/schemas/tapp-store-v1.json",
   "name": "Myriad Official Tapp Store",
-  "version": "1.0.30",
+  "version": "1.0.31",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-08-17T16:31:23.678Z",
+  "updated_at": "2026-08-17T21:24:30.956Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.you",
@@ -1171,7 +1171,7 @@
         "page_styles": "apps/org.smcresearchhk.math/page.css",
         "page_template": "apps/org.smcresearchhk.math/page.html"
       },
-      "size": 58083,
+      "size": 58091,
       "downloads": 0,
       "rating": 0,
       "featured": false,
