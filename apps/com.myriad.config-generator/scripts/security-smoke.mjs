@@ -32,6 +32,9 @@ assert.match(main, /isValidPgMajor/)
 assert.match(main, /parseImageRef/)
 assert.match(main, /nginx -t/)
 assert.match(main, /MYRIAD_SETUP_SECRET/)
+assert.match(main, /DOCKER_GUARD_EXPECTED_IMAGE/)
+assert.match(main, /GUARD_SELF_UPDATE_TOKEN/)
+assert.doesNotMatch(main, /DOCKER_GUARD_ALLOWED_IMAGES: \\\$\{BACKEND_IMAGE/)
 assert.doesNotMatch(main, /await Promise\.all\(\s*\[\s*fetchDockerHubTags/)
 
 // Extract pure helpers by executing a slice of main.js (no DOM / Tapp)
@@ -138,7 +141,16 @@ function buildCleanEnv(secrets, bundled) {
     'MYRIAD_SETUP_SECRET=' + secrets.MYRIAD_SETUP_SECRET,
     'CORS_ORIGINS=https://example.com',
     'BASE_URL=https://example.com',
-    'FRONTEND_URL=https://example.com'
+    'FRONTEND_URL=https://example.com',
+    'MYRIAD_COMPOSE_HOST_ROOT=.',
+    'MYRIAD_GUARD_ENV_FILE=/etc/myriad/docker-guard.env',
+    'DOCKER_GUARD_IMAGE=docker.io/somekawahitomi/myriad-updater@sha256:' + 'a'.repeat(64),
+    'UPDATER_IMAGE_REF=docker.io/somekawahitomi/myriad-updater@sha256:' + 'a'.repeat(64),
+    'GUARD_SELF_UPDATE_TOKEN=' + secrets.GUARD_SELF_UPDATE_TOKEN,
+    'GUARD_COMPOSE_PROJECT_NAME=myriad',
+    'GUARD_MYRIAD_DOCKER_NETWORK=myriad-net',
+    'GUARD_MYRIAD_ADMIN_NETWORK=myriad-admin-net',
+    'GUARD_MYRIAD_DOCKER_GUARD_NETWORK=myriad-docker-guard-net'
   )
   return lines.join('\n') + '\n'
 }
@@ -148,7 +160,8 @@ const secrets = {
   UPDATE_TOKEN: 'U'.repeat(40),
   UPDATER_GATEWAY_SECRET: 'G'.repeat(40),
   MYRIAD_SETUP_SECRET: 'S'.repeat(40),
-  POSTGRES_PASSWORD: 'P'.repeat(40)
+  POSTGRES_PASSWORD: 'P'.repeat(40),
+  GUARD_SELF_UPDATE_TOKEN: 'H'.repeat(40)
 }
 const clean = buildCleanEnv(secrets, true)
 const parsed = h.validateGeneratedEnv(clean, secrets, { bundled: true })

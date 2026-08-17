@@ -34,6 +34,13 @@
       "method": "GET",
       "endpoint": "https://hub.docker.com/v2/repositories/somekawahitomi/{{params.repo}}/tags?page_size=100&ordering=-last_updated",
       "cacheTtl": 300
+    },
+    "dockerHubTag": {
+      "access": "public",
+      "type": "http",
+      "method": "GET",
+      "endpoint": "https://hub.docker.com/v2/repositories/somekawahitomi/{{params.repo}}/tags/{{params.tag}}",
+      "cacheTtl": 300
     }
   }
 }

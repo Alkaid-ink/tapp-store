@@ -76,6 +76,7 @@ var PANEL_PROFILES = {
     guideOverview: ['guide.overview.secret', 'guide.overview.paste', 'guide.overview.overwrite', 'guide.overview.open'],
     guideSteps: [
       { titleKey: 'guide.1panel.pasteTitle', bodyKey: 'guide.1panel.pasteBody', files: ['compose', 'env'] },
+      { titleKey: 'guide.1panel.guardTitle', bodyKey: 'guide.1panel.guardBody', files: ['guard-env'] },
       { titleKey: 'guide.1panel.overwriteTitle', bodyKey: 'guide.1panel.overwriteBody', files: ['nginx'], extraFiles: ['nginx-extra'] }
     ],
     // Baota-specific include patterns not used; 1Panel proxy includes stripped in transform
@@ -518,6 +519,10 @@ var I18N_FALLBACK = {
   "error.netDuplicate": "{prev} 与 {key} 使用了相同的 Docker 网络名「{value}」，请改为互不相同",
   "error.netExtraClash": "{key} 与附加 Docker 子网使用了相同的网络名「{value}」，两者必须不同",
   "error.generateFailed": "生成失败",
+  "error.needUpdaterDigest": "Guard 必须钉死 updater 镜像 digest。请填写 vX.Y.Z@sha256:<64hex>，或等 Docker Hub 解析完成后再生成。",
+  "done.badgeGuard": "宿主策略 · /etc/myriad",
+  "guide.1panel.guardTitle": "安装宿主 Guard 策略",
+  "guide.1panel.guardBody": "把 docker-guard.env 写到 /etc/myriad/docker-guard.env（chmod 600，不要放进编排目录，不要用符号链接）。v0.3.29+ 没有这份文件 Guard 起不来。",
   "error.uploadTooLarge": "Nginx 配置不能超过 {max}KB（当前 {current}KB）",
   "error.uploadType": "请上传 .conf 文本文件",
   "error.uploadNotText": "无法以文本读取该文件",
@@ -1100,7 +1105,7 @@ function buildPanelDeploySection(panelId, mainDomain, httpBind, httpPort, isExte
       '',
       '```bash',
       'mkdir -p /opt/myriad && cd /opt/myriad',
-      '# 放入 docker-compose.yml 与 .env',
+      '# 放入 docker-compose.yml、.env，并把 docker-guard.env 复制到 /etc/myriad/',
       isExternal
         ? 'mkdir -p state backups && chmod 600 .env'
         : 'mkdir -p pgdata state backups && chown -R 70:70 pgdata && chmod 700 pgdata && chmod 600 .env',
@@ -1117,10 +1122,11 @@ function buildPanelDeploySection(panelId, mainDomain, httpBind, httpPort, isExte
     '## 1Panel',
     '',
     '1. **容器 → 编排 → 创建**：粘贴 `docker-compose.yml`',
-    '2. **环境变量**：粘贴 `.env` 全文（勿公开、勿提交）',
-    '3. 若为内置 Postgres：在编排工作目录准备 `pgdata` 并修正属主（见下方权限专节），再启动',
-    '4. **网站** 创建反向代理或导入生成的 Nginx 配置，目标 `http://' + bind + '`，必须 **整站** 反代',
-    '5. 申请 SSL 后确认 `/.well-known/acme-challenge/` 仍为本地目录，其余 `.well-known` 走 proxy',
+    '2. **环境变量**：粘贴 `.env` 全文（勿公开、勿提交；须含 DOCKER_GUARD_IMAGE 与 GUARD_SELF_UPDATE_TOKEN）',
+    '3. 把 `docker-guard.env` 写到 `/etc/myriad/docker-guard.env`（chmod 600，不要放进编排目录）',
+    '4. 若为内置 Postgres：在编排工作目录准备 `pgdata` 并修正属主（见下方权限专节），再启动',
+    '5. **网站** 创建反向代理或导入生成的 Nginx 配置，目标 `http://' + bind + '`，必须 **整站** 反代',
+    '6. 申请 SSL 后确认 `/.well-known/acme-challenge/` 仍为本地目录，其余 `.well-known` 走 proxy',
     '',
     '站点路径约定（1Panel 默认）：`/www/sites/' + mainDomain + '/…`',
     '',
@@ -1222,6 +1228,8 @@ services:
       JWT_SECRET: \${JWT_SECRET}
       MYRIAD_SETUP_SECRET: \${MYRIAD_SETUP_SECRET}
       TRUST_PROXY_HEADERS: "true"
+      TRUST_PROXY_PEERS: \${TRUST_PROXY_PEERS:-127.0.0.0/8,::1,172.17.0.0/16,172.28.0.0/16}
+      MYRIAD_ALLOW_REMOTE_BOOTSTRAP: \${MYRIAD_ALLOW_REMOTE_BOOTSTRAP:-false}
       CORS_ORIGINS: \${CORS_ORIGINS:-http://localhost}
       CSP_CONNECT_SRC: \${CSP_CONNECT_SRC:-'self' https:}
       ENVIRONMENT: \${ENVIRONMENT:-production}
@@ -1317,24 +1325,31 @@ services:
       options: { max-size: "10m", max-file: "3" }
 
   docker-guard:
-    # 仅此处挂 docker.sock
-    image: \${UPDATER_IMAGE:-docker.io/somekawahitomi/myriad-updater}:\${UPDATER_TAG}
+    # Host-owned TCB. Image must be an exact repo@sha256 from docker-guard.env.
+    image: \${DOCKER_GUARD_IMAGE:?Pass /etc/myriad/docker-guard.env with an exact repo@sha256 digest}
     container_name: myriad-docker-guard
     entrypoint: ["/usr/bin/tini", "--", "/usr/local/bin/myriad-docker-guard"]
     environment:
-      UPDATE_TOKEN: \${UPDATE_TOKEN}
-      COMPOSE_PROJECT_NAME: \${COMPOSE_PROJECT_NAME:-myriad}
-      MYRIAD_DOCKER_NETWORK: \${MYRIAD_DOCKER_NETWORK:-myriad-net}
-      MYRIAD_ADMIN_NETWORK: \${MYRIAD_ADMIN_NETWORK:-myriad-admin-net}
-      MYRIAD_DOCKER_GUARD_NETWORK: \${MYRIAD_DOCKER_GUARD_NETWORK:-myriad-docker-guard-net}
+      COMPOSE_PROJECT_NAME: \${GUARD_COMPOSE_PROJECT_NAME:-myriad}
+      MYRIAD_DOCKER_NETWORK: \${GUARD_MYRIAD_DOCKER_NETWORK:-myriad-net}
+      MYRIAD_ADMIN_NETWORK: \${GUARD_MYRIAD_ADMIN_NETWORK:-myriad-admin-net}
+      MYRIAD_DOCKER_GUARD_NETWORK: \${GUARD_MYRIAD_DOCKER_GUARD_NETWORK:-myriad-docker-guard-net}
       DOCKER_GUARD_COMPOSE_DIR: /host/compose
-      DOCKER_GUARD_ENV_FILE: /host/compose/.env
-      DOCKER_GUARD_ALLOWED_IMAGES: \${BACKEND_IMAGE:-docker.io/somekawahitomi/myriad-backend},\${FRONTEND_IMAGE:-docker.io/somekawahitomi/myriad-frontend},\${PROXY_IMAGE:-docker.io/somekawahitomi/myriad-proxy},\${UPDATER_IMAGE:-docker.io/somekawahitomi/myriad-updater}{{DOCKER_GUARD_EXTRA_IMAGES}}
+      DOCKER_GUARD_STATE_DIR: /host/state
+      DOCKER_GUARD_EXPECTED_IMAGE: \${DOCKER_GUARD_IMAGE}
+      DOCKER_GUARD_HOST_POLICY_PATH: \${MYRIAD_GUARD_ENV_FILE:?Host Guard policy path is required}
+      DOCKER_GUARD_SELF_UPDATE_TOKEN: \${GUARD_SELF_UPDATE_TOKEN:?Host Guard self-update token is required}
       RUST_LOG: \${DOCKER_GUARD_LOG:-info}
       TZ: Asia/Shanghai
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./:/host/compose:ro
+      - type: bind
+        source: \${MYRIAD_COMPOSE_HOST_ROOT:-.}
+        target: /host/compose
+        read_only: true
+      - type: bind
+        source: \${MYRIAD_COMPOSE_HOST_ROOT:-.}/state
+        target: /host/state
     networks: [myriad-docker-guard-net]
     restart: unless-stopped
     security_opt: [no-new-privileges:true]
@@ -1350,7 +1365,7 @@ services:
       options: { max-size: "10m", max-file: "3" }
 
   updater:
-    image: \${UPDATER_IMAGE:-docker.io/somekawahitomi/myriad-updater}:\${UPDATER_TAG}
+    image: \${UPDATER_IMAGE_REF:-\${UPDATER_IMAGE:-docker.io/somekawahitomi/myriad-updater}:\${UPDATER_TAG}}
     container_name: myriad-updater
     environment:
       UPDATE_TOKEN: \${UPDATE_TOKEN}
@@ -1363,7 +1378,8 @@ services:
       UPDATER_ENV_FILE: /host/compose/.env
 {{UPDATER_PGDATA_LINE}}      UPDATER_COMPOSE_DIR: /host/compose
       DOCKER_HOST: tcp://docker-guard:2375
-      DOCKER_GUARD_SELF_UPDATE_URL: http://docker-guard:2375/_myriad/self-update
+      DOCKER_GUARD_SELF_UPDATE_TOKEN: \${GUARD_SELF_UPDATE_TOKEN:?Host Guard self-update token is required}
+      UPDATER_GUARD_ENV_FILE: /run/secrets/docker-guard.env
       COSIGN_VERIFY: \${COSIGN_VERIFY:-strict}
       UPDATER_ALLOW_INSECURE_COSIGN: \${UPDATER_ALLOW_INSECURE_COSIGN:-}
       COSIGN_INSECURE_OK: \${COSIGN_INSECURE_OK:-}
@@ -1372,18 +1388,37 @@ services:
       MYRIAD_VERSION: \${UPDATER_TAG}
       TZ: Asia/Shanghai
     volumes:
-      - ./:/host/compose
+      - type: bind
+        source: \${MYRIAD_COMPOSE_HOST_ROOT:-.}
+        target: /host/compose
+        read_only: true
+      - type: bind
+        source: \${MYRIAD_COMPOSE_HOST_ROOT:-.}/.env
+        target: /host/compose/.env
+      - type: bind
+        source: \${MYRIAD_COMPOSE_HOST_ROOT:-.}/state
+        target: /host/compose/state
+{{UPDATER_PGDATA_VOLUME}}      - type: bind
+        source: \${MYRIAD_GUARD_ENV_FILE:?Host Guard policy path is required}
+        target: /run/secrets/docker-guard.env
+        read_only: true
     networks: [myriad-admin-net, myriad-docker-guard-net]
     depends_on:
       docker-guard: { condition: service_healthy }
     restart: unless-stopped
     security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:1101/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
     logging:
       driver: "json-file"
       options: { max-size: "10m", max-file: "3" }
 
   updater-gateway:
-    image: \${UPDATER_IMAGE:-docker.io/somekawahitomi/myriad-updater}:\${UPDATER_TAG}
+    image: \${UPDATER_IMAGE_REF:-\${UPDATER_IMAGE:-docker.io/somekawahitomi/myriad-updater}:\${UPDATER_TAG}}
     container_name: myriad-updater-gateway
     entrypoint: ["/usr/bin/tini", "--", "/usr/local/bin/myriad-updater-gateway"]
     environment:
@@ -1399,6 +1434,12 @@ services:
     security_opt: [no-new-privileges:true]
     read_only: true
     tmpfs: [/tmp, /run]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:1104/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
     logging:
       driver: "json-file"
       options: { max-size: "10m", max-file: "3" }
@@ -1439,6 +1480,15 @@ MYRIAD_DOCKER_NETWORK={{MYRIAD_DOCKER_NETWORK}}
 MYRIAD_ADMIN_NETWORK={{MYRIAD_ADMIN_NETWORK}}
 MYRIAD_DOCKER_GUARD_NETWORK={{MYRIAD_DOCKER_GUARD_NETWORK}}
 {{BACKEND_EXTRA_NETWORK_LINE}}
+MYRIAD_COMPOSE_HOST_ROOT={{MYRIAD_COMPOSE_HOST_ROOT}}
+MYRIAD_GUARD_ENV_FILE={{MYRIAD_GUARD_ENV_FILE}}
+DOCKER_GUARD_IMAGE={{DOCKER_GUARD_IMAGE}}
+UPDATER_IMAGE_REF={{UPDATER_IMAGE_REF}}
+GUARD_SELF_UPDATE_TOKEN={{GUARD_SELF_UPDATE_TOKEN}}
+GUARD_COMPOSE_PROJECT_NAME=myriad
+GUARD_MYRIAD_DOCKER_NETWORK={{MYRIAD_DOCKER_NETWORK}}
+GUARD_MYRIAD_ADMIN_NETWORK={{MYRIAD_ADMIN_NETWORK}}
+GUARD_MYRIAD_DOCKER_GUARD_NETWORK={{MYRIAD_DOCKER_GUARD_NETWORK}}
 
 UPDATE_TOKEN={{UPDATE_TOKEN}}
 UPDATER_GATEWAY_SECRET={{UPDATER_GATEWAY_SECRET}}
@@ -1475,6 +1525,18 @@ BASE_URL=https://{{MAIN_DOMAIN}}
 FRONTEND_URL=https://{{MAIN_DOMAIN}}
 PUBLIC_API_URL=
 # RUST_LOG=info
+`;
+
+	var GUARD_ENV_TEMPLATE = `# Host-owned Guard policy. Copy outside the compose directory:
+#   Linux:   /etc/myriad/docker-guard.env
+# chmod 600. Not a symlink. Do not put this file in the updater-writable root.
+DOCKER_GUARD_IMAGE={{DOCKER_GUARD_IMAGE}}
+GUARD_SELF_UPDATE_TOKEN={{GUARD_SELF_UPDATE_TOKEN}}
+GUARD_COMPOSE_PROJECT_NAME=myriad
+GUARD_MYRIAD_DOCKER_NETWORK={{MYRIAD_DOCKER_NETWORK}}
+GUARD_MYRIAD_ADMIN_NETWORK={{MYRIAD_ADMIN_NETWORK}}
+GUARD_MYRIAD_DOCKER_GUARD_NETWORK={{MYRIAD_DOCKER_GUARD_NETWORK}}
+MYRIAD_GUARD_ENV_FILE={{MYRIAD_GUARD_ENV_FILE}}
 `;
 
 // Whole-site reverse proxy to Myriad proxy (NOT /api-only). Federation paths that
@@ -1587,6 +1649,7 @@ var CADDYFILE_TEMPLATE = `{{MAIN_DOMAIN}} {
 var DEPLOY_NOTES_TEMPLATE = `# Myriad 部署
 
 同目录：\`docker-compose.yml\` + \`.env\`（\`chmod 600\`，勿提交）。
+宿主策略：把 \`docker-guard.env\` 放到 \`/etc/myriad/docker-guard.env\`（部署根目录外，\`chmod 600\`，禁止符号链接）。
 
 面板适配：\`{{PANEL_LABEL}}\` · 数据库模式：\`MYRIAD_DB_MODE={{MYRIAD_DB_MODE}}\`（bundled=内置 Postgres；external=外置）。
 
@@ -1625,8 +1688,11 @@ curl -sS "https://{{MAIN_DOMAIN}}/.well-known/nodeinfo" | head -c 200
 
 \`\`\`bash
 {{DEPLOY_MKDIR}}
+install -d -m 0755 /etc/myriad
+install -m 0600 docker-guard.env /etc/myriad/docker-guard.env
 chmod 600 .env
-docker compose pull && docker compose up -d
+docker compose --env-file .env --env-file /etc/myriad/docker-guard.env pull
+docker compose --env-file .env --env-file /etc/myriad/docker-guard.env up -d
 \`\`\`
 
 \`backend-volume-init\` 会在 backend 启动前修复持久卷权限；无需手工 chown。
@@ -1645,7 +1711,7 @@ https://{{MAIN_DOMAIN}} → \`{{HTTP_BIND_ADDRESS}}:{{HTTP_PORT}}\`（整站反�
 
 proxy 有 AP 路由变更时需单独 bump \`PROXY_TAG\`（与 \`MYRIAD_TAG\` 独立）。
 
-\`DOCKER_GUARD_ALLOWED_IMAGES\` 必须包含 proxy（默认 \`myriad-proxy\`）；否则 product/proxy 更新会 403。已部署栈若曾漏掉 proxy：编辑 compose 补上后执行 \`docker compose up -d --force-recreate docker-guard\`，再重试更新。
+v0.3.29+ 的 Guard 不再读取 \`DOCKER_GUARD_ALLOWED_IMAGES\`。必须用宿主 \`/etc/myriad/docker-guard.env\` 钉死 \`DOCKER_GUARD_IMAGE=docker.io/somekawahitomi/myriad-updater@sha256:<64hex>\`，并注入 \`GUARD_SELF_UPDATE_TOKEN\`。面板只加载 \`.env\` 时，把这两项也写进 \`.env\`，否则 Guard 起不来。
 
 {{DEPLOY_DATA_SECTION}}
 
@@ -1667,7 +1733,7 @@ MYRIAD_TAG={{MYRIAD_TAG}} · PROXY_TAG={{PROXY_TAG}} · UPDATER_TAG={{UPDATER_TA
 
 \`\`\`bash
 # Compose 语法
-docker compose -f docker-compose.yml --env-file .env config >/dev/null
+docker compose -f docker-compose.yml --env-file .env --env-file /etc/myriad/docker-guard.env config >/dev/null
 
 # 外层 Nginx（路径按面板调整）
 nginx -t
@@ -1738,8 +1804,14 @@ var EXPECTED_ENV_KEYS_BASE = [
   'UPDATE_MODE', 'MYRIAD_GITHUB_REPO', 'CHECK_INTERVAL_SECS',
   'HTTP_BIND_ADDRESS', 'HTTP_PORT', 'PROXY_ALLOW_DIRECT_UPDATER',
   'COSIGN_VERIFY', 'MYRIAD_MEMORY_PROFILE', 'MYRIAD_DB_MODE', 'DATABASE_URL', 'JWT_SECRET',
-  'MYRIAD_SETUP_SECRET', 'CORS_ORIGINS', 'BASE_URL', 'FRONTEND_URL'
+  'MYRIAD_SETUP_SECRET', 'CORS_ORIGINS', 'BASE_URL', 'FRONTEND_URL',
+  'MYRIAD_COMPOSE_HOST_ROOT', 'MYRIAD_GUARD_ENV_FILE', 'DOCKER_GUARD_IMAGE',
+  'UPDATER_IMAGE_REF', 'GUARD_SELF_UPDATE_TOKEN', 'GUARD_COMPOSE_PROJECT_NAME',
+  'GUARD_MYRIAD_DOCKER_NETWORK', 'GUARD_MYRIAD_ADMIN_NETWORK',
+  'GUARD_MYRIAD_DOCKER_GUARD_NETWORK'
 ];
+
+var GUARD_IMAGE_RE = /^docker\.io\/somekawahitomi\/myriad-updater@sha256:[0-9a-f]{64}$/;
 
 function isSafeDotenvToken(value) {
   if (typeof value !== 'string') return false;
@@ -1812,6 +1884,19 @@ function validateGeneratedEnv(envText, secrets, opts) {
   if (parsed.map.MYRIAD_MEMORY_PROFILE !== 'saver' && parsed.map.MYRIAD_MEMORY_PROFILE !== 'default') {
     throw new Error('MYRIAD_MEMORY_PROFILE 必须是 saver 或 default');
   }
+  if (!GUARD_IMAGE_RE.test(parsed.map.DOCKER_GUARD_IMAGE || '')) {
+    throw new Error('DOCKER_GUARD_IMAGE 必须是 docker.io/somekawahitomi/myriad-updater@sha256:<64hex>');
+  }
+  if (parsed.map.UPDATER_IMAGE_REF !== parsed.map.DOCKER_GUARD_IMAGE) {
+    throw new Error('UPDATER_IMAGE_REF 必须与 DOCKER_GUARD_IMAGE 相同');
+  }
+  if (parsed.map.MYRIAD_GUARD_ENV_FILE !== '/etc/myriad/docker-guard.env') {
+    throw new Error('MYRIAD_GUARD_ENV_FILE 必须是 /etc/myriad/docker-guard.env');
+  }
+  if (secrets.GUARD_SELF_UPDATE_TOKEN && parsed.map.GUARD_SELF_UPDATE_TOKEN !== secrets.GUARD_SELF_UPDATE_TOKEN) {
+    throw new Error('GUARD_SELF_UPDATE_TOKEN 写入 .env 后与输入不一致');
+  }
+  requireSafeDotenvToken(parsed.map.GUARD_SELF_UPDATE_TOKEN, 'GUARD_SELF_UPDATE_TOKEN');
   var allowCount = (String(envText).match(/^PROXY_ALLOW_DIRECT_UPDATER=/gm) || []).length;
   if (allowCount !== 1) {
     throw new Error('PROXY_ALLOW_DIRECT_UPDATER 出现 ' + allowCount + ' 次，拒绝生成');
@@ -2066,6 +2151,50 @@ function extractTagNamesFromHubPayload(data) {
     if (results[i] && results[i].name) names.push(results[i].name);
   }
   return names;
+}
+
+
+function extractDigestFromHubTag(data) {
+  var payload = data;
+  if (payload && payload.data && (payload.data.digest || payload.data.images)) {
+    payload = payload.data;
+  }
+  function fromDigestField(value) {
+    var m = String(value || '').match(/sha256:([a-fA-F0-9]{64})/i);
+    return m ? m[1].toLowerCase() : null;
+  }
+  var top = fromDigestField(payload && payload.digest);
+  if (top) return top;
+  var images = payload && payload.images;
+  if (!Array.isArray(images)) return null;
+  var i;
+  for (i = 0; i < images.length; i++) {
+    if (images[i] && images[i].architecture === 'amd64') {
+      var amd = fromDigestField(images[i].digest);
+      if (amd) return amd;
+    }
+  }
+  for (i = 0; i < images.length; i++) {
+    var any = fromDigestField(images[i] && images[i].digest);
+    if (any) return any;
+  }
+  return null;
+}
+
+async function resolveUpdaterDigest(tag) {
+  var repo = DOCKER_REPOS.updater;
+  if (typeof Tapp !== 'undefined' && typeof Tapp.api === 'function') {
+    var data = await Tapp.api('dockerHubTag', { repo: repo, tag: tag });
+    return extractDigestFromHubTag(data);
+  }
+  if (typeof fetch === 'function') {
+    var url = 'https://hub.docker.com/v2/repositories/somekawahitomi/' +
+      encodeURIComponent(repo) + '/tags/' + encodeURIComponent(tag);
+    var resp = await fetch(url);
+    if (!resp.ok) throw new Error(t('tags.hubHttp', { status: resp.status }));
+    return extractDigestFromHubTag(await resp.json());
+  }
+  return null;
 }
 
 async function fetchDockerHubTags(repo) {
@@ -3473,6 +3602,18 @@ function initPage() {
       state.myriadDigest = myriadRef.digest;
       state.proxyDigest = proxyRef.digest;
       state.updaterDigest = updaterRef.digest;
+      if (!state.updaterDigest) {
+        try {
+          state.updaterDigest = await resolveUpdaterDigest(state.updaterTag);
+        } catch (digestErr) {
+          showNotification((digestErr && digestErr.message) ? digestErr.message : t('error.needUpdaterDigest'), 'error');
+          return;
+        }
+        if (!state.updaterDigest) {
+          showNotification(t('error.needUpdaterDigest'), 'error');
+          return;
+        }
+      }
       // 输入框保留用户原文（可含 digest）
       if (myriadTagInput) myriadTagInput.value = myriadRef.raw;
       if (proxyTagInput) proxyTagInput.value = proxyRef.raw;
@@ -3766,9 +3907,9 @@ function generateConfigs() {
 
   var postgresService = '';
   var backendDependsOn = '      backend-volume-init: { condition: service_completed_successfully }\n';
-  var dockerGuardExtra = '';
   var updaterPgdataLine = '';
-  var composeStartHint = 'mkdir -p state backups && docker compose up -d';
+  var updaterPgdataVolume = '';
+  var composeStartHint = 'mkdir -p state backups && docker compose --env-file .env --env-file /etc/myriad/docker-guard.env up -d';
   var postgresEnvBlock = '';
   var deployNetMembers = 'proxy, frontend, backend';
   var deployMkdir = 'mkdir -p state backups';
@@ -3787,10 +3928,10 @@ function generateConfigs() {
     backendDependsOn =
       '      postgres: { condition: service_healthy }\n' +
       '      backend-volume-init: { condition: service_completed_successfully }\n';
-    dockerGuardExtra = ',postgres';
     updaterPgdataLine = '      UPDATER_PGDATA: /host/compose/pgdata\n';
+    updaterPgdataVolume = '      - type: bind\n        source: ${MYRIAD_COMPOSE_HOST_ROOT:-.}/pgdata\n        target: /host/compose/pgdata\n';
     composeStartHint =
-      'mkdir -p pgdata state backups && chown -R 70:70 pgdata && chmod 700 pgdata && docker compose up -d';
+      'mkdir -p pgdata state backups && chown -R 70:70 pgdata && chmod 700 pgdata && docker compose --env-file .env --env-file /etc/myriad/docker-guard.env up -d';
     postgresEnvBlock =
       'POSTGRES_DB=' + state.dbName + '\n' +
       'POSTGRES_USER=' + state.dbUser + '\n' +
@@ -3823,13 +3964,22 @@ function generateConfigs() {
     ? 'MYRIAD_BACKEND_EXTRA_NETWORK=' + extraNetworkName + '\n'
     : '';
 
+  if (!state.updaterDigest) {
+    throw new Error(t('error.needUpdaterDigest'));
+  }
+  var guardImage = 'docker.io/somekawahitomi/myriad-updater@sha256:' + state.updaterDigest;
+  if (!state.guardSelfUpdateToken) {
+    state.guardSelfUpdateToken = generateUpdateToken();
+  }
+  var guardToken = state.guardSelfUpdateToken;
+
   var map = {
     MYRIAD_DB_MODE: isExternal ? 'external' : 'bundled',
     COMPOSE_START_HINT: composeStartHint,
     POSTGRES_SERVICE: postgresService,
     BACKEND_DEPENDS_ON: backendDependsOn,
-    DOCKER_GUARD_EXTRA_IMAGES: dockerGuardExtra,
     UPDATER_PGDATA_LINE: updaterPgdataLine,
+    UPDATER_PGDATA_VOLUME: updaterPgdataVolume,
     POSTGRES_ENV_BLOCK: postgresEnvBlock,
     DEPLOY_NET_MEMBERS: deployNetMembers,
     DEPLOY_MKDIR: deployMkdir,
@@ -3857,6 +4007,11 @@ function generateConfigs() {
     MYRIAD_DOCKER_NETWORK: state.netMyriad || 'myriad-net',
     MYRIAD_ADMIN_NETWORK: state.netAdmin || 'myriad-admin-net',
     MYRIAD_DOCKER_GUARD_NETWORK: state.netGuard || 'myriad-docker-guard-net',
+    MYRIAD_COMPOSE_HOST_ROOT: '.',
+    MYRIAD_GUARD_ENV_FILE: '/etc/myriad/docker-guard.env',
+    DOCKER_GUARD_IMAGE: guardImage,
+    UPDATER_IMAGE_REF: guardImage,
+    GUARD_SELF_UPDATE_TOKEN: guardToken,
     BACKEND_EXTRA_NETWORK_REF: backendExtraNetworkRef,
     EXTRA_NETWORK_DECL: extraNetworkDecl,
     BACKEND_EXTRA_NETWORK_LINE: backendExtraNetworkLine,
@@ -3892,6 +4047,7 @@ function generateConfigs() {
 
   var dockerCompose = applyPlaceholders(DOCKER_COMPOSE_TEMPLATE, map);
   var envFile = applyPlaceholders(ENV_TEMPLATE, map);
+  var guardEnv = applyPlaceholders(GUARD_ENV_TEMPLATE, map);
   var deployNotes = applyPlaceholders(DEPLOY_NOTES_TEMPLATE, map);
 
   // 可选 digest pin：将 image: ${X_IMAGE:-repo}:tag 换成完整 @sha256 引用
@@ -3931,6 +4087,7 @@ function generateConfigs() {
     UPDATE_TOKEN: state.updateToken,
     UPDATER_GATEWAY_SECRET: state.updaterGatewaySecret,
     MYRIAD_SETUP_SECRET: state.setupSecret,
+    GUARD_SELF_UPDATE_TOKEN: guardToken,
     POSTGRES_PASSWORD: isExternal ? undefined : state.dbPassword
   }, { bundled: !isExternal });
 
@@ -3941,7 +4098,7 @@ function generateConfigs() {
   var caddyFile = '';
   var nginxSummary = [];
   var verifyProxyLine = '';
-  var verifyCommand = 'docker compose -f docker-compose.yml --env-file .env config';
+  var verifyCommand = 'docker compose -f docker-compose.yml --env-file .env --env-file /etc/myriad/docker-guard.env config';
   var cardMain = document.getElementById('card-main-nginx');
   var cardExtra = document.getElementById('card-extra-nginx');
   var cardCaddy = document.getElementById('card-caddy');
@@ -4003,6 +4160,8 @@ function generateConfigs() {
 
   document.getElementById('result-docker-compose').textContent = dockerCompose;
   document.getElementById('result-env').textContent = envFile;
+  var guardResult = document.getElementById('result-guard-env');
+  if (guardResult) guardResult.textContent = guardEnv;
   document.getElementById('result-main-nginx').textContent = mainNginx;
   document.getElementById('result-deploy-notes').textContent = deployNotes;
   var caddyResult = document.getElementById('result-caddyfile');
@@ -4019,7 +4178,7 @@ function generateConfigs() {
       (proxyFiles === 'caddy' ? t('validation.caddyPrefix') : proxyFiles === 'none' ? t('validation.proxyPrefix') : t('validation.nginxPrefix')) +
         nginxSummary.join('\n  '),
       '',
-      'docker compose -f docker-compose.yml --env-file .env config',
+      'docker compose -f docker-compose.yml --env-file .env --env-file /etc/myriad/docker-guard.env config',
       verifyCommand
     ].join('\n');
   }

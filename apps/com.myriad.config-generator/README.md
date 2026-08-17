@@ -53,7 +53,8 @@ DEPLOY：`chown -R 70:70 pgdata && chmod 700 pgdata`。
 | 文件 | 内容 |
 |------|------|
 | `docker-compose.yml` | proxy / frontend / backend / backend-volume-init / [postgres] / docker-guard / updater / updater-gateway |
-| `.env` | 密钥、tag、`MYRIAD_DB_MODE`（勿提交） |
+| `.env` | 密钥、tag、`MYRIAD_DB_MODE`、Guard 插值项（勿提交） |
+| `docker-guard.env` | 宿主策略：digest 钉死的 `DOCKER_GUARD_IMAGE` + `GUARD_SELF_UPDATE_TOKEN`，放到 `/etc/myriad/` |
 | `<domain>.conf` | Nginx 类方式：外层整站反代到 proxy（含 ACME 本地挑战） |
 | `Caddyfile` | 仅 Caddy：自动 HTTPS + 整站 `reverse_proxy` |
 | `DEPLOY.md` | 启动、联邦与救援（含所选方式专章） |
@@ -63,7 +64,7 @@ DEPLOY：`chown -R 70:70 pgdata && chmod 700 pgdata`。
 | 模式 | 说明 |
 |------|------|
 | `bundled`（默认） | compose 含 `postgres` 服务、`./pgdata`、`depends_on: service_healthy`；`DATABASE_URL` 指向 `postgres:5432`；updater 可快照 pgdata |
-| `external` | **不**生成 `postgres` 服务；backend **不** `depends_on` postgres；`DATABASE_URL` 为用户外置库完整 URL；`DOCKER_GUARD_ALLOWED_IMAGES` 不含 `postgres`；不强制 `mkdir pgdata` / 不设 `UPDATER_PGDATA` |
+| `external` | **不**生成 `postgres` 服务；backend **不** `depends_on` postgres；`DATABASE_URL` 为用户外置库完整 URL；不强制 `mkdir pgdata` / 不设 `UPDATER_PGDATA` |
 
 外置库（1Panel 外部 DB、托管 Postgres 等）选 **外置 Postgres**，避免 updater 重启后再起内置库冲突。
 
@@ -81,7 +82,7 @@ DEPLOY：`chown -R 70:70 pgdata && chmod 700 pgdata`。
 
 - backend-volume-init 使用 `network_mode: none`
 - 仅 docker-guard 挂 sock；仅 proxy 映射宿主端口
-- `DOCKER_GUARD_ALLOWED_IMAGES` 须含 backend / frontend / **proxy** / updater；（bundled 时另含 postgres；漏 proxy 会导致 pull 403）
+- Guard 镜像必须是 `docker.io/somekawahitomi/myriad-updater@sha256:<64hex>`；策略文件在 `/etc/myriad/docker-guard.env`，不进编排目录
 - backend 只持 `UPDATER_GATEWAY_SECRET`，经 gateway 更新
 - backend-volume-init 会在 backend 启动前修复持久卷权限
 - 禁止 `:latest`
