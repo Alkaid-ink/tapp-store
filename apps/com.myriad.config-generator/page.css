@@ -166,6 +166,28 @@ html.dark #tapp-background {
   box-shadow: none;
 }
 
+.cg-ob__card::before {
+  content: '';
+  position: absolute;
+  z-index: 6;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: calc(var(--sob-top-h) + clamp(40px, 8vh, 96px));
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--sob-canvas) calc(48% + 44% * var(--sob-top-dense, 0)), transparent) 0%,
+    color-mix(in srgb, var(--sob-canvas) calc(24% + 40% * var(--sob-top-dense, 0)), transparent) 34%,
+    color-mix(in srgb, var(--sob-canvas) calc(8% + 24% * var(--sob-top-dense, 0)), transparent) 58%,
+    transparent 100%
+  );
+  backdrop-filter: blur(16px) saturate(1.18);
+  -webkit-backdrop-filter: blur(16px) saturate(1.18);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 42%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 42%, transparent 100%);
+}
+
 /* ---------- 顶栏 ---------- */
 
 .cg-ob-top {
@@ -180,30 +202,8 @@ html.dark #tapp-background {
   justify-content: space-between;
   gap: 12px;
   padding: calc(var(--sob-pad) - 6px) var(--sob-pad-x) 14px;
-  isolation: isolate;
+  overflow: visible;
   pointer-events: none;
-}
-
-.cg-ob-top::before {
-  content: '';
-  position: absolute;
-  z-index: 0;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: calc(100% + clamp(28px, 4.2vh, 48px));
-  pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    color-mix(in srgb, var(--sob-canvas) calc(48% + 44% * var(--sob-top-dense, 0)), transparent) 0%,
-    color-mix(in srgb, var(--sob-canvas) calc(24% + 40% * var(--sob-top-dense, 0)), transparent) 34%,
-    color-mix(in srgb, var(--sob-canvas) calc(8% + 24% * var(--sob-top-dense, 0)), transparent) 58%,
-    transparent 100%
-  );
-  backdrop-filter: blur(16px) saturate(1.18);
-  -webkit-backdrop-filter: blur(16px) saturate(1.18);
-  mask-image: linear-gradient(to bottom, #000 0%, #000 36%, transparent 82%);
-  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 36%, transparent 82%);
 }
 
 .cg-ob-top__side,
@@ -324,11 +324,13 @@ html.dark #tapp-background {
 
 .cg-ob__pane {
   position: relative;
+  display: flex;
   width: 100%;
   min-height: 0;
+  flex-direction: column;
   padding-top: var(--sob-top-h);
   padding-bottom: 76px;
-  overflow-y: auto;
+  overflow: hidden;
   overscroll-behavior: contain;
   grid-area: 1 / 1;
   scrollbar-width: thin;
@@ -361,8 +363,6 @@ html.dark #tapp-background {
 
 .cg-ob__pane.is-welcome {
   --sob-pad-x: clamp(26px, 4.6vw, 54px);
-  display: flex;
-  flex-direction: column;
 }
 
 .cg-ob-welcome {
@@ -371,7 +371,11 @@ html.dark #tapp-background {
   gap: 9px;
   width: 100%;
   max-width: none;
+  min-height: 0;
+  flex: 1 1 auto;
   margin: auto 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   text-align: left;
 }
 
@@ -408,8 +412,11 @@ html.dark #tapp-background {
 }
 
 .cg-ob-welcome .cg-ob-body {
+  flex: none;
   gap: 18px;
+  min-height: 0;
   padding-top: 26px;
+  overflow: visible;
 }
 
 .cg-ob-hero {
@@ -462,7 +469,11 @@ html.dark #tapp-background {
   gap: 14px;
   width: 100%;
   max-width: none;
+  min-height: 0;
+  flex: 1 1 auto;
   padding: 14px var(--sob-pad-x) 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   text-align: left;
 }
 
@@ -612,11 +623,12 @@ html.dark #tapp-background {
 
 .panel-mode-toggle.cg-choice {
   gap: 8px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .panel-mode-toggle .cg-choice__card {
-  min-height: 7.1rem;
-  padding: 0.85rem 0.85rem 0.9rem;
+  min-height: 0;
+  padding: 0.8rem 0.75rem 0.85rem;
 }
 
 .panel-mode-toggle .cg-choice__logo {
@@ -624,6 +636,10 @@ html.dark #tapp-background {
 }
 
 .panel-mode-toggle .cg-choice__desc {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
   font-size: 11.5px;
 }
 
@@ -691,6 +707,16 @@ html.dark #tapp-background {
 
 .cg-logo-cli {
   color: var(--sob-accent);
+}
+
+.cg-logo-dokploy {
+  color: #111827;
+}
+
+.dark .cg-logo-dokploy,
+html.dark .cg-logo-dokploy,
+body.dark .cg-logo-dokploy {
+  color: #f8fafc;
 }
 
 .cg-choice__card input {
@@ -1744,9 +1770,15 @@ select.form-select:not(.cg-select-native) {
   }
 }
 
-@media (width <= 900px) and (width > 640px) {
+@media (width <= 1180px) {
   .panel-mode-toggle.cg-choice {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (width <= 860px) {
+  .panel-mode-toggle.cg-choice {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -1761,6 +1793,10 @@ select.form-select:not(.cg-select-native) {
   .upload-group,
   .cg-ob-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .panel-mode-toggle.cg-choice {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .cg-ob-features > div {

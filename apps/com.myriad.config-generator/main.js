@@ -2717,6 +2717,14 @@ function unbindTopBarDense() {
   topBarScroll.fn = null;
 }
 
+function wizardScroller(pane) {
+  if (!pane) return null;
+  if (pane.classList.contains('is-welcome')) {
+    return pane.querySelector('.cg-ob-welcome') || pane;
+  }
+  return pane.querySelector(':scope > .cg-ob-body') || pane;
+}
+
 function bindTopBarDense(scroller) {
   var card = document.getElementById('cg-card');
   unbindTopBarDense();
@@ -2738,8 +2746,9 @@ function goWizard(next, dir) {
   wizardStep = next;
   renderWizardChrome(next, dir || 'fade');
   var pane = wizardPane(next);
-  if (pane) pane.scrollTop = 0;
-  bindTopBarDense(pane);
+  var scroller = wizardScroller(pane);
+  if (scroller) scroller.scrollTop = 0;
+  bindTopBarDense(scroller);
   if (next === 'site') syncSiteStepUi();
 }
 
