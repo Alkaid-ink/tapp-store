@@ -167,12 +167,31 @@ function packageRel(appId, fileRel) {
   return `apps/${appId}/${cleaned}`
 }
 
+function collectLayerJs(appId, layerDir) {
+  const base = join(appsDir, appId, layerDir)
+  if (!dirExists(base)) return []
+  const out = []
+  const walk = (dir) => {
+    for (const name of readdirSync(dir).sort()) {
+      const absolute = join(dir, name)
+      const stat = statSync(absolute)
+      if (stat.isDirectory()) walk(absolute)
+      else if (stat.isFile() && name.endsWith('.js')) {
+        out.push(relative(join(appsDir, appId), absolute).replaceAll('\\', '/'))
+      }
+    }
+  }
+  walk(base)
+  return out
+}
+
 function buildDownload(appId, manifest) {
-  const main = (manifest.main && String(manifest.main).trim()) || 'main.js'
+  const coreEntry = manifest.core?.entry && String(manifest.core.entry).trim()
+  if (!coreEntry) throw new Error(`${appId}: manifest.core.entry is required`)
   // Build in a stable key order matching historical catalog entries.
   const staged = {
     manifest: packageRel(appId, 'manifest.json'),
-    code: packageRel(appId, main),
+    code: packageRel(appId, coreEntry),
     readme: null,
     styles: null,
     widget_styles: null,
@@ -180,26 +199,20 @@ function buildDownload(appId, manifest) {
     page_template: null,
     widget_templates: null,
     i18n: null,
-    page_modules: null,
+    modules: null,
   }
 
   if (fileExists(packageRel(appId, 'README.md'))) {
     staged.readme = packageRel(appId, 'README.md')
   }
 
-  if (manifest.styles) staged.styles = packageRel(appId, manifest.styles)
-  if (manifest.widgetStyles) staged.widget_styles = packageRel(appId, manifest.widgetStyles)
+  if (manifest.core?.styles) staged.styles = packageRel(appId, manifest.core.styles)
+  const widgetStyles = [...new Set((manifest.widgets || []).map((widget) => widget?.styles).filter(Boolean))]
+  if (widgetStyles.length > 1) throw new Error(`${appId}: store supports one shared widget styles download`)
+  if (widgetStyles[0]) staged.widget_styles = packageRel(appId, widgetStyles[0])
 
-  if (manifest.pageStyles) {
-    staged.page_styles = packageRel(appId, manifest.pageStyles)
-  } else if (manifest.pageTemplate && manifest.styles) {
-    // unified cssMode: page still needs a stylesheet path for installers that read page_styles
-    staged.page_styles = packageRel(appId, manifest.styles)
-  }
-
-  if (manifest.pageTemplate) {
-    staged.page_template = packageRel(appId, manifest.pageTemplate)
-  }
+  if (manifest.page?.styles) staged.page_styles = packageRel(appId, manifest.page.styles)
+  if (manifest.page?.template) staged.page_template = packageRel(appId, manifest.page.template)
 
   if (Array.isArray(manifest.widgets) && manifest.widgets.length) {
     const widgetTemplates = {}
@@ -231,15 +244,15 @@ function buildDownload(appId, manifest) {
     if (Object.keys(i18n).length) staged.i18n = i18n
   }
 
-  if (Array.isArray(manifest.pageModules) && manifest.pageModules.length) {
-    const pageModules = {}
-    for (const mod of manifest.pageModules) {
-      const file = String(mod).replace(/^\/+/, '')
-      const base = file.split('/').pop()
-      pageModules[base] = packageRel(appId, file.includes('/') ? file : `page/${file}`)
-    }
-    staged.page_modules = pageModules
-  }
+  const entries = [
+    manifest.page?.entry,
+    ...(manifest.widgets || []).map((widget) => widget?.entry),
+    ...collectLayerJs(appId, 'page'),
+    ...collectLayerJs(appId, 'widget'),
+  ].filter(Boolean)
+  const modules = {}
+  for (const entry of new Set(entries)) modules[entry] = packageRel(appId, entry)
+  if (Object.keys(modules).length) staged.modules = modules
 
   const download = {}
   for (const [key, value] of Object.entries(staged)) {
@@ -298,10 +311,10 @@ function bootstrapPreview(appId, manifest) {
   const html = packageRel(appId, 'preview.html')
   if (!fileExists(html)) return undefined
   const styles = []
-  if (manifest.pageStyles && fileExists(packageRel(appId, manifest.pageStyles))) {
-    styles.push(packageRel(appId, manifest.pageStyles))
-  } else if (manifest.styles && fileExists(packageRel(appId, manifest.styles))) {
-    styles.push(packageRel(appId, manifest.styles))
+  if (manifest.page?.styles && fileExists(packageRel(appId, manifest.page.styles))) {
+    styles.push(packageRel(appId, manifest.page.styles))
+  } else if (manifest.core?.styles && fileExists(packageRel(appId, manifest.core.styles))) {
+    styles.push(packageRel(appId, manifest.core.styles))
   }
   if (fileExists(packageRel(appId, 'preview.css'))) {
     styles.push(packageRel(appId, 'preview.css'))
