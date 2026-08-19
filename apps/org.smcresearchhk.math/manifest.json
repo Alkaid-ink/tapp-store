@@ -1,7 +1,7 @@
 {
   "id": "org.smcresearchhk.math",
   "name": "函数图形计算器",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "minSystemVersion": "0.2.1",
   "description": "类似 GeoGebra 的函数绘图与交互式计算器，支持多函数叠加、坐标系缩放平移、常用函数库与表达式求值",
   "locales": {

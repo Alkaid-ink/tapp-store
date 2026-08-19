@@ -167,22 +167,65 @@ function packageRel(appId, fileRel) {
   return `apps/${appId}/${cleaned}`
 }
 
-function collectLayerJs(appId, layerDir) {
-  const base = join(appsDir, appId, layerDir)
-  if (!dirExists(base)) return []
-  const out = []
+function collectPackageJs(appId) {
+  const base = join(appsDir, appId)
+  const out = new Set()
   const walk = (dir) => {
     for (const name of readdirSync(dir).sort()) {
       const absolute = join(dir, name)
       const stat = statSync(absolute)
       if (stat.isDirectory()) walk(absolute)
       else if (stat.isFile() && name.endsWith('.js')) {
-        out.push(relative(join(appsDir, appId), absolute).replaceAll('\\', '/'))
+        out.add(relative(base, absolute).replaceAll('\\', '/'))
       }
     }
   }
   walk(base)
   return out
+}
+
+function resolveModuleRequest(fromModule, request, packageJs) {
+  const base = request.startsWith('/') ? '' : dirname(fromModule).replaceAll('\\', '/')
+  const source = request.startsWith('/')
+    ? request.slice(1)
+    : `${base === '.' ? '' : `${base}/`}${request}`
+  const resolved = []
+  for (const segment of source.split('/')) {
+    if (!segment || segment === '.') continue
+    if (segment === '..') {
+      if (!resolved.length) return null
+      resolved.pop()
+    } else {
+      resolved.push(segment)
+    }
+  }
+  const candidate = resolved.join('/')
+  if (packageJs.has(candidate)) return candidate
+  if (packageJs.has(`${candidate}.js`)) return `${candidate}.js`
+  return null
+}
+
+function collectModuleGraph(appId, entries) {
+  const packageJs = collectPackageJs(appId)
+  const included = new Set()
+  const queue = [...new Set(entries.filter(Boolean))]
+  const requirePattern = /\brequire\s*\(\s*(['"])([^'"]+)\1\s*\)/g
+  while (queue.length) {
+    const modulePath = queue.shift()
+    if (included.has(modulePath)) continue
+    if (!packageJs.has(modulePath)) throw new Error(`${appId}: missing module ${modulePath}`)
+    included.add(modulePath)
+    const source = readFileSync(join(appsDir, appId, modulePath), 'utf8')
+    requirePattern.lastIndex = 0
+    for (const match of source.matchAll(requirePattern)) {
+      const target = resolveModuleRequest(modulePath, match[2], packageJs)
+      if (!target) {
+        throw new Error(`${appId}: ${modulePath} requires missing module ${match[2]}`)
+      }
+      if (!included.has(target)) queue.push(target)
+    }
+  }
+  return [...included].sort()
 }
 
 function buildDownload(appId, manifest) {
@@ -245,13 +288,14 @@ function buildDownload(appId, manifest) {
   }
 
   const entries = [
+    coreEntry,
     manifest.page?.entry,
     ...(manifest.widgets || []).map((widget) => widget?.entry),
-    ...collectLayerJs(appId, 'page'),
-    ...collectLayerJs(appId, 'widget'),
-  ].filter(Boolean)
+  ]
   const modules = {}
-  for (const entry of new Set(entries)) modules[entry] = packageRel(appId, entry)
+  for (const entry of collectModuleGraph(appId, entries)) {
+    if (entry !== coreEntry) modules[entry] = packageRel(appId, entry)
+  }
   if (Object.keys(modules).length) staged.modules = modules
 
   const download = {}
