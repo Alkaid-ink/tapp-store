@@ -1,10 +1,10 @@
 {
   "$schema": "https://myriad.you/schemas/tapp-store-v1.json",
   "name": "Myriad Official Tapp Store",
-  "version": "1.0.35",
+  "version": "1.0.36",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-08-19T11:38:29.448Z",
+  "updated_at": "2026-08-20T15:19:12.995Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.you",
@@ -1616,6 +1616,73 @@
       "verified": true,
       "created_at": "2026-08-14T09:55:45.239Z",
       "updated_at": "2026-08-19T11:26:32.406Z"
+    },
+    {
+      "id": "top.360nenz.metro-guide",
+      "name": "地铁通",
+      "version": "1.3.16",
+      "description": "按城市查询地铁线路、站点与少换乘出行方案。",
+      "long_description": "地铁通提供中文路线规划、站点线路筛选与高清线路图。应用覆盖 MetroMan 55 城市目录，优先使用缓存和离线资源；新版及旧版规划均可展示车辆起止时间、用时、票价、方向与里程，行程轴支持精简站数与完整站点切换。收藏路线页可按城市筛选、一键查询、反向和删除。线路图支持滚轮缩放和拖动，上海另含参考 APK 中的 PDF。联网时直接从 MetroMan 检查更新，并明确显示连接或权限错误。MetroMan 的线路图、线路数据和参考 PDF 属于外部资源，不包含在本项目 MIT 代码许可内。",
+      "author": {
+        "name": "360NENZ",
+        "url": "https://github.com/360NENZ"
+      },
+      "license": "MIT（代码；MetroMan 外部资源除外）",
+      "homepage": "https://myriad.360nenz.top/",
+      "repository": "https://github.com/360NENZ/tapp-store",
+      "category": "utility",
+      "tags": [
+        "地铁",
+        "线路查询",
+        "线路图",
+        "换乘",
+        "出行",
+        "离线",
+        "中文"
+      ],
+      "permissions": [
+        "storage:read",
+        "storage:write",
+        "ui:notification",
+        "ui:openUrl",
+        "network:fetch"
+      ],
+      "icon_svg": "<svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M5 4h14v11a7 7 0 0 1-14 0V4Z' stroke='currentColor' stroke-width='1.8'/><path d='M8 8h8M8 12h8M8 20l-2 2M16 20l2 2' stroke='currentColor' stroke-width='1.8' stroke-linecap='round'/><circle cx='9' cy='16' r='1' fill='currentColor'/><circle cx='15' cy='16' r='1' fill='currentColor'/></svg>",
+      "theme_color": "#0F766E",
+      "screenshots": [],
+      "preview": {
+        "version": 1,
+        "type": "snapshot",
+        "html": "apps/top.360nenz.metro-guide/preview.html",
+        "styles": [
+          "apps/top.360nenz.metro-guide/page.css",
+          "apps/top.360nenz.metro-guide/preview.css"
+        ],
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "fit": "cover",
+        "focus": {
+          "x": 0.5,
+          "y": 0.45
+        },
+        "theme": "light"
+      },
+      "download": {
+        "manifest": "apps/top.360nenz.metro-guide/manifest.json",
+        "code": "apps/top.360nenz.metro-guide/main.js",
+        "readme": "apps/top.360nenz.metro-guide/README.md",
+        "page_styles": "apps/top.360nenz.metro-guide/page.css",
+        "page_template": "apps/top.360nenz.metro-guide/page.html"
+      },
+      "size": 1259970,
+      "downloads": 0,
+      "rating": 0,
+      "featured": false,
+      "verified": false,
+      "created_at": "2026-08-20T15:19:12.995Z",
+      "updated_at": "2026-08-20T15:19:12.995Z"
     }
   ],
   "last_updated": "2026-08-04T09:47:35Z"
