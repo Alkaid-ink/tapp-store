@@ -1,10 +1,10 @@
 {
   "$schema": "https://myriad.you/schemas/tapp-store-v1.json",
   "name": "Myriad Official Tapp Store",
-  "version": "1.0.42",
+  "version": "1.0.43",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-08-21T05:53:26.933Z",
+  "updated_at": "2026-08-21T07:37:43.563Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.you",
@@ -1684,6 +1684,94 @@
       "verified": false,
       "created_at": "2026-08-20T15:19:12.995Z",
       "updated_at": "2026-08-20T15:19:12.995Z"
+    },
+    {
+      "id": "cn.echootaku.sponsors",
+      "name": "赞助者名单",
+      "version": "0.1.18",
+      "description": "聚合多个赞助平台的支持者，在一个私密仪表盘中查看。",
+      "long_description": "面向创作者的私密赞助者聚合仪表盘。提供深空观测站与传统名册双视图：每位支持者是一颗具有自然色温的恒星，同币种内累计赞助越高越明亮，当前支持金额决定大小；可缩放星图、调整景深并查看支持者的观测档案。2×2、4×2 与 4×4 小组件采用天文台观测日志设计，只读已同步的私有快照，在主页展示赞助者数量、分币种月度支持、代表星体和静态星图。通过 Myriad 只写凭据与声明式网络 API 接入 GitHub Sponsors、Patreon 和爱发电；各平台可独立隐藏并停止同步，已有快照不会因此删除。",
+      "locales": {
+        "en-US": {
+          "name": "Sponsor Roster",
+          "description": "Review supporters from multiple funding platforms in one private dashboard."
+        },
+        "ja-JP": {
+          "name": "スポンサー名簿",
+          "description": "複数の支援プラットフォームのサポーターを非公開ダッシュボードで確認します。"
+        }
+      },
+      "author": {
+        "name": "EchoOtaku",
+        "url": "https://echootaku.cn"
+      },
+      "license": "MIT",
+      "homepage": "https://echootaku.cn",
+      "repository": "https://github.com/Myriad-You/tapp-store",
+      "category": "social",
+      "tags": [
+        "赞助",
+        "GitHub Sponsors",
+        "Patreon",
+        "爱发电",
+        "创作者"
+      ],
+      "permissions": [
+        "storage:read",
+        "storage:write",
+        "network:fetch",
+        "ui:openUrl",
+        "ui:theme",
+        "widget:register"
+      ],
+      "icon_svg": "<svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M12 20.5S4 16 4 9.5A4.5 4.5 0 0 1 12 6.7a4.5 4.5 0 0 1 8 2.8c0 6.5-8 11-8 11Z' stroke='currentColor' stroke-width='1.8' stroke-linejoin='round'/><path d='M8.5 11.5h7M12 8v7' stroke='currentColor' stroke-width='1.6' stroke-linecap='round'/></svg>",
+      "theme_color": "#C06C58",
+      "screenshots": [],
+      "preview": {
+        "version": 1,
+        "type": "snapshot",
+        "html": "apps/cn.echootaku.sponsors/preview.html",
+        "styles": [
+          "apps/cn.echootaku.sponsors/page.css",
+          "apps/cn.echootaku.sponsors/preview.css"
+        ],
+        "viewport": {
+          "width": 1280,
+          "height": 800
+        },
+        "fit": "cover",
+        "focus": {
+          "x": 0.5,
+          "y": 0.45
+        },
+        "theme": "dark"
+      },
+      "download": {
+        "manifest": "apps/cn.echootaku.sponsors/manifest.json",
+        "code": "apps/cn.echootaku.sponsors/main.js",
+        "widget_styles": "apps/cn.echootaku.sponsors/widget.css",
+        "page_styles": "apps/cn.echootaku.sponsors/page.css",
+        "page_template": "apps/cn.echootaku.sponsors/page.html",
+        "widget_templates": {
+          "sponsor-glance": {
+            "2x2": "apps/cn.echootaku.sponsors/widget-2x2.html",
+            "4x2": "apps/cn.echootaku.sponsors/widget-4x2.html",
+            "4x4": "apps/cn.echootaku.sponsors/widget-4x4.html"
+          }
+        },
+        "i18n": {
+          "en-US": "apps/cn.echootaku.sponsors/i18n/en-US.json",
+          "ja-JP": "apps/cn.echootaku.sponsors/i18n/ja-JP.json",
+          "zh-CN": "apps/cn.echootaku.sponsors/i18n/zh-CN.json"
+        }
+      },
+      "size": 3657504,
+      "downloads": 0,
+      "rating": 0,
+      "featured": false,
+      "verified": false,
+      "created_at": "2026-08-21T07:37:43.563Z",
+      "updated_at": "2026-08-21T07:37:43.563Z"
     }
   ],
   "last_updated": "2026-08-04T09:47:35Z"
