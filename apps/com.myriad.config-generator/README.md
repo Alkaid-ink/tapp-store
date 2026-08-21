@@ -4,11 +4,12 @@
 
 ## 版本
 
-`1.0.1`
+`1.0.3`
 
 ## 安全
 
-- **密钥白名单**：`JWT_SECRET` / `UPDATE_TOKEN` / `UPDATER_GATEWAY_SECRET` / `MYRIAD_SETUP_SECRET`（及 bundled `POSTGRES_PASSWORD`）须匹配 `[A-Za-z0-9_-]{32,512}`；拒绝 CR/LF/NUL、`#`、`=`、空白，避免未加引号 `.env` 注入。
+- **密钥白名单**：`JWT_SECRET` / `UPDATE_TOKEN` / `UPDATER_GATEWAY_SECRET` / `MYRIAD_SETUP_SECRET` / `ANALYTICS_SALT`（及 bundled `POSTGRES_PASSWORD`）须匹配 `[A-Za-z0-9_-]{32,512}`；拒绝 CR/LF/NUL、`#`、`=`、空白，避免未加引号 `.env` 注入。
+- **访客统计盐**：自动生成 32 字节 hex 写入 `ANALYTICS_SALT`，并注入 backend；勿与 JWT 混用。
 - **安装暗号**：`MYRIAD_SETUP_SECRET` 写入 `.env` 并注入 backend。生成页和结果区都会提醒先复制，首次向导创建所有者必须对上。
 - **生成后自检**：对产物再 `parseDotenvStrict`，校验密钥一致、期望键齐全、`PROXY_ALLOW_DIRECT_UPDATER=false` 仅一次。
 - **Nginx 上传**：≤512KB、`.conf`/文本、拒 NUL。
