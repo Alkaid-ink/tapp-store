@@ -2,11 +2,14 @@
 
 社交中心：消息（Channel/Room）、时间线、环网与个人资料。
 
-> 官方社交 Tapp（version 1.1.0，需 Myriad ≥ v0.3.36）。设置页含出站投递队列与联邦签名密钥轮换（需宿主 `federation.rotateKeys`）。
+> 官方社交 Tapp（version 1.1.1，需 Myriad ≥ v0.3.36）。设置页含出站投递队列与联邦签名密钥轮换（需宿主 `federation.rotateKeys`）。
 
 ## 功能
 
 - 联邦消息 / 房间 / 关注 / 时间线 / 环网
+- **首页 = 群邻时间线**：本实例加入的每个群聊里，出现过的每个实例的每个用户的公开帖，
+  按实例算而不是按成员算（需宿主 `federation.getRoomsFeed`，Myriad ≥ v0.3.38）；
+  **订阅** 页是原来的首页，即关注对象的时间线
 - 聊天输入区 **表情/贴纸**：群共享贴纸包（宿主 `addRoomSticker` / `removeRoomSticker`，Myriad ≥ v0.3.14）+ 本机「我的」贴纸
 - 出站投递列表：刷新 / 单项取消·重试 / 全部取消·重试失败
 - 联邦签名密钥显式轮换（确认后 `rotateKeys(true)`）
@@ -28,6 +31,16 @@
 > 为 **elevated**；已安装实例更新时需重新授权该权限（否则只保留旧 granted 交集）。
 
 ## Changelog
+
+### 1.1.1
+
+- 首页改为**群邻时间线**：本实例加入的每个群聊中，出现过的每个实例的每个用户的
+  公开帖都在这里，去重后按时间倒序。范围按**实例**算 —— 三个实例同处一个群，三边
+  首页看到的是同一批人，包括从没在群里发过言的用户和本站用户。
+- 新增左栏 **订阅** 页，承接原首页语义（关注对象的时间线，`getFeed` / `getTimeline`）。
+  「显示转发」开关现在同时作用于首页与订阅。
+- 宿主未提供 `federation.getRoomsFeed`（Myriad < v0.3.38）时首页回退到 `getFeed`，
+  不会空白。
 
 ### 1.1.0
 
@@ -149,6 +162,7 @@
 | External share (1.0.8) | `federation.composeExternalShare(req)` | `federation:read` | Myriad PR #225 — X Web Intent only |
 | Share status (optional) | `federation.getExternalShareStatus()` | `federation:read` | Same PR; mode=`intent`, `can_post=false` |
 | Room stickers (1.0.29) | `federation.addRoomSticker` / `removeRoomSticker` | `federation:room` | Myriad ≥ v0.3.14; pack in `shared_data_config.stickers` |
+| Home = room peers (1.1.1) | `federation.getRoomsFeed()` | `federation:read` | Myriad ≥ v0.3.38; falls back to `getFeed` when absent |
 
 If `composeExternalShare` is missing, Aro falls back to a local `https://x.com/intent/tweet` URL. **Myriad never posts to X server-side.**
 
@@ -161,7 +175,7 @@ page/index.js        # page 层入口：按依赖顺序 require 同层文件，�
 page/scope.js        # 层内共享作用域（把跨文件的名字挂回沙箱全局）
 page/*.js            # UI 真源，由 page/index.js 的 require 闭包拉入
 i18n/{zh,en,ja}.json
-manifest.json        # version 1.1.0
+manifest.json        # version 1.1.1
 ```
 
 层入口由 manifest 的 `core.entry` / `page.entry` 声明；层内其余文件不进 manifest，

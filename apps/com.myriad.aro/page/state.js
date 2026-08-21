@@ -68,6 +68,7 @@ var state = {
   feedError: null,
   feedLoaded: {
     timeline: false,
+    subscribed: false,
     following: false,
     followers: false,
     published: false,
@@ -81,7 +82,10 @@ var state = {
     autoE2eOnOpen: true,
     whoCanMessage: 'everyone',
   },
+  /** Home: posts from every instance sharing a group chat this one joined. */
   timeline: [],
+  /** Subscribed: posts from people you follow (the personal federation timeline). */
+  subscribed: [],
   following: [],
   followers: [],
   published: [],
