@@ -1256,10 +1256,6 @@ services:
       MYRIAD_MEMORY_PROFILE: \${MYRIAD_MEMORY_PROFILE:-default}
       MYRIAD_UPDATER_URL: http://updater-gateway:1104
       UPDATER_GATEWAY_SECRET: \${UPDATER_GATEWAY_SECRET}
-      YOUTUBE_API_KEY: \${YOUTUBE_API_KEY:-}
-      YOUTUBE_CHANNEL_ID: \${YOUTUBE_CHANNEL_ID:-}
-      OPENXBL_API_KEY: \${OPENXBL_API_KEY:-}
-      PSN_NPSSO: \${PSN_NPSSO:-}
     depends_on:
 {{BACKEND_DEPENDS_ON}}
     healthcheck:
@@ -1293,7 +1289,6 @@ services:
           cpus: '0.25'
           memory: 256M
     environment:
-      PUBLIC_API_URL: \${PUBLIC_API_URL:-}
       NODE_ENV: production
       TZ: Asia/Shanghai
     depends_on:
@@ -1549,17 +1544,11 @@ MYRIAD_SETUP_SECRET={{MYRIAD_SETUP_SECRET}}
 ANALYTICS_SALT={{ANALYTICS_SALT}}
 TAPP_STORE_STATS_URL=https://stats.store.myriad.you
 TAPP_STORE_STATS_ENABLED=true
-# Optional platform keys — compose forwards nonempty values into backend.
-# YOUTUBE_API_KEY=
-# YOUTUBE_CHANNEL_ID=
-# OPENXBL_API_KEY=
-# PSN_NPSSO=
 
 CORS_ORIGINS={{CORS_ORIGINS}}
 # BASE_URL / FRONTEND_URL = public HTTPS origin (required for federation Actor URLs)
 BASE_URL=https://{{MAIN_DOMAIN}}
 FRONTEND_URL=https://{{MAIN_DOMAIN}}
-PUBLIC_API_URL=
 # RUST_LOG=info
 `;
 
