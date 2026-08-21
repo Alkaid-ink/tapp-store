@@ -1,10 +1,10 @@
 {
   "$schema": "https://myriad.you/schemas/tapp-store-v1.json",
   "name": "Myriad Official Tapp Store",
-  "version": "1.0.37",
+  "version": "1.0.38",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-08-21T04:09:43.044Z",
+  "updated_at": "2026-08-21T04:37:50.469Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.you",
@@ -526,7 +526,7 @@
       "locales": {
         "en-US": {
           "description": "Social hub for messages, timeline, ring network and profile in one place",
-          "long_description": "1.1.0 migrates Aro to the declared layer package format: `core` contains only the headless notification poll, `page` uses a static `require` closure, direct Tapp shares carry `modules`, and the manifest requests the split storage and federation permissions. The duplicate styles.css is gone. Requires Myriad 0.3.36 or newer.\n\nAro is the official Myriad social hub: federated direct messages and group rooms, a timeline, the ring network, and your profile in one place. Messenger covers Channel / Room chats, end-to-end encryption, shared and personal sticker packs, emoji, attachments (images, files, Tapps, Brew, library, and reports), @mentions, pins, forwards, and background new-message notifications. The timeline supports posts, quote-reposts, bookmarks, and follows; rings connect instance directories, Brew picks, library exchange, and Tapp store peers. Settings show the outbound delivery queue (cancel / retry) and can rotate federation signing keys. Chat history can be exported or imported as a local JSON backup. The UI follows Chinese, English, and Japanese, plus the host light/dark theme.",
+          "long_description": "Aro is the official Myriad social hub: federated direct messages and group rooms, a timeline, the ring network, and your profile in one place. Messenger covers Channel / Room chats, end-to-end encryption, shared and personal sticker packs, emoji, attachments (images, files, Tapps, Brew, library, and reports), @mentions, pins, forwards, and background new-message notifications. The timeline supports posts, quote-reposts, bookmarks, and follows; rings connect instance directories, Brew picks, library exchange, and Tapp store peers. Settings show the outbound delivery queue (cancel / retry) and can rotate federation signing keys. Chat history can be exported or imported as a local JSON backup. The UI follows Chinese, English, and Japanese, plus the host light/dark theme.",
           "preview": {
             "version": 1,
             "type": "snapshot",
