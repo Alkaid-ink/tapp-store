@@ -1,3 +1,5 @@
+var share = require('./scope.js');
+
 // ==================== Feed View (merged Timeline + Profile) ====================
 async function loadFeed() {
   renderFederationIdentity();
@@ -2857,3 +2859,25 @@ function bindEvents() {
   if (typeof registerMsgMenuOutsideGuards === 'function') registerMsgMenuOutsideGuards();
 }
 
+
+// ==================== Shared scope ====================
+// Republish the names this file's siblings read. See page/scope.js.
+share.value({
+  applyQuoteRepostLabels: applyQuoteRepostLabels,
+  bindEvents: bindEvents,
+  extractPublishTarget: extractPublishTarget,
+  getFeedEmptyText: getFeedEmptyText,
+  getFeedEmptyTitle: getFeedEmptyTitle,
+  getFeedTitle: getFeedTitle,
+  isActorInFollowing: isActorInFollowing,
+  isOwnTimelineItem: isOwnTimelineItem,
+  loadFeed: loadFeed,
+  loadFeedSubTab: loadFeedSubTab,
+  looksLikeBareUrl: looksLikeBareUrl,
+  renderFeedContent: renderFeedContent,
+  renderQuotedObjectHtml: renderQuotedObjectHtml,
+  resolveObjectId: resolveObjectId,
+  switchFeedSubTab: switchFeedSubTab,
+  updateFeedHeader: updateFeedHeader,
+  updateFeedProfileHeader: updateFeedProfileHeader,
+});

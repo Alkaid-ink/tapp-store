@@ -1,10 +1,10 @@
 {
   "$schema": "https://myriad.you/schemas/tapp-store-v1.json",
   "name": "Myriad Official Tapp Store",
-  "version": "1.0.36",
+  "version": "1.0.37",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-08-20T15:19:12.995Z",
+  "updated_at": "2026-08-21T04:09:43.044Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.you",
@@ -520,13 +520,13 @@
     {
       "id": "com.myriad.aro",
       "name": "Aro",
-      "version": "1.0.59",
+      "version": "1.1.0",
       "description": "社交中心，统一管理消息、时间线、环网与个人资料",
       "long_description": "Aro 是 Myriad 官方社交中心，把联邦私信与群聊、时间线、环网和个人资料收在同一处。信使支持 Channel / Room、端到端加密、群共享与本机贴纸包、表情、附件（图片、文件、Tapp、Brew、资料库与报告）、@ 提及、置顶与转发，以及后台轮询新消息通知。时间线可发帖、引用转发、收藏与关注；环网用于实例目录、Brew 推荐、资料交换和 Tapp 商店等节点协作。设置页可查看出站投递队列（取消 / 重试）并轮换联邦签名密钥。聊天记录可在本机导出或导入 JSON 备份。界面支持中英日与宿主明暗主题。",
       "locales": {
         "en-US": {
           "description": "Social hub for messages, timeline, ring network and profile in one place",
-          "long_description": "Aro is the official Myriad social hub: federated direct messages and group rooms, a timeline, the ring network, and your profile in one place. Messenger covers Channel / Room chats, end-to-end encryption, shared and personal sticker packs, emoji, attachments (images, files, Tapps, Brew, library, and reports), @mentions, pins, forwards, and background new-message notifications. The timeline supports posts, quote-reposts, bookmarks, and follows; rings connect instance directories, Brew picks, library exchange, and Tapp store peers. Settings show the outbound delivery queue (cancel / retry) and can rotate federation signing keys. Chat history can be exported or imported as a local JSON backup. The UI follows Chinese, English, and Japanese, plus the host light/dark theme.",
+          "long_description": "1.1.0 migrates Aro to the declared layer package format: `core` contains only the headless notification poll, `page` uses a static `require` closure, direct Tapp shares carry `modules`, and the manifest requests the split storage and federation permissions. The duplicate styles.css is gone. Requires Myriad 0.3.36 or newer.\n\nAro is the official Myriad social hub: federated direct messages and group rooms, a timeline, the ring network, and your profile in one place. Messenger covers Channel / Room chats, end-to-end encryption, shared and personal sticker packs, emoji, attachments (images, files, Tapps, Brew, library, and reports), @mentions, pins, forwards, and background new-message notifications. The timeline supports posts, quote-reposts, bookmarks, and follows; rings connect instance directories, Brew picks, library exchange, and Tapp store peers. Settings show the outbound delivery queue (cancel / retry) and can rotate federation signing keys. Chat history can be exported or imported as a local JSON backup. The UI follows Chinese, English, and Japanese, plus the host light/dark theme.",
           "preview": {
             "version": 1,
             "type": "snapshot",
@@ -591,9 +591,12 @@
         "storage:read",
         "storage:write",
         "ui:notification",
-        "ui:theme",
         "federation:read",
-        "federation:write",
+        "federation:interact",
+        "federation:post",
+        "federation:channel",
+        "federation:room",
+        "federation:ring",
         "federation:message",
         "federation:files",
         "platform:read",
@@ -602,7 +605,6 @@
         "tappList:manage",
         "brew:read",
         "media:control",
-        "media:read",
         "network:fetch"
       ],
       "icon_svg": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M2 12h20\"/><path d=\"M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z\"/></svg>",
@@ -629,9 +631,8 @@
       },
       "download": {
         "manifest": "apps/com.myriad.aro/manifest.json",
-        "code": "apps/com.myriad.aro/index.js",
+        "code": "apps/com.myriad.aro/core.js",
         "readme": "apps/com.myriad.aro/README.md",
-        "styles": "apps/com.myriad.aro/styles.css",
         "page_styles": "apps/com.myriad.aro/page.css",
         "page_template": "apps/com.myriad.aro/page.html",
         "i18n": {
@@ -645,7 +646,6 @@
           "page/chat.js": "apps/com.myriad.aro/page/chat.js",
           "page/createUi.js": "apps/com.myriad.aro/page/createUi.js",
           "page/e2eUi.js": "apps/com.myriad.aro/page/e2eUi.js",
-          "page/entry.js": "apps/com.myriad.aro/page/entry.js",
           "page/events.js": "apps/com.myriad.aro/page/events.js",
           "page/feedCompose.js": "apps/com.myriad.aro/page/feedCompose.js",
           "page/feedUi.js": "apps/com.myriad.aro/page/feedUi.js",
@@ -660,18 +660,19 @@
           "page/msgUi.js": "apps/com.myriad.aro/page/msgUi.js",
           "page/ringsUi.js": "apps/com.myriad.aro/page/ringsUi.js",
           "page/roomUi.js": "apps/com.myriad.aro/page/roomUi.js",
+          "page/scope.js": "apps/com.myriad.aro/page/scope.js",
           "page/shareUi.js": "apps/com.myriad.aro/page/shareUi.js",
           "page/state.js": "apps/com.myriad.aro/page/state.js",
           "page/views.js": "apps/com.myriad.aro/page/views.js"
         }
       },
-      "size": 1412794,
+      "size": 1223112,
       "downloads": 0,
       "rating": 0,
       "featured": true,
       "verified": true,
       "created_at": "2025-12-01T00:00:00Z",
-      "updated_at": "2026-08-19T11:26:32.391Z"
+      "updated_at": "2026-08-21T04:09:43.043Z"
     },
     {
       "id": "cn.wyyzxzyg.cdn-cache",
