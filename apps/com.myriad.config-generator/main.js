@@ -1748,7 +1748,7 @@ docker exec myriad-updater myriad-rescue exit-maintenance --force
 ## 版本
 
 MYRIAD_TAG={{MYRIAD_TAG}} · PROXY_TAG={{PROXY_TAG}} · UPDATER_TAG={{UPDATER_TAG}}  
-禁止 \`:latest\`。生产建议 pin digest：tag 填 \`vX.Y.Z@sha256:<64hex>\`，生成器会写入完整 image 引用。
+禁止 \`:latest\`。TCB 以 \`.env\` 的 \`UPDATER_IMAGE_REF\` digest 为准，不要把 \`UPDATER_TAG\` 当成正在运行的更新器。生成器会写入完整 image 引用。
 
 ## 生成后自检（务必）
 
