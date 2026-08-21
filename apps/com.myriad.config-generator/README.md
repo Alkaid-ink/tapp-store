@@ -87,6 +87,9 @@ DEPLOY：`chown -R 70:70 pgdata && chmod 700 pgdata`。
 - backend 只持 `UPDATER_GATEWAY_SECRET`，经 gateway 更新
 - backend-volume-init 会在 backend 启动前修复持久卷权限
 - 禁止 `:latest`
+- 容器身份来自镜像 `ENV`，compose 不以 `MYRIAD_TAG` / `PROXY_TAG` / `UPDATER_TAG` 覆盖 `MYRIAD_VERSION`
+- 不注入 YouTube / OpenXBL / PSN；平台密钥走站点配置
+- 不注入 `PUBLIC_API_URL`（前端构建期打进相对 `/api`）
 
 ## 联邦 / Federation
 
