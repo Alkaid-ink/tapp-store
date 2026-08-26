@@ -1,10 +1,10 @@
 {
   "$schema": "https://myriad.you/schemas/tapp-store-v1.json",
   "name": "Myriad Official Tapp Store",
-  "version": "1.0.48",
+  "version": "1.0.49",
   "api_version": "2",
   "base_url": "https://raw.githubusercontent.com/Myriad-You/tapp-store/main",
-  "updated_at": "2026-08-24T11:33:10.642Z",
+  "updated_at": "2026-08-26T00:55:42.920Z",
   "maintainer": {
     "name": "Myriad Team",
     "email": "tapp@myriad.you",
@@ -1776,6 +1776,99 @@
       "verified": false,
       "created_at": "2026-08-21T07:37:43.563Z",
       "updated_at": "2026-08-21T07:37:43.563Z"
+    },
+    {
+      "id": "cn.echootaku.echo-stage",
+      "name": "回声剧场",
+      "version": "0.1.4",
+      "description": "安全加载本地视觉小说，并用 Myriad AI 创作、绘制与试玩自己的分支故事",
+      "long_description": "回声剧场是一套运行在 Myriad 沙箱中的声明式网页视觉小说启动器与创作工房。它安全读取 game.json、.echo 剧本和用户选择的本地媒体，不执行游戏目录中的任意代码；支持背景、对白、分支、变量、BGM、回看、自动播放、独立存档与 Myriad 宿主自动配音。余响工房可调用受治理的 Myriad AI 生成结构化故事和 16:9 场景图，并在本地解释器检查后立即试玩。应用附带《离岸之前》和《没有寄出的星图》两个明确标注的示例项目。",
+      "locales": {
+        "en-US": {
+          "name": "Echo Stage",
+          "description": "Load local visual novels and use Myriad AI to write, illustrate, and play branching stories",
+          "long_description": "Echo Stage is a sandboxed visual-novel launcher and creation workshop for Myriad. It reads game.json, declarative .echo scripts, and user-selected local media without executing arbitrary game-folder code. It supports branching stories, BGM, backlog, autoplay, isolated saves, and optional Myriad-hosted character dubbing. The Resonance Workshop can generate structured drafts and 16:9 scenes through governed Myriad AI tasks, validate them locally, and play them immediately. Two clearly labeled sample projects are included."
+        },
+        "ja-JP": {
+          "name": "エコーステージ",
+          "description": "ローカル作品を再生し、Myriad AI で分岐物語の執筆・作画・試演を行う",
+          "long_description": "エコーステージは Myriad 上で動くサンドボックス型ビジュアルノベルランチャー兼創作工房です。game.json、宣言型 .echo シナリオ、ユーザーが選んだローカル素材を読み込み、ゲームフォルダー内の任意コードは実行しません。分岐、BGM、履歴、自動再生、作品別セーブ、Myriad ホスト音声による任意の自動読み上げに対応します。余響工房では、管理された Myriad AI タスクで構造化された物語と 16:9 シーンを生成し、ローカル検証後すぐに試演できます。2本のサンプル作品を収録しています。"
+        }
+      },
+      "author": {
+        "name": "EchoOtaku",
+        "url": "https://github.com/EchoOtaku"
+      },
+      "license": "MIT",
+      "homepage": "https://github.com/Myriad-You/tapp-store/tree/main/apps/cn.echootaku.echo-stage",
+      "repository": "https://github.com/Myriad-You/tapp-store",
+      "category": "game",
+      "tags": [
+        "视觉小说",
+        "Galgame",
+        "本地播放器",
+        "分支剧情",
+        "AI 创作",
+        "自动配音"
+      ],
+      "permissions": [
+        "storage:read",
+        "storage:write",
+        "media:audio",
+        "speech:tts",
+        "ui:notification",
+        "ui:theme",
+        "ai:generate",
+        "ai:image"
+      ],
+      "icon_svg": "<svg viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'><path d='M4 5.5A2.5 2.5 0 0 1 6.5 3H18a2 2 0 0 1 2 2v12.5a2.5 2.5 0 0 1-2.5 2.5H6.8A2.8 2.8 0 0 1 4 17.2V5.5Z' stroke='currentColor' stroke-width='1.8'/><path d='M8 8h8M8 12h5M8 16h7' stroke='currentColor' stroke-width='1.8' stroke-linecap='round'/><path d='m17 3-1 4 4-1' stroke='currentColor' stroke-width='1.6' stroke-linejoin='round'/></svg>",
+      "theme_color": "#315d75",
+      "screenshots": [],
+      "preview": {
+        "version": 1,
+        "type": "snapshot",
+        "html": "apps/cn.echootaku.echo-stage/preview.html",
+        "styles": [
+          "apps/cn.echootaku.echo-stage/page.css",
+          "apps/cn.echootaku.echo-stage/preview.css"
+        ],
+        "viewport": {
+          "width": 1440,
+          "height": 900
+        },
+        "fit": "cover",
+        "focus": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "theme": "dark"
+      },
+      "download": {
+        "manifest": "apps/cn.echootaku.echo-stage/manifest.json",
+        "code": "apps/cn.echootaku.echo-stage/main.js",
+        "readme": "apps/cn.echootaku.echo-stage/README.md",
+        "page_styles": "apps/cn.echootaku.echo-stage/page.css",
+        "page_template": "apps/cn.echootaku.echo-stage/page.html",
+        "i18n": {
+          "en-US": "apps/cn.echootaku.echo-stage/i18n/en-US.json",
+          "ja-JP": "apps/cn.echootaku.echo-stage/i18n/ja-JP.json",
+          "zh-CN": "apps/cn.echootaku.echo-stage/i18n/zh-CN.json"
+        },
+        "modules": {
+          "page/demo-archive.js": "apps/cn.echootaku.echo-stage/page/demo-archive.js",
+          "page/editor.js": "apps/cn.echootaku.echo-stage/page/editor.js",
+          "page/engine.js": "apps/cn.echootaku.echo-stage/page/engine.js",
+          "page/index.js": "apps/cn.echootaku.echo-stage/page/index.js",
+          "page/player.js": "apps/cn.echootaku.echo-stage/page/player.js"
+        }
+      },
+      "size": 14737452,
+      "downloads": 0,
+      "rating": 0,
+      "featured": false,
+      "verified": false,
+      "created_at": "2026-08-26T00:55:42.920Z",
+      "updated_at": "2026-08-26T00:55:42.920Z"
     }
   ],
   "last_updated": "2026-08-04T09:47:35Z"
