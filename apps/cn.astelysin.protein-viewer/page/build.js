@@ -72,7 +72,7 @@ function setBondMatrix(mesh, index, x1, y1, z1, x2, y2, z2, radius) {
 
 // colorFor(atom, index) -> 0xRRGGBB
 function makeSpacefill(atoms, colorFor) {
-  var mesh = new THREE.InstancedMesh(getAtomGeom(), new THREE.MeshStandardMaterial(), atoms.length);
+  var mesh = new THREE.InstancedMesh(getAtomGeom(), new THREE.MeshStandardMaterial({ vertexColors: true }), atoms.length);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   for (var i = 0; i < atoms.length; i++) {
     var a = atoms[i];
@@ -86,7 +86,7 @@ function makeSpacefill(atoms, colorFor) {
 // colorFor(atom, index) -> 0xRRGGBB
 function makeBallStick(atoms, bonds, colorFor, atomRadiusFactor) {
   var factor = atomRadiusFactor === undefined ? 0.34 : atomRadiusFactor;
-  var atomMesh = new THREE.InstancedMesh(getAtomGeom(), new THREE.MeshStandardMaterial(), atoms.length);
+  var atomMesh = new THREE.InstancedMesh(getAtomGeom(), new THREE.MeshStandardMaterial({ vertexColors: true }), atoms.length);
   atomMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   for (var i = 0; i < atoms.length; i++) {
     var a = atoms[i];
@@ -95,7 +95,7 @@ function makeBallStick(atoms, bonds, colorFor, atomRadiusFactor) {
   }
   atomMesh.instanceColor.needsUpdate = true;
 
-  var bondMesh = new THREE.InstancedMesh(getBondGeom(), new THREE.MeshStandardMaterial({ roughness: 0.45 }), bonds.length);
+  var bondMesh = new THREE.InstancedMesh(getBondGeom(), new THREE.MeshStandardMaterial({ roughness: 0.45, vertexColors: true }), bonds.length);
   for (var b = 0; b < bonds.length; b++) {
     var p = atoms[bonds[b][0]], q = atoms[bonds[b][1]];
     setBondMatrix(bondMesh, b, p.x, p.y, p.z, q.x, q.y, q.z, 0.16);
@@ -130,7 +130,7 @@ function makeBackbone(atoms, colorFor) {
       segments.push([list[s], list[s + 1], chain]);
     }
   }
-  var mesh = new THREE.InstancedMesh(getBondGeom(), new THREE.MeshStandardMaterial({ roughness: 0.55 }), segments.length);
+  var mesh = new THREE.InstancedMesh(getBondGeom(), new THREE.MeshStandardMaterial({ roughness: 0.55, vertexColors: true }), segments.length);
   for (var b = 0; b < segments.length; b++) {
     var p = atoms[segments[b][0]], q = atoms[segments[b][1]];
     setBondMatrix(mesh, b, p.x, p.y, p.z, q.x, q.y, q.z, 0.30);

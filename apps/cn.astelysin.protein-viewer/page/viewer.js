@@ -57,13 +57,13 @@ var I18N_FALLBACK = {
 };
 
 I18N_FALLBACK['zh-CN'].modeHybrid = '混合';
-I18N_FALLBACK['zh-CN'].modeCartoon = 'Ribbon 卡通';
+I18N_FALLBACK['zh-CN'].modeCartoon = 'Ribbon';
 I18N_FALLBACK['zh-CN'].modeWireframe = '线框';
 I18N_FALLBACK['en-US'].modeHybrid = 'Hybrid';
-I18N_FALLBACK['en-US'].modeCartoon = 'Ribbon cartoon';
+I18N_FALLBACK['en-US'].modeCartoon = 'Ribbon';
 I18N_FALLBACK['en-US'].modeWireframe = 'Wireframe';
 I18N_FALLBACK['ja-JP'].modeHybrid = '混合';
-I18N_FALLBACK['ja-JP'].modeCartoon = 'Ribbon カートゥーン';
+I18N_FALLBACK['ja-JP'].modeCartoon = 'Ribbon';
 I18N_FALLBACK['ja-JP'].modeWireframe = 'ワイヤー';
 
 var AA_ONE = {

@@ -97,6 +97,7 @@ const colorFor = (a) => 0x123456;
 test('makeSpacefill creates one instance per atom at the right position', () => {
   const mesh = build.makeSpacefill(atoms, colorFor);
   assert.equal(mesh.count, atoms.length);
+  assert.equal(mesh.material.options.vertexColors, true);
   assert.equal(mesh.matrices.length, atoms.length);
   assert.deepEqual(mesh.matrices[0]._pos, { x: 10, y: 8, z: 10 });
   assert.deepEqual(mesh.matrices[atoms.length - 1]._pos, { x: 30, y: 30, z: 30 });
@@ -111,6 +112,8 @@ test('makeBallStick creates atom and bond instances', () => {
   const [atomMesh, bondMesh] = group.userData.meshes;
   assert.equal(atomMesh.count, atoms.length);
   assert.equal(bondMesh.count, 8);
+  assert.equal(atomMesh.material.options.vertexColors, true);
+  assert.equal(bondMesh.material.options.vertexColors, true);
   // Peptide bond midpoint should sit between VAL C (10,10,10) and GLY N (10,10.8,10)
   const peptide = bonds.find(([i, j]) => (i === 2 && j === 4) || (i === 4 && j === 2));
   const mid = bondMesh.matrices[bonds.indexOf(peptide)]._pos;
@@ -121,6 +124,7 @@ test('makeBackbone creates one tube per adjacent CA pair', () => {
   const mesh = build.makeBackbone(atoms, colorFor);
   // chain A: VAL CA + GLY CA -> 1 segment; chain B: single CA -> 0; HEM: no CA
   assert.equal(mesh.count, 1);
+  assert.equal(mesh.material.options.vertexColors, true);
   assert.equal(mesh.userData.segments, 1);
 });
 
