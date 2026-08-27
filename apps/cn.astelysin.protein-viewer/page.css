@@ -118,10 +118,11 @@ button { cursor: pointer; }
 @keyframes pv-spin { to { transform: rotate(360deg); } }
 
 .control-dock { border-top: 1px solid var(--pv-border); background: var(--pv-surface); }
-.dock-heading { min-height: 50px; padding: 8px 18px; }
-.dock-content { display: grid; grid-template-columns: minmax(0, 1fr) minmax(190px, .9fr); gap: 14px 16px; padding: 0 18px 16px; }
-.dock-content .control-block:first-child { grid-column: 1 / -1; padding-right: 0; padding-bottom: 12px; border-right: 0; border-bottom: 1px solid var(--pv-border); }
-.dock-content .control-block:first-child .segmented-control { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.dock-heading { min-height: 40px; padding: 6px 18px; }
+.dock-content { display: grid; grid-template-columns: minmax(120px, .7fr) minmax(280px, 1.3fr); gap: 12px 16px; padding: 0 18px 10px; }
+.representation-fixed { display: flex; align-items: center; gap: 12px; }
+.representation-fixed .control-label { margin: 0; }
+.fixed-mode { padding: 7px 12px; border: 1px solid var(--pv-accent); border-radius: 5px; background: var(--pv-accent-soft); color: var(--pv-accent); font-size: 12px; font-weight: 600; }
 .control-block { min-width: 0; padding-right: 16px; border-right: 1px solid var(--pv-border); }.control-block:last-child { padding-right: 0; border-right: 0; }
 .control-label { display: block; margin-bottom: 8px; color: var(--pv-muted); font-size: 11px; }
 .segmented-control { display: flex; min-height: 35px; }.segmented-control label { flex: 1; min-width: 0; }.segmented-control input { position: absolute; opacity: 0; pointer-events: none; }.segmented-control span { display: block; overflow: hidden; padding: 8px 9px; border: 1px solid var(--pv-border-strong); margin-left: -1px; color: var(--pv-text); font-size: 11px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }.segmented-control label:first-child span { margin-left: 0; border-radius: 5px 0 0 5px; }.segmented-control label:last-child span { border-radius: 0 5px 5px 0; }.segmented-control input:checked + span { position: relative; z-index: 1; border-color: var(--pv-accent); background: var(--pv-accent-soft); color: var(--pv-accent); }

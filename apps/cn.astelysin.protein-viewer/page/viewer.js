@@ -96,7 +96,7 @@ var state = {
   renderer: null, scene: null, camera: null, raf: 0, paused: false, destroyed: false,
   target: null, theta: 0.6, phi: 1.1, radius: 6,
   autoRotate: false, model: null, structure: null, bonds: null, rawCif: '',
-  mode: 'spacefill', colorMode: 'element', chainOrder: [], visibleChains: {}, renderAtoms: [],
+  colorMode: 'element', chainOrder: [], visibleChains: {}, renderAtoms: [],
   selectedAtom: null, measureAtoms: [], selectionMarker: null, pointerId: null, lastX: 0, lastY: 0, downX: 0, downY: 0, dragMode: null,
   pinchDist: 0, pinchStartTheta: 0, pinchStartPhi: 0,
   resizeObserver: null, busy: false, renderReady: false, bootstrapped: false, bootstrapWaits: 0,
@@ -361,25 +361,8 @@ function buildModel() {
   }
   var atoms = state.renderAtoms;
   var colorFor = function (atom, index) { return chainColorFor(structure, atom, index); };
-  var model;
-  if (state.mode === 'backbone') {
-    model = build.makeBackbone(atoms, colorFor);
-  } else if (state.mode === 'ballstick') {
-    state.bonds = bondsMod.buildBonds(atoms);
-    model = build.makeBallStick(atoms, state.bonds, colorFor);
-  } else if (state.mode === 'cartoon') {
-    model = build.makeCartoon(atoms, colorFor);
-  } else if (state.mode === 'wireframe') {
-    state.bonds = bondsMod.buildBonds(atoms);
-    model = build.makeWireframe(atoms, state.bonds, colorFor);
-  } else if (state.mode === 'hybrid') {
-    var polymerAtoms = atoms.filter(function (atom) { return atom.kind !== 'ligand'; });
-    var ligandAtoms = atoms.filter(function (atom) { return atom.kind === 'ligand'; });
-    state.bonds = bondsMod.buildBonds(ligandAtoms);
-    model = build.makeHybrid(polymerAtoms, ligandAtoms, state.bonds, colorFor);
-  } else {
-    model = build.makeSpacefill(atoms, colorFor);
-  }
+  state.bonds = bondsMod.buildBonds(atoms);
+  var model = build.makeWireframe(atoms, state.bonds, colorFor);
   state.model = model;
   state.scene.add(model);
   frameCamera();
@@ -444,11 +427,6 @@ function loadStructure(parsed, sourceLabel, rawCif) {
   if (!simplified && atoms.length > 8000) {
     atoms = parser.extractCA(atoms);
     simplified = true;
-  }
-  if (simplified && (state.mode === 'ballstick' || state.mode === 'wireframe' || state.mode === 'hybrid')) {
-    state.mode = state.mode === 'hybrid' ? 'cartoon' : 'backbone';
-    var fallbackMode = document.querySelector('[name="mode"][value="' + state.mode + '"]');
-    if (fallbackMode) fallbackMode.checked = true;
   }
   state.rawCif = rawCif || '';
   setStructure({ id: parsed.id || '', title: parsed.title || '', atoms: atoms, simplified: simplified, truncated: parsed.truncated === true }, { source: sourceLabel || '' });
@@ -788,17 +766,6 @@ function bindEvents() {
     if (ev.key === 'Enter') { ev.preventDefault(); runSearch(); }
   });
 
-  document.querySelectorAll('[name="mode"]').forEach(function (input) {
-    input.addEventListener('change', function () {
-      if (!input.checked) return;
-      state.mode = input.value;
-      if (state.structure && state.structure.simplified && (state.mode === 'ballstick' || state.mode === 'wireframe' || state.mode === 'hybrid')) {
-        state.mode = state.mode === 'hybrid' ? 'cartoon' : 'backbone';
-        document.querySelector('[name="mode"][value="' + state.mode + '"]').checked = true;
-      }
-      buildModel();
-    });
-  });
   document.querySelectorAll('[name="color"]').forEach(function (input) {
     input.addEventListener('change', function () {
       if (input.checked) { state.colorMode = input.value; buildModel(); }

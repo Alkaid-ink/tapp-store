@@ -249,13 +249,30 @@ function makeCartoon(atoms, colorFor) {
 // separate line geometry, not a transparent ball-and-stick approximation.
 function makeWireframe(atoms, bonds, colorFor) {
   ensureThree();
+  var lineBonds = bonds ? bonds.slice() : [];
+  if (!lineBonds.length) {
+    var caByChain = {};
+    for (var c = 0; c < atoms.length; c++) {
+      if (atoms[c].atom !== 'CA') continue;
+      if (!caByChain[atoms[c].chain]) caByChain[atoms[c].chain] = [];
+      caByChain[atoms[c].chain].push(c);
+    }
+    Object.keys(caByChain).forEach(function (chain) {
+      var list = caByChain[chain].sort(function (a, b) { return atoms[a].resi - atoms[b].resi; });
+      for (var s = 0; s < list.length - 1; s++) {
+        if (atoms[list[s + 1]].resi - atoms[list[s]].resi === 1 && distanceBetween(atoms[list[s + 1]], atoms[list[s]]) < 5.5) {
+          lineBonds.push([list[s], list[s + 1]]);
+        }
+      }
+    });
+  }
   var positions = [];
   var vertexColors = [];
-  for (var i = 0; i < bonds.length; i++) {
-    var p = atoms[bonds[i][0]], q = atoms[bonds[i][1]];
+  for (var i = 0; i < lineBonds.length; i++) {
+    var p = atoms[lineBonds[i][0]], q = atoms[lineBonds[i][1]];
     positions.push(p.x, p.y, p.z, q.x, q.y, q.z);
-    var pColor = new THREE.Color(colorFor(p, bonds[i][0]));
-    var qColor = new THREE.Color(colorFor(q, bonds[i][1]));
+    var pColor = new THREE.Color(colorFor(p, lineBonds[i][0]));
+    var qColor = new THREE.Color(colorFor(q, lineBonds[i][1]));
     vertexColors.push(pColor.r, pColor.g, pColor.b, qColor.r, qColor.g, qColor.b);
   }
   var geometry = new THREE.BufferGeometry();
@@ -263,7 +280,7 @@ function makeWireframe(atoms, bonds, colorFor) {
   geometry.setAttribute('color', new THREE.Float32BufferAttribute(vertexColors, 3));
   var line = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.92 }));
   line.userData.representation = 'wireframe';
-  line.userData.bonds = bonds.length;
+  line.userData.bonds = lineBonds.length;
   return line;
 }
 
