@@ -201,7 +201,9 @@
 
   Runtime.prototype.loadGuestSnapshot = async function () {
     var snapshot = await this.safeSharedGet(Core.SHARED_KEYS.guestSnapshot);
-    if (snapshot && snapshot.boardId === this.config.boardId && snapshot.dataUrl) this.editor.setSnapshot(snapshot.dataUrl);
+    if (snapshot && snapshot.boardId === this.config.boardId && snapshot.dataUrl && !this.editor.setSnapshot(snapshot.dataUrl)) {
+      this.toast("访客快照格式不受支持，已清空。", true);
+    }
   };
 
   Runtime.prototype.connectRoom = async function () {
@@ -533,7 +535,12 @@
     try {
       var snapshot = await this.safeSharedGet(archive.snapshotKey);
       if (!snapshot || !snapshot.dataUrl) throw new Error("归档快照不存在或已被移除。");
-      query("[data-archive-image]").src = snapshot.dataUrl;
+      var safeUrl = root.SignatureBoardEditor.safeImage(snapshot.dataUrl);
+      var image = query("[data-archive-image]");
+      image.removeAttribute("src");
+      query("[data-archive-preview]").hidden = true;
+      if (!safeUrl) throw new Error("归档快照格式不受支持，已清空。");
+      image.src = safeUrl;
       query("[data-archive-caption]").textContent = new Date(archive.archivedAt).toLocaleString() + " · " + (archive.roomId || "Room 未记录");
       query("[data-archive-preview]").hidden = false;
     } catch (error) { this.toast(this.messageForError(error), true); }

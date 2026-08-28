@@ -5,6 +5,10 @@
   var DEFAULT_WIDTH = Core.LIMITS.canvasWidth;
   var DEFAULT_HEIGHT = Core.LIMITS.canvasHeight;
 
+  function safeImage(value) {
+    return typeof value === "string" && /^data:image\/(?:jpeg|png|webp);base64,/i.test(value) ? value : "";
+  }
+
   function distanceToSegment(point, start, end) {
     var dx = end[0] - start[0];
     var dy = end[1] - start[1];
@@ -101,16 +105,18 @@
   };
 
   BoardEditor.prototype.setSnapshot = function (dataUrl) {
+    var safeUrl = safeImage(dataUrl);
     var self = this;
-    if (!dataUrl) {
+    if (!safeUrl) {
       this.snapshotImage = null;
       this.render();
-      return;
+      return !dataUrl;
     }
     var image = new Image();
     image.onload = function () { self.snapshotImage = image; self.render(); };
     image.onerror = function () { self.snapshotImage = null; self.render(); };
-    image.src = dataUrl;
+    image.src = safeUrl;
+    return true;
   };
 
   BoardEditor.prototype.screenToWorld = function (clientX, clientY) {
@@ -505,5 +511,6 @@
     return canvas.toDataURL("image/jpeg", .76);
   };
 
+  BoardEditor.safeImage = safeImage;
   root.SignatureBoardEditor = BoardEditor;
 })(globalThis);

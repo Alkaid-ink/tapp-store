@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const require = createRequire(import.meta.url);
 const Core = require('../main.js');
+require('../page/editor.js');
+const BoardEditor = globalThis.SignatureBoardEditor;
 
 function drawing(overrides = {}) {
   return {
@@ -30,6 +33,25 @@ test('drawing larger than 1024 logical pixels is rejected', () => {
   const result = Core.validateDrawing(drawing({ strokes: [{ color: '#ffffff', width: 4, points: [[10, 10], [1100, 10]] }] }));
   assert.equal(result.ok, false);
   assert.ok(result.errors.includes('bounds_exceeded'));
+});
+
+test('page snapshot whitelist rejects active and SVG image URLs', () => {
+  assert.equal(BoardEditor.safeImage('data:image/jpeg;base64,AA=='), 'data:image/jpeg;base64,AA==');
+  assert.equal(BoardEditor.safeImage('data:image/png;base64,AA=='), 'data:image/png;base64,AA==');
+  assert.equal(BoardEditor.safeImage('data:image/webp;base64,AA=='), 'data:image/webp;base64,AA==');
+  assert.equal(BoardEditor.safeImage('data:image/svg+xml;base64,PHN2Zz4='), '');
+  assert.equal(BoardEditor.safeImage('javascript:alert(1)'), '');
+  assert.equal(BoardEditor.safeImage('https://example.test/snapshot.png'), '');
+
+  const editor = Object.create(BoardEditor.prototype);
+  editor.snapshotImage = {};
+  editor.render = () => {};
+  assert.equal(editor.setSnapshot('javascript:alert(1)'), false);
+  assert.equal(editor.snapshotImage, null);
+
+  const runtimeSource = readFileSync(new URL('../page/runtime.js', import.meta.url), 'utf8');
+  assert.match(runtimeSource, /SignatureBoardEditor\.safeImage/);
+  assert.doesNotMatch(runtimeSource, /\.src\s*=\s*snapshot\.dataUrl/);
 });
 
 test('dense curve samples are not collapsed into a few polygon points', () => {

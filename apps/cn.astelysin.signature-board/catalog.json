@@ -3,7 +3,7 @@
   "tags": ["签名板", "绘画", "涂鸦", "社交", "联邦", "Room", "小组件", "多语言"],
   "featured": false,
   "verified": false,
-  "securityReview": false,
+  "securityReview": true,
   "preview": {
     "version": 1,
     "type": "snapshot",
