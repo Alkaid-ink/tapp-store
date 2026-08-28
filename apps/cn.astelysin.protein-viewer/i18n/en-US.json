@@ -10,6 +10,8 @@
   "connected": "Connected",
   "recent": "Recent",
   "history": "History",
+  "historyExpand": "Expand history",
+  "historyCollapse": "Collapse history",
   "clearHistory": "Clear",
   "removeHistory": "Remove from history",
   "historyEmpty": "Loaded structures appear here",

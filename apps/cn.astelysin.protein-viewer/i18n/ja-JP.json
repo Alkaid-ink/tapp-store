@@ -10,6 +10,8 @@
   "connected": "接続済み",
   "recent": "最近",
   "history": "履歴",
+  "historyExpand": "履歴を開く",
+  "historyCollapse": "履歴を閉じる",
   "clearHistory": "クリア",
   "removeHistory": "履歴から削除",
   "historyEmpty": "読み込んだ構造がここに表示されます",

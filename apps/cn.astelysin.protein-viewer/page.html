@@ -32,14 +32,19 @@
     </div>
   </header>
 
-  <main class="workspace">
+  <main class="workspace history-collapsed">
     <aside class="history-panel" aria-label="历史记录">
-      <div class="panel-heading">
-        <div><span class="eyebrow" data-i18n="recent">最近</span><h2 data-i18n="history">历史记录</h2></div>
-        <button type="button" id="view-clear-history" class="text-button" data-i18n="clearHistory">清空</button>
+      <button type="button" id="view-toggle-history" class="history-toggle" aria-expanded="false" aria-controls="view-history-content" aria-label="展开历史记录" title="展开历史记录">
+        <span id="view-history-toggle-icon" aria-hidden="true">›</span>
+      </button>
+      <div id="view-history-content" class="history-content" hidden>
+        <div class="panel-heading">
+          <div><span class="eyebrow" data-i18n="recent">最近</span><h2 data-i18n="history">历史记录</h2></div>
+          <button type="button" id="view-clear-history" class="text-button" data-i18n="clearHistory">清空</button>
+        </div>
+        <div id="view-history-list" class="history-list"></div>
+        <div id="view-history-empty" class="empty-history"><span class="empty-icon">⌁</span><p data-i18n="historyEmpty">加载过的结构会显示在这里</p></div>
       </div>
-      <div id="view-history-list" class="history-list"></div>
-      <div id="view-history-empty" class="empty-history"><span class="empty-icon">⌁</span><p data-i18n="historyEmpty">加载过的结构会显示在这里</p></div>
     </aside>
 
     <section class="viewer-column">

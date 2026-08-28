@@ -12,7 +12,7 @@ var I18N_FALLBACK = {
   'zh-CN': {
     appName: '蛋白质结构查看器', tagline: '在线浏览 PDB 分子结构', pdbIdLabel: 'PDB ID', searchLabel: '按名称搜索',
     searchPlaceholder: '按名称搜索结构', searchBtn: '搜索', pdbIdPlaceholder: '输入 PDB ID，如 1A3N', loadBtn: '加载结构', connected: '已连接',
-    recent: '最近', history: '历史记录', clearHistory: '清空', historyEmpty: '加载过的结构会显示在这里', emptyHint: '输入 PDB ID，或从名称搜索开始',
+    recent: '最近', history: '历史记录', historyExpand: '展开历史记录', historyCollapse: '收起历史记录', clearHistory: '清空', historyEmpty: '加载过的结构会显示在这里', emptyHint: '输入 PDB ID，或从名称搜索开始',
     chains: '条链', residues: '个残基', residuePosition: '残基位置', tools: '工具', structure: '结构', measure: '测量', structureSearch: '结构内搜索',
     components: '组成成分', export: '导出', chain: '链', allChains: '全部', model: '当前模型', representation: '表示方式', colorBy: '颜色方式', camera: '视角',
     viewControls: '视图控制', controls: '控制', collapse: '收起', expand: '展开', fitView: '适应画布', zoomIn: '放大', zoomOut: '缩小',
@@ -27,7 +27,7 @@ var I18N_FALLBACK = {
   'en-US': {
     appName: 'Protein Structure Viewer', tagline: 'Browse PDB structures', pdbIdLabel: 'PDB ID', searchLabel: 'Search by name',
     searchPlaceholder: 'Search structures by name', searchBtn: 'Search', pdbIdPlaceholder: 'Enter a PDB ID, e.g. 1A3N', loadBtn: 'Load structure', connected: 'Connected',
-    recent: 'Recent', history: 'History', clearHistory: 'Clear', historyEmpty: 'Loaded structures appear here', emptyHint: 'Enter a PDB ID or search by name',
+    recent: 'Recent', history: 'History', historyExpand: 'Expand history', historyCollapse: 'Collapse history', clearHistory: 'Clear', historyEmpty: 'Loaded structures appear here', emptyHint: 'Enter a PDB ID or search by name',
     chains: 'chains', residues: 'residues', residuePosition: 'Residue position', tools: 'Tools', structure: 'Structure', measure: 'Measure', structureSearch: 'Search structure',
     components: 'Components', export: 'Export', chain: 'Chain', allChains: 'All', model: 'Model', representation: 'Representation', colorBy: 'Color by', camera: 'Camera',
     viewControls: 'View controls', controls: 'Controls', collapse: 'Collapse', expand: 'Expand', fitView: 'Fit view', zoomIn: 'Zoom in', zoomOut: 'Zoom out',
@@ -42,7 +42,7 @@ var I18N_FALLBACK = {
   'ja-JP': {
     appName: 'タンパク質構造ビューア', tagline: 'PDB 構造を閲覧', pdbIdLabel: 'PDB ID', searchLabel: '名前で検索',
     searchPlaceholder: '構造名で検索', searchBtn: '検索', pdbIdPlaceholder: 'PDB IDを入力（例: 1A3N）', loadBtn: '構造を読み込む', connected: '接続済み',
-    recent: '最近', history: '履歴', clearHistory: 'クリア', historyEmpty: '読み込んだ構造がここに表示されます', emptyHint: 'PDB IDを入力するか名前で検索してください',
+    recent: '最近', history: '履歴', historyExpand: '履歴を開く', historyCollapse: '履歴を閉じる', clearHistory: 'クリア', historyEmpty: '読み込んだ構造がここに表示されます', emptyHint: 'PDB IDを入力するか名前で検索してください',
     chains: '鎖', residues: '残基', residuePosition: '残基位置', tools: 'ツール', structure: '構造', measure: '測定', structureSearch: '構造内検索',
     components: '構成要素', export: 'エクスポート', chain: '鎖', allChains: 'すべて', model: 'モデル', representation: '表示形式', colorBy: '色分け', camera: '視点',
     viewControls: 'ビュー操作', controls: '操作', collapse: '閉じる', expand: '開く', fitView: '画面に合わせる', zoomIn: '拡大', zoomOut: '縮小',
@@ -100,7 +100,8 @@ var state = {
   selectedAtom: null, measureAtoms: [], selectionMarker: null, pointerId: null, lastX: 0, lastY: 0, downX: 0, downY: 0, dragMode: null,
   pinchDist: 0, pinchStartTheta: 0, pinchStartPhi: 0,
   resizeObserver: null, busy: false, renderReady: false, bootstrapped: false, bootstrapWaits: 0,
-  historyKey: 'protein-viewer.history.v1', historyMemory: []
+  historyKey: 'protein-viewer.history.v1', historyMemory: [], historyCollapsed: true,
+  historyCollapsedKey: 'protein-viewer.history-collapsed.v1'
 };
 
 function setStatus(text) { var el = $id('view-status'); if (el) el.textContent = text; }
@@ -132,6 +133,33 @@ function readHistory() {
 function writeHistory(items) {
   state.historyMemory = items.slice(0, 12);
   try { localStorage.setItem(state.historyKey, JSON.stringify(state.historyMemory)); } catch (_) {}
+}
+
+function readHistoryCollapsed() {
+  try { return localStorage.getItem(state.historyCollapsedKey) !== 'expanded'; } catch (_) { return true; }
+}
+
+function updateHistoryToggle() {
+  var toggle = $id('view-toggle-history');
+  if (!toggle) return;
+  var key = state.historyCollapsed ? 'historyExpand' : 'historyCollapse';
+  var label = i18n(key);
+  toggle.setAttribute('aria-expanded', String(!state.historyCollapsed));
+  toggle.setAttribute('aria-label', label);
+  toggle.setAttribute('title', label);
+  toggle.textContent = state.historyCollapsed ? '›' : '‹';
+}
+
+function setHistoryCollapsed(collapsed, persist) {
+  state.historyCollapsed = !!collapsed;
+  var workspace = document.querySelector('.workspace');
+  var content = $id('view-history-content');
+  if (workspace) workspace.classList.toggle('history-collapsed', state.historyCollapsed);
+  if (content) content.hidden = state.historyCollapsed;
+  updateHistoryToggle();
+  if (persist) {
+    try { localStorage.setItem(state.historyCollapsedKey, state.historyCollapsed ? 'collapsed' : 'expanded'); } catch (_) {}
+  }
 }
 
 function renderHistory() {
@@ -191,6 +219,7 @@ function applyLocale() {
   document.querySelectorAll('[data-i18n]').forEach(function (el) { el.textContent = i18n(el.dataset.i18n); });
   document.querySelectorAll('[data-i18n-placeholder]').forEach(function (el) { el.setAttribute('placeholder', i18n(el.dataset.i18nPlaceholder)); });
   document.querySelectorAll('[data-i18n-aria-label]').forEach(function (el) { el.setAttribute('aria-label', i18n(el.dataset.i18nAriaLabel)); });
+  updateHistoryToggle();
 }
 
 function applyTheme(theme) {
@@ -791,6 +820,7 @@ function bindEvents() {
   $id('view-fit').addEventListener('click', function () { if (state.structure) frameCamera(); updateCamera(); });
   $id('view-zoom-in').addEventListener('click', function () { zoomBy(0.82); });
   $id('view-zoom-out').addEventListener('click', function () { zoomBy(1.22); });
+  $id('view-toggle-history').addEventListener('click', function () { setHistoryCollapsed(!state.historyCollapsed, true); });
   $id('view-clear-history').addEventListener('click', function () { writeHistory([]); renderHistory(); });
   $id('view-clear-measure').addEventListener('click', clearMeasure);
   $id('view-export-image').addEventListener('click', exportImage);
@@ -849,6 +879,7 @@ function bootstrap() {
     initTheme();
     initLocale();
     bindEvents();
+    setHistoryCollapsed(readHistoryCollapsed(), false);
     renderHistory();
     setStatus((i18n('runtimeReady') === 'runtimeReady' ? '页面已就绪' : i18n('runtimeReady')) + ' · ' + i18n('selectHint'));
   } catch (err) {

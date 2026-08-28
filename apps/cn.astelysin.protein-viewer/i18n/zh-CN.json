@@ -10,6 +10,8 @@
   "connected": "已连接",
   "recent": "最近",
   "history": "历史记录",
+  "historyExpand": "展开历史记录",
+  "historyCollapse": "收起历史记录",
   "clearHistory": "清空",
   "removeHistory": "删除历史记录",
   "historyEmpty": "加载过的结构会显示在这里",
