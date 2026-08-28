@@ -47,7 +47,7 @@ const viewerSrc = read('page/viewer.js');
 for (const dep of ['parser', 'structure-loader', 'bonds', 'build', 'colors']) {
   check(`viewer -> ./${dep}.js`, new RegExp(`require\\(['"]\\./${dep}\\.js['"]\\)`).test(viewerSrc));
 }
-check('wireframe pick target', /function makePickMesh\(atoms\)/.test(viewerSrc) && /new THREE\.InstancedMesh/.test(viewerSrc) && /if \(state\.pickMesh\) targets = \[state\.pickMesh\]/.test(viewerSrc));
+check('wireframe pick target', /function makePickMesh\(atoms\)/.test(viewerSrc) && /new THREE\.InstancedMesh/.test(viewerSrc) && /intersectObjects\(\[state\.pickMesh\], false\)/.test(viewerSrc));
 check('host file download', /Tapp\.file\.download/.test(viewerSrc) && !/URL\.createObjectURL/.test(viewerSrc));
 check('text structure fallback', /structureLoader\.load/.test(viewerSrc) && /structureCa/.test(read('page/structure-loader.js')));
 check('model server text APIs', [manifest.apis.structure, manifest.apis.structureCa].every((api) => api.endpoint.startsWith('https://models.rcsb.org/v1/')) && !/\.cif\.gz/.test(JSON.stringify(manifest.apis)));

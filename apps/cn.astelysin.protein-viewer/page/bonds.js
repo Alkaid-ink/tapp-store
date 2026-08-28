@@ -107,4 +107,4 @@ function buildBonds(atoms) {
   return bonds;
 }
 
-module.exports = { buildBonds: buildBonds, covalentRadius: covalentRadius };
+module.exports = { buildBonds: buildBonds };

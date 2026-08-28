@@ -30,4 +30,4 @@ function chainColors(count) {
   return out;
 }
 
-module.exports = { colorForElement: colorForElement, chainColors: chainColors, CHAIN_COLORS: CHAIN_COLORS };
+module.exports = { colorForElement: colorForElement, chainColors: chainColors };

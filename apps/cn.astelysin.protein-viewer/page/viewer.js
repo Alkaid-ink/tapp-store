@@ -19,8 +19,8 @@ var I18N_FALLBACK = {
     viewControls: '视图控制', controls: '控制', collapse: '收起', expand: '展开', fitView: '适应画布', zoomIn: '放大', zoomOut: '缩小',
     measureHint: '点击两个原子测量距离', clearMeasure: '清除测量', atomSearchPlaceholder: '链、残基或原子', exportImage: '导出 SVG 截图', downloadCif: '下载 mmCIF', copyPdbId: '复制 PDB ID',
     modeWireframe: '线框', colorElement: '按元素着色', colorChain: '按链着色',
-    autorotate: '自动旋转', resetView: '重置视角', fullscreen: '全屏', loading: '加载中…',
-    loadFailed: '加载失败', structureTooBig: '结构过大，仅显示 α 碳骨架', searchFailed: '搜索失败',
+    autorotate: '自动旋转', resetView: '重置视角', fullscreen: '全屏',
+    loadFailed: '加载失败', searchFailed: '搜索失败',
     noResults: '未找到匹配结构', selectHint: '选择要查看的结构', atomCount: '原子', caOnly: 'α碳骨架',
     truncated: '数据可能被截断', onlineTitle: '在线结构', apiMissing: '宿主未注入 THREE，请检查 runtimeModules 声明', simplifiedFallback: '完整结构不可用，正在加载 α 碳骨架', structureUnavailable: '结构为空或不可用',
     startLoading: '正在加载…'
@@ -34,8 +34,8 @@ var I18N_FALLBACK = {
     viewControls: 'View controls', controls: 'Controls', collapse: 'Collapse', expand: 'Expand', fitView: 'Fit view', zoomIn: 'Zoom in', zoomOut: 'Zoom out',
     measureHint: 'Click two atoms to measure distance', clearMeasure: 'Clear measurement', atomSearchPlaceholder: 'Chain, residue or atom', exportImage: 'Export SVG screenshot', downloadCif: 'Download mmCIF', copyPdbId: 'Copy PDB ID',
     modeWireframe: 'Wireframe', colorElement: 'By element', colorChain: 'By chain',
-    autorotate: 'Rotate', resetView: 'Reset view', fullscreen: 'Fullscreen', loading: 'Loading…',
-    loadFailed: 'Load failed', structureTooBig: 'Structure too large; showing α-carbon backbone', searchFailed: 'Search failed',
+    autorotate: 'Rotate', resetView: 'Reset view', fullscreen: 'Fullscreen',
+    loadFailed: 'Load failed', searchFailed: 'Search failed',
     noResults: 'No matching structures', selectHint: 'Pick a structure', atomCount: 'atoms', caOnly: 'α-carbon backbone',
     truncated: 'Response may be truncated', onlineTitle: 'Online structure', apiMissing: 'THREE not injected; check runtimeModules', simplifiedFallback: 'Full structure unavailable; loading α-carbon backbone', structureUnavailable: 'Structure is empty or unavailable',
     startLoading: 'Loading…'
@@ -49,8 +49,8 @@ var I18N_FALLBACK = {
     viewControls: 'ビュー操作', controls: '操作', collapse: '閉じる', expand: '開く', fitView: '画面に合わせる', zoomIn: '拡大', zoomOut: '縮小',
     measureHint: '2つの原子をクリックして距離を測定', clearMeasure: '測定をクリア', atomSearchPlaceholder: '鎖、残基、原子', exportImage: 'SVG画像を書き出す', downloadCif: 'mmCIFをダウンロード', copyPdbId: 'PDB IDをコピー',
     modeWireframe: 'ワイヤー', colorElement: '元素別', colorChain: '鎖別',
-    autorotate: '自動回転', resetView: '視点リセット', fullscreen: '全画面', loading: '読み込み中…',
-    loadFailed: '読み込み失敗', structureTooBig: '構造が大きいため α炭素骨格のみ表示', searchFailed: '検索失敗',
+    autorotate: '自動回転', resetView: '視点リセット', fullscreen: '全画面',
+    loadFailed: '読み込み失敗', searchFailed: '検索失敗',
     noResults: '一致する構造がありません', selectHint: '表示する構造を選択', atomCount: '原子', caOnly: 'α炭素骨格',
     truncated: 'データが途切れている可能性があります', onlineTitle: 'オンライン構造', apiMissing: 'THREE がありません（runtimeModules を確認）', simplifiedFallback: '完全な構造を取得できないため、α炭素骨格を読み込みます', structureUnavailable: '構造が空または利用できません',
     startLoading: '読み込み中…'
@@ -86,10 +86,9 @@ function $id(id) { return document.getElementById(id); }
 var state = {
   renderer: null, scene: null, camera: null, raf: 0, paused: false, destroyed: false,
   target: null, theta: 0.6, phi: 1.1, radius: 6,
-  autoRotate: false, model: null, pickMesh: null, structure: null, bonds: null, rawCif: '',
+  autoRotate: false, model: null, pickMesh: null, structure: null, rawCif: '',
   colorMode: 'element', chainOrder: [], visibleChains: {}, renderAtoms: [],
-  selectedAtom: null, measureAtoms: [], selectionMarker: null, pointerId: null, lastX: 0, lastY: 0, downX: 0, downY: 0, dragMode: null,
-  pinchDist: 0, pinchStartTheta: 0, pinchStartPhi: 0,
+  measureAtoms: [], selectionMarker: null, pointerId: null, lastX: 0, lastY: 0, downX: 0, downY: 0, dragMode: null,
   resizeObserver: null, busy: false, renderReady: false, bootstrapped: false, bootstrapWaits: 0,
   historyKey: 'protein-viewer.history.v1', historyMemory: [], historyCollapsed: true,
   historyCollapsedKey: 'protein-viewer.history-collapsed.v1'
@@ -346,7 +345,6 @@ function renderComponents(components) {
 function updateSelectionCard(atom) {
   var card = $id('view-selection-card');
   if (!card) return;
-  state.selectedAtom = atom || null;
   if (!atom) { card.hidden = true; card.replaceChildren(); return; }
   card.hidden = false;
   card.replaceChildren();
@@ -404,8 +402,8 @@ function buildModel() {
   }
   var atoms = state.renderAtoms;
   var colorFor = function (atom, index) { return chainColorFor(structure, atom, index); };
-  state.bonds = bondsMod.buildBonds(atoms);
-  var model = build.makeWireframe(atoms, state.bonds, colorFor);
+  var bonds = bondsMod.buildBonds(atoms);
+  var model = build.makeWireframe(atoms, bonds, colorFor);
   state.model = model;
   state.scene.add(model);
   state.pickMesh = makePickMesh(atoms);
@@ -445,7 +443,6 @@ function renderFrame() {
 
 function setStructure(structure, meta) {
   state.structure = structure;
-  state.bonds = null;
   clearMeasure();
   updateSelectionCard(null);
   if (state.selectionMarker && state.scene) {
@@ -590,17 +587,13 @@ function showAtom(atom) {
 }
 
 function pickAtom(ev) {
-  if (!state.structure || !state.model || !state.renderAtoms.length || !THREE.Raycaster || !THREE.Vector2) return;
+  if (!state.structure || !state.pickMesh || !state.renderAtoms.length || !THREE.Raycaster || !THREE.Vector2) return;
   var canvas = $id('view-canvas');
   var rect = canvas.getBoundingClientRect();
   var pointer = new THREE.Vector2(((ev.clientX - rect.left) / rect.width) * 2 - 1, -((ev.clientY - rect.top) / rect.height) * 2 + 1);
   var raycaster = new THREE.Raycaster();
   raycaster.setFromCamera(pointer, state.camera);
-  var targets = [];
-  if (state.pickMesh) targets = [state.pickMesh];
-  else if (state.model.isInstancedMesh) targets = [state.model];
-  else if (state.model.userData && state.model.userData.meshes) targets = [state.model.userData.meshes[0]];
-  var hits = raycaster.intersectObjects(targets, false);
+  var hits = raycaster.intersectObjects([state.pickMesh], false);
   if (!hits.length || hits[0].instanceId === undefined) return;
   var atom = state.renderAtoms[hits[0].instanceId];
   if (!atom) return;
@@ -794,7 +787,6 @@ function bindEvents() {
   canvas.addEventListener('pointercancel', onPointerUp);
   canvas.addEventListener('wheel', onWheel, { passive: false });
   canvas.addEventListener('dblclick', onDoubleClick);
-  canvas.addEventListener('touchstart', function (ev) { state.pinchDist = 0; }, { passive: true });
 
   var loadForm = $id('view-load-form');
   var loadButton = $id('view-load-btn');

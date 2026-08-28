@@ -30,6 +30,5 @@ async function load(id, deps) {
 }
 
 module.exports = {
-  load: load,
-  requestStructure: requestStructure
+  load: load
 };
