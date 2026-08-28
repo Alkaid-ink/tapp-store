@@ -149,17 +149,6 @@ function asBytes(value) {
   return bytes;
 }
 
-function decodeBase64(value) {
-  if (typeof value !== 'string' || typeof atob !== 'function' || value.length < 4 || value.length % 4 !== 0) return null;
-  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(value)) return null;
-  try {
-    var raw = atob(value);
-    var bytes = new Uint8Array(raw.length);
-    for (var i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-    return bytes;
-  } catch (_) { return null; }
-}
-
 function decodeBytes(value) {
   var bytes = asBytes(value);
   if (!bytes) return null;
@@ -185,32 +174,6 @@ function toText(result) {
     });
   }
   throw new Error('API_NOT_TEXT');
-}
-
-// Preserve binary response bytes so the viewer can inflate a compressed mmCIF
-// before decoding it as UTF-8. The host may wrap bytes in body/data/content.
-function toBytes(result) {
-  var queue = [result];
-  var seen = [];
-  while (queue.length) {
-    var current = queue.shift();
-    var bytes = asBytes(current);
-    if (bytes) return bytes;
-    if (!current || typeof current !== 'object' || seen.indexOf(current) !== -1) continue;
-    seen.push(current);
-    if (typeof current.bytes === 'string') {
-      bytes = decodeBase64(current.bytes);
-      if (bytes) return bytes;
-    }
-    ['bytes', 'buffer', 'body', 'data', 'content', 'result'].forEach(function (key) {
-      if (current[key] !== undefined && current[key] !== null) queue.push(current[key]);
-    });
-  }
-  throw new Error('API_NOT_BYTES');
-}
-
-function isGzip(bytes) {
-  return !!bytes && bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
 }
 
 function normalizePdbId(input) {
@@ -280,8 +243,6 @@ module.exports = {
   parseMmCif: parseMmCif,
   extractCA: extractCA,
   toText: toText,
-  toBytes: toBytes,
-  isGzip: isGzip,
   normalizePdbId: normalizePdbId,
   buildLookupEntryIds: buildLookupEntryIds,
   parseSearchResponse: parseSearchResponse,

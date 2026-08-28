@@ -26,7 +26,7 @@ check('core.entry exists', manifest.core && existsSync(join(root, manifest.core.
 check('page.entry exists', manifest.page && existsSync(join(root, manifest.page.entry)));
 check('page.template exists', manifest.page && existsSync(join(root, manifest.page.template)));
 check('page.styles exists', manifest.page && existsSync(join(root, manifest.page.styles)));
-check('apis search/titles/structure', manifest.apis && ['search', 'titles', 'structure', 'structurePlain'].every((k) => manifest.apis[k]));
+check('apis search/titles/structure', manifest.apis && ['search', 'titles', 'structure', 'structureCa'].every((k) => manifest.apis[k]));
 
 const catalog = JSON.parse(read('catalog.json'));
 check('catalog preview snapshot', catalog.preview && catalog.preview.type === 'snapshot');
@@ -37,20 +37,20 @@ for (const lang of ['zh-CN', 'en-US', 'ja-JP']) {
   check(`i18n ${lang}`, !!table && Object.keys(table).length > 10, Object.keys(table).length + ' keys');
 }
 
-for (const mod of ['page/parser.js', 'page/bonds.js', 'page/colors.js']) {
+for (const mod of ['page/parser.js', 'page/structure-loader.js', 'page/bonds.js', 'page/colors.js']) {
   try { require(join(root, mod)); check(`require ${mod}`, true); }
   catch (err) { check(`require ${mod}`, false, err.message); }
 }
 const entrySrc = read('page/entry.js');
 check('entry -> viewer', /require\(['"]\.\/viewer\.js['"]\)/.test(entrySrc));
 const viewerSrc = read('page/viewer.js');
-for (const dep of ['parser', 'bonds', 'build', 'colors']) {
+for (const dep of ['parser', 'structure-loader', 'bonds', 'build', 'colors']) {
   check(`viewer -> ./${dep}.js`, new RegExp(`require\\(['"]\\./${dep}\\.js['"]\\)`).test(viewerSrc));
 }
 check('wireframe pick target', /function makePickMesh\(atoms\)/.test(viewerSrc) && /new THREE\.InstancedMesh/.test(viewerSrc) && /if \(state\.pickMesh\) targets = \[state\.pickMesh\]/.test(viewerSrc));
 check('host file download', /Tapp\.file\.download/.test(viewerSrc) && !/URL\.createObjectURL/.test(viewerSrc));
-check('compressed structure fallback', /DecompressionStream\('gzip'\)/.test(viewerSrc) && /Tapp\.api\('structurePlain'/.test(viewerSrc));
-check('compressed structure API', manifest.apis.structure.endpoint.endsWith('.cif.gz'));
+check('text structure fallback', /structureLoader\.load/.test(viewerSrc) && /structureCa/.test(read('page/structure-loader.js')));
+check('model server text APIs', [manifest.apis.structure, manifest.apis.structureCa].every((api) => api.endpoint.startsWith('https://models.rcsb.org/v1/')) && !/\.cif\.gz/.test(JSON.stringify(manifest.apis)));
 
 for (const mod of ['page/build.js', 'page/viewer.js']) {
   const res = spawnSync(process.execPath, ['--check', join(root, mod)], { encoding: 'utf8' });

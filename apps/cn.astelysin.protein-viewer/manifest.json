@@ -73,17 +73,17 @@
       "type": "http",
       "access": "public",
       "method": "GET",
-      "endpoint": "https://files.rcsb.org/download/{{params.id}}.cif.gz",
+      "endpoint": "https://models.rcsb.org/v1/{{params.id}}/full?model_nums=1&encoding=cif&copy_all_categories=false",
       "cacheTtl": 3600,
-      "description": "按 PDB ID 拉取压缩 mmCIF 结构坐标"
+      "description": "按 PDB ID 拉取精简类别的完整 mmCIF 结构坐标"
     },
-    "structurePlain": {
+    "structureCa": {
       "type": "http",
       "access": "public",
       "method": "GET",
-      "endpoint": "https://files.rcsb.org/download/{{params.id}}.cif",
+      "endpoint": "https://models.rcsb.org/v1/{{params.id}}/atoms?label_atom_id=CA&model_nums=1&encoding=cif&copy_all_categories=false",
       "cacheTtl": 3600,
-      "description": "GZIP 不可用时回退拉取 mmCIF 结构坐标"
+      "description": "完整结构超出宿主响应上限时拉取 Cα 骨架坐标"
     }
   },
   "core": {

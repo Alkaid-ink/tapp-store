@@ -62,7 +62,7 @@
   "truncated": "データが途切れている可能性があります",
   "onlineTitle": "オンライン構造",
   "apiMissing": "THREE がありません（runtimeModules を確認）",
-  "gzipUnsupported": "GZIP 解凍に対応していないため、非圧縮構造を試します",
+  "simplifiedFallback": "完全な構造を取得できないため、α炭素骨格を読み込みます",
   "startLoading": "読み込み中…",
   "requestTimeout": "リクエストがタイムアウトしました",
   "responseFormatError": "未対応のレスポンス形式です",

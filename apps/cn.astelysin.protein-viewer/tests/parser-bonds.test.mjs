@@ -86,14 +86,6 @@ test('toText unwraps observed response shapes', () => {
   assert.throws(() => parser.toText(42), /API_NOT_TEXT/);
 });
 
-test('toBytes and isGzip preserve compressed response detection', () => {
-  const bytes = new Uint8Array([0x1f, 0x8b, 0x08, 0x00]);
-  assert.deepEqual(Array.from(parser.toBytes({ body: bytes })), [0x1f, 0x8b, 0x08, 0x00]);
-  assert.deepEqual(Array.from(parser.toBytes({ bytes: Buffer.from(bytes).toString('base64') })), [0x1f, 0x8b, 0x08, 0x00]);
-  assert.equal(parser.isGzip(bytes), true);
-  assert.equal(parser.isGzip(new Uint8Array([0x23, 0x20])), false);
-});
-
 test('normalizePdbId cleans and uppercases input', () => {
   assert.equal(parser.normalizePdbId('1A3N'), '1A3N');
   assert.equal(parser.normalizePdbId(' 1a3n '), '1A3N');
