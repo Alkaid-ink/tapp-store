@@ -136,7 +136,8 @@ function extractCA(atoms) {
 // host bridge, a text body may arrive as a string, a nested wrapper, or bytes.
 function asBytes(value) {
   var bytes = null;
-  if (typeof ArrayBuffer !== 'undefined' && value instanceof ArrayBuffer) {
+  var tag = Object.prototype.toString.call(value);
+  if (typeof ArrayBuffer !== 'undefined' && (value instanceof ArrayBuffer || tag === '[object ArrayBuffer]')) {
     bytes = new Uint8Array(value);
   } else if (typeof ArrayBuffer !== 'undefined' && ArrayBuffer.isView && ArrayBuffer.isView(value)) {
     bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
@@ -146,6 +147,17 @@ function asBytes(value) {
     bytes = new Uint8Array(value);
   }
   return bytes;
+}
+
+function decodeBase64(value) {
+  if (typeof value !== 'string' || typeof atob !== 'function' || value.length < 4 || value.length % 4 !== 0) return null;
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(value)) return null;
+  try {
+    var raw = atob(value);
+    var bytes = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+    return bytes;
+  } catch (_) { return null; }
 }
 
 function decodeBytes(value) {
@@ -186,6 +198,10 @@ function toBytes(result) {
     if (bytes) return bytes;
     if (!current || typeof current !== 'object' || seen.indexOf(current) !== -1) continue;
     seen.push(current);
+    if (typeof current.bytes === 'string') {
+      bytes = decodeBase64(current.bytes);
+      if (bytes) return bytes;
+    }
     ['bytes', 'buffer', 'body', 'data', 'content', 'result'].forEach(function (key) {
       if (current[key] !== undefined && current[key] !== null) queue.push(current[key]);
     });
