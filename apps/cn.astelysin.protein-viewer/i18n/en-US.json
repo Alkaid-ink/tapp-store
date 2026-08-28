@@ -62,6 +62,7 @@
   "truncated": "Response may be truncated",
   "onlineTitle": "Online structure",
   "apiMissing": "THREE not injected; check runtimeModules",
+  "gzipUnsupported": "GZIP decompression is unavailable; trying plain structure",
   "startLoading": "Loading…",
   "requestTimeout": "Request timed out",
   "responseFormatError": "Unsupported response format",

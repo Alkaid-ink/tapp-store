@@ -21,7 +21,7 @@ var I18N_FALLBACK = {
     autorotate: '自动旋转', resetView: '重置视角', fullscreen: '全屏', loading: '加载中…',
     loadFailed: '加载失败', structureTooBig: '结构过大，仅显示 α 碳骨架', searchFailed: '搜索失败',
     noResults: '未找到匹配结构', selectHint: '选择要查看的结构', atomCount: '原子', caOnly: 'α碳骨架',
-    truncated: '数据可能被截断', onlineTitle: '在线结构', apiMissing: '宿主未注入 THREE，请检查 runtimeModules 声明',
+    truncated: '数据可能被截断', onlineTitle: '在线结构', apiMissing: '宿主未注入 THREE，请检查 runtimeModules 声明', gzipUnsupported: '宿主不支持 GZIP 解压，正在尝试明文结构',
     startLoading: '正在加载…'
   },
   'en-US': {
@@ -36,7 +36,7 @@ var I18N_FALLBACK = {
     autorotate: 'Rotate', resetView: 'Reset view', fullscreen: 'Fullscreen', loading: 'Loading…',
     loadFailed: 'Load failed', structureTooBig: 'Structure too large; showing α-carbon backbone', searchFailed: 'Search failed',
     noResults: 'No matching structures', selectHint: 'Pick a structure', atomCount: 'atoms', caOnly: 'α-carbon backbone',
-    truncated: 'Response may be truncated', onlineTitle: 'Online structure', apiMissing: 'THREE not injected; check runtimeModules',
+    truncated: 'Response may be truncated', onlineTitle: 'Online structure', apiMissing: 'THREE not injected; check runtimeModules', gzipUnsupported: 'GZIP decompression is unavailable; trying plain structure',
     startLoading: 'Loading…'
   },
   'ja-JP': {
@@ -51,7 +51,7 @@ var I18N_FALLBACK = {
     autorotate: '自動回転', resetView: '視点リセット', fullscreen: '全画面', loading: '読み込み中…',
     loadFailed: '読み込み失敗', structureTooBig: '構造が大きいため α炭素骨格のみ表示', searchFailed: '検索失敗',
     noResults: '一致する構造がありません', selectHint: '表示する構造を選択', atomCount: '原子', caOnly: 'α炭素骨格',
-    truncated: 'データが途切れている可能性があります', onlineTitle: 'オンライン構造', apiMissing: 'THREE がありません（runtimeModules を確認）',
+    truncated: 'データが途切れている可能性があります', onlineTitle: 'オンライン構造', apiMissing: 'THREE がありません（runtimeModules を確認）', gzipUnsupported: 'GZIP 解凍に対応していないため、非圧縮構造を試します',
     startLoading: '読み込み中…'
   }
 };
@@ -477,6 +477,32 @@ function loadStructure(parsed, sourceLabel, rawCif) {
   addHistory(state.structure);
 }
 
+async function decodeStructureResponse(result) {
+  var bytes;
+  try { bytes = parser.toBytes(result); } catch (_) {}
+  if (!bytes) return parser.toText(result);
+  if (!parser.isGzip(bytes)) return parser.toText(bytes);
+  if (typeof DecompressionStream !== 'function' || typeof Blob !== 'function' || typeof Response !== 'function' ||
+      !Blob.prototype || typeof Blob.prototype.stream !== 'function') {
+    throw new Error('GZIP_UNSUPPORTED');
+  }
+  var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  var buffer = await new Response(stream).arrayBuffer();
+  return parser.toText(buffer);
+}
+
+async function fetchStructureText(id) {
+  var result = await withTimeout(Tapp.api('structure', { id: id }), 30000);
+  try {
+    return await decodeStructureResponse(result);
+  } catch (err) {
+    if (err && err.message !== 'GZIP_UNSUPPORTED') throw err;
+    setStatus(i18n('gzipUnsupported'));
+    var plain = await withTimeout(Tapp.api('structurePlain', { id: id }), 30000);
+    return parser.toText(plain);
+  }
+}
+
 async function loadPdbId(input) {
   var id = parser.normalizePdbId(input);
   if (!id) return toast(i18n('searchPlaceholder'), 'warning');
@@ -486,8 +512,7 @@ async function loadPdbId(input) {
   if (loadButton) { loadButton.disabled = true; loadButton.setAttribute('aria-busy', 'true'); }
   try {
     if (typeof Tapp === 'undefined' || !Tapp.api) throw new Error('api missing');
-    var result = await withTimeout(Tapp.api('structure', { id: id }), 30000);
-    var text = parser.toText(result);
+    var text = await fetchStructureText(id);
     var parsed = parser.parseMmCif(text);
     if (!parsed.atoms.length) throw new Error('MMCIF_NO_ATOMS');
     parsed.id = id;

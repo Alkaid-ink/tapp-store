@@ -62,6 +62,7 @@
   "truncated": "数据可能被截断",
   "onlineTitle": "在线结构",
   "apiMissing": "宿主未注入 THREE，请检查 runtimeModules 声明",
+  "gzipUnsupported": "宿主不支持 GZIP 解压，正在尝试明文结构",
   "startLoading": "正在加载…",
   "requestTimeout": "请求超时",
   "responseFormatError": "响应格式不支持",

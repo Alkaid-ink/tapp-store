@@ -134,7 +134,7 @@ function extractCA(atoms) {
 
 // Defensively unwrap a Tapp.api response into a text string. Depending on the
 // host bridge, a text body may arrive as a string, a nested wrapper, or bytes.
-function decodeBytes(value) {
+function asBytes(value) {
   var bytes = null;
   if (typeof ArrayBuffer !== 'undefined' && value instanceof ArrayBuffer) {
     bytes = new Uint8Array(value);
@@ -145,6 +145,11 @@ function decodeBytes(value) {
   })) {
     bytes = new Uint8Array(value);
   }
+  return bytes;
+}
+
+function decodeBytes(value) {
+  var bytes = asBytes(value);
   if (!bytes) return null;
   if (typeof TextDecoder === 'function') return new TextDecoder('utf-8').decode(bytes);
   var out = '';
@@ -168,6 +173,28 @@ function toText(result) {
     });
   }
   throw new Error('API_NOT_TEXT');
+}
+
+// Preserve binary response bytes so the viewer can inflate a compressed mmCIF
+// before decoding it as UTF-8. The host may wrap bytes in body/data/content.
+function toBytes(result) {
+  var queue = [result];
+  var seen = [];
+  while (queue.length) {
+    var current = queue.shift();
+    var bytes = asBytes(current);
+    if (bytes) return bytes;
+    if (!current || typeof current !== 'object' || seen.indexOf(current) !== -1) continue;
+    seen.push(current);
+    ['bytes', 'buffer', 'body', 'data', 'content', 'result'].forEach(function (key) {
+      if (current[key] !== undefined && current[key] !== null) queue.push(current[key]);
+    });
+  }
+  throw new Error('API_NOT_BYTES');
+}
+
+function isGzip(bytes) {
+  return !!bytes && bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
 }
 
 function normalizePdbId(input) {
@@ -237,6 +264,8 @@ module.exports = {
   parseMmCif: parseMmCif,
   extractCA: extractCA,
   toText: toText,
+  toBytes: toBytes,
+  isGzip: isGzip,
   normalizePdbId: normalizePdbId,
   buildLookupEntryIds: buildLookupEntryIds,
   parseSearchResponse: parseSearchResponse,

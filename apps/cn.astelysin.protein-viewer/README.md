@@ -27,8 +27,9 @@
 - 数据源均为 RCSB PDB 公共接口，经 `manifest.apis` 代理（沙箱禁止直接 `fetch`）：
   - `search` → `search.rcsb.org/rcsbsearch/v2/query`（全文搜索）
   - `titles` → `data.rcsb.org/graphql`（批量标题/原子数）
-  - `structure` → `files.rcsb.org/download/{id}.cif`（mmCIF 坐标）
-- 沙箱响应体上限 2 MiB；超大结构可能无法完整在线拉取，页面会提示响应截断或降级为 Cα 线段。`Tapp.api` 文本响应做了防御式提取（`toText`）。
+  - `structure` → `files.rcsb.org/download/{id}.cif.gz`（压缩 mmCIF 坐标）
+  - `structurePlain` → `files.rcsb.org/download/{id}.cif`（GZIP 不可用时回退）
+- 沙箱响应体上限 2 MiB；应用优先拉取压缩结构并在页面端解压，仍无法处理的超大结构会提示失败。加载后的原子数超过 8000 时再降级为 Cα 线段。`Tapp.api` 响应做了防御式提取（`toText` / `toBytes`）。
 
 ## 本地文件
 

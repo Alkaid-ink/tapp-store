@@ -26,7 +26,7 @@ check('core.entry exists', manifest.core && existsSync(join(root, manifest.core.
 check('page.entry exists', manifest.page && existsSync(join(root, manifest.page.entry)));
 check('page.template exists', manifest.page && existsSync(join(root, manifest.page.template)));
 check('page.styles exists', manifest.page && existsSync(join(root, manifest.page.styles)));
-check('apis search/titles/structure', manifest.apis && ['search', 'titles', 'structure'].every((k) => manifest.apis[k]));
+check('apis search/titles/structure', manifest.apis && ['search', 'titles', 'structure', 'structurePlain'].every((k) => manifest.apis[k]));
 
 const catalog = JSON.parse(read('catalog.json'));
 check('catalog preview snapshot', catalog.preview && catalog.preview.type === 'snapshot');
@@ -49,6 +49,8 @@ for (const dep of ['parser', 'bonds', 'build', 'colors']) {
 }
 check('wireframe pick target', /function makePickMesh\(atoms\)/.test(viewerSrc) && /new THREE\.InstancedMesh/.test(viewerSrc) && /if \(state\.pickMesh\) targets = \[state\.pickMesh\]/.test(viewerSrc));
 check('host file download', /Tapp\.file\.download/.test(viewerSrc) && !/URL\.createObjectURL/.test(viewerSrc));
+check('compressed structure fallback', /DecompressionStream\('gzip'\)/.test(viewerSrc) && /Tapp\.api\('structurePlain'/.test(viewerSrc));
+check('compressed structure API', manifest.apis.structure.endpoint.endsWith('.cif.gz'));
 
 for (const mod of ['page/build.js', 'page/viewer.js']) {
   const res = spawnSync(process.execPath, ['--check', join(root, mod)], { encoding: 'utf8' });

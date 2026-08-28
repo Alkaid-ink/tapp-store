@@ -73,9 +73,17 @@
       "type": "http",
       "access": "public",
       "method": "GET",
+      "endpoint": "https://files.rcsb.org/download/{{params.id}}.cif.gz",
+      "cacheTtl": 3600,
+      "description": "按 PDB ID 拉取压缩 mmCIF 结构坐标"
+    },
+    "structurePlain": {
+      "type": "http",
+      "access": "public",
+      "method": "GET",
       "endpoint": "https://files.rcsb.org/download/{{params.id}}.cif",
       "cacheTtl": 3600,
-      "description": "按 PDB ID 拉取 mmCIF 结构坐标"
+      "description": "GZIP 不可用时回退拉取 mmCIF 结构坐标"
     }
   },
   "core": {
