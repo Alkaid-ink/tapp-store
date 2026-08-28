@@ -7,11 +7,11 @@
   "locales": {
     "en-US": {
       "name": "Protein 3D Viewer",
-      "description": "Interactive 3D molecular viewer: load structures from RCSB PDB by ID or search, inspect with orbit controls and switch render styles."
+      "description": "Interactive Wireframe viewer: load structures from RCSB PDB by ID or search, inspect with orbit controls, residue selection, and measurement."
     },
     "ja-JP": {
       "name": "タンパク質 3D ビューア",
-      "description": "インタラクティブな 3D 分子ビューア。RCSB PDB から ID・検索で構造を取得し、回転・ズームと多彩な描画モードで観察できます。"
+      "description": "インタラクティブな Wireframe ビューア。RCSB PDB から ID・検索で構造を取得し、回転・ズーム、残基選択、測定に対応します。"
     }
   },
   "category": "developer",
@@ -27,6 +27,7 @@
   "themeColor": "#0ea5e9",
   "permissions": [
     "network:fetch",
+    "storage:read",
     "ui:theme",
     "ui:fullscreen",
     "ui:notification"
@@ -63,7 +64,7 @@
       "method": "POST",
       "endpoint": "https://data.rcsb.org/graphql",
       "body": {
-        "query": "{{params.query}}"
+        "query": "{ entries(entry_ids: {{params.entry_ids}}) { rcsb_id struct { title } rcsb_entry_info { deposited_atom_count } } }"
       },
       "cacheTtl": 86400,
       "description": "批量查询 PDB 条目标题与原子数"

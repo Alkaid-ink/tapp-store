@@ -94,19 +94,17 @@ test('normalizePdbId cleans and uppercases input', () => {
 });
 
 test('search/lookup helpers parse RCSB responses', () => {
-  const query = parser.buildLookupQuery(['1A3N', '4HHB']);
-  assert.ok(query.includes('1A3N'));
-  assert.ok(query.includes('4HHB'));
-  assert.ok(query.includes('entries'));
+  const entryIds = JSON.parse(parser.buildLookupEntryIds(['1a3n', '4hhb!', '1A3N']));
+  assert.deepEqual(entryIds, ['1A3N', '4HHB']);
 
-  const ids = parser.parseSearchResponse({ result_set: [{ identifier: '1A3N' }, { identifier: '4HHB' }] });
+  const ids = parser.parseSearchResponse({ data: { result_set: [{ identifier: '1a3n' }, { identifier: '4HHB' }, { identifier: '4HHB!' }] } });
   assert.deepEqual(ids, ['1A3N', '4HHB']);
 
-  const items = parser.parseLookupResponse({
+  const items = parser.parseLookupResponse({ body: { data: {
     entries: [
       { rcsb_id: '1A3N', struct: { title: 'DEOXY HUMAN HEMOGLOBIN' }, rcsb_entry_info: { deposited_atom_count: 4997 } }
     ]
-  });
+  } } });
   assert.equal(items[0].id, '1A3N');
   assert.equal(items[0].title, 'DEOXY HUMAN HEMOGLOBIN');
   assert.equal(items[0].atomCount, 4997);

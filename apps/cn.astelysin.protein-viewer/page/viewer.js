@@ -14,10 +14,10 @@ var I18N_FALLBACK = {
     searchPlaceholder: '按名称搜索结构', searchBtn: '搜索', pdbIdPlaceholder: '输入 PDB ID，如 1A3N', loadBtn: '加载结构', connected: '已连接',
     recent: '最近', history: '历史记录', historyExpand: '展开历史记录', historyCollapse: '收起历史记录', clearHistory: '清空', historyEmpty: '加载过的结构会显示在这里', emptyHint: '输入 PDB ID，或从名称搜索开始',
     chains: '条链', residues: '个残基', residuePosition: '残基位置', tools: '工具', structure: '结构', measure: '测量', structureSearch: '结构内搜索',
-    components: '组成成分', export: '导出', chain: '链', allChains: '全部', model: '当前模型', representation: '表示方式', colorBy: '颜色方式', camera: '视角',
+    components: '组成成分', export: '导出', chain: '链', allChains: '全部', representation: '表示方式', colorBy: '颜色方式', camera: '视角',
     viewControls: '视图控制', controls: '控制', collapse: '收起', expand: '展开', fitView: '适应画布', zoomIn: '放大', zoomOut: '缩小',
-    measureHint: '点击两个原子测量距离', clearMeasure: '清除测量', atomSearchPlaceholder: '链、残基或原子', exportImage: '导出截图', downloadCif: '下载 mmCIF', copyPdbId: '复制 PDB ID',
-    modeSpacefill: '空间填充', modeBallStick: '球棍', modeBackbone: '骨架', modeCartoon: 'Ribbon 卡通', modeWireframe: '线框', colorElement: '按元素着色', colorChain: '按链着色',
+    measureHint: '点击两个原子测量距离', clearMeasure: '清除测量', atomSearchPlaceholder: '链、残基或原子', exportImage: '导出 SVG 截图', downloadCif: '下载 mmCIF', copyPdbId: '复制 PDB ID',
+    modeWireframe: '线框', colorElement: '按元素着色', colorChain: '按链着色',
     autorotate: '自动旋转', resetView: '重置视角', fullscreen: '全屏', loading: '加载中…',
     loadFailed: '加载失败', structureTooBig: '结构过大，仅显示 α 碳骨架', searchFailed: '搜索失败',
     noResults: '未找到匹配结构', selectHint: '选择要查看的结构', atomCount: '原子', caOnly: 'α碳骨架',
@@ -29,10 +29,10 @@ var I18N_FALLBACK = {
     searchPlaceholder: 'Search structures by name', searchBtn: 'Search', pdbIdPlaceholder: 'Enter a PDB ID, e.g. 1A3N', loadBtn: 'Load structure', connected: 'Connected',
     recent: 'Recent', history: 'History', historyExpand: 'Expand history', historyCollapse: 'Collapse history', clearHistory: 'Clear', historyEmpty: 'Loaded structures appear here', emptyHint: 'Enter a PDB ID or search by name',
     chains: 'chains', residues: 'residues', residuePosition: 'Residue position', tools: 'Tools', structure: 'Structure', measure: 'Measure', structureSearch: 'Search structure',
-    components: 'Components', export: 'Export', chain: 'Chain', allChains: 'All', model: 'Model', representation: 'Representation', colorBy: 'Color by', camera: 'Camera',
+    components: 'Components', export: 'Export', chain: 'Chain', allChains: 'All', representation: 'Representation', colorBy: 'Color by', camera: 'Camera',
     viewControls: 'View controls', controls: 'Controls', collapse: 'Collapse', expand: 'Expand', fitView: 'Fit view', zoomIn: 'Zoom in', zoomOut: 'Zoom out',
-    measureHint: 'Click two atoms to measure distance', clearMeasure: 'Clear measurement', atomSearchPlaceholder: 'Chain, residue or atom', exportImage: 'Export image', downloadCif: 'Download mmCIF', copyPdbId: 'Copy PDB ID',
-    modeSpacefill: 'Spacefill', modeBallStick: 'Ball & stick', modeBackbone: 'Backbone', modeCartoon: 'Ribbon cartoon', modeWireframe: 'Wireframe', colorElement: 'By element', colorChain: 'By chain',
+    measureHint: 'Click two atoms to measure distance', clearMeasure: 'Clear measurement', atomSearchPlaceholder: 'Chain, residue or atom', exportImage: 'Export SVG screenshot', downloadCif: 'Download mmCIF', copyPdbId: 'Copy PDB ID',
+    modeWireframe: 'Wireframe', colorElement: 'By element', colorChain: 'By chain',
     autorotate: 'Rotate', resetView: 'Reset view', fullscreen: 'Fullscreen', loading: 'Loading…',
     loadFailed: 'Load failed', structureTooBig: 'Structure too large; showing α-carbon backbone', searchFailed: 'Search failed',
     noResults: 'No matching structures', selectHint: 'Pick a structure', atomCount: 'atoms', caOnly: 'α-carbon backbone',
@@ -44,10 +44,10 @@ var I18N_FALLBACK = {
     searchPlaceholder: '構造名で検索', searchBtn: '検索', pdbIdPlaceholder: 'PDB IDを入力（例: 1A3N）', loadBtn: '構造を読み込む', connected: '接続済み',
     recent: '最近', history: '履歴', historyExpand: '履歴を開く', historyCollapse: '履歴を閉じる', clearHistory: 'クリア', historyEmpty: '読み込んだ構造がここに表示されます', emptyHint: 'PDB IDを入力するか名前で検索してください',
     chains: '鎖', residues: '残基', residuePosition: '残基位置', tools: 'ツール', structure: '構造', measure: '測定', structureSearch: '構造内検索',
-    components: '構成要素', export: 'エクスポート', chain: '鎖', allChains: 'すべて', model: 'モデル', representation: '表示形式', colorBy: '色分け', camera: '視点',
+    components: '構成要素', export: 'エクスポート', chain: '鎖', allChains: 'すべて', representation: '表示形式', colorBy: '色分け', camera: '視点',
     viewControls: 'ビュー操作', controls: '操作', collapse: '閉じる', expand: '開く', fitView: '画面に合わせる', zoomIn: '拡大', zoomOut: '縮小',
-    measureHint: '2つの原子をクリックして距離を測定', clearMeasure: '測定をクリア', atomSearchPlaceholder: '鎖、残基、原子', exportImage: '画像を書き出す', downloadCif: 'mmCIFをダウンロード', copyPdbId: 'PDB IDをコピー',
-    modeSpacefill: '空間充填', modeBallStick: '球棒', modeBackbone: '骨格', modeCartoon: 'Ribbon カートゥーン', modeWireframe: 'ワイヤー', colorElement: '元素別', colorChain: '鎖別',
+    measureHint: '2つの原子をクリックして距離を測定', clearMeasure: '測定をクリア', atomSearchPlaceholder: '鎖、残基、原子', exportImage: 'SVG画像を書き出す', downloadCif: 'mmCIFをダウンロード', copyPdbId: 'PDB IDをコピー',
+    modeWireframe: 'ワイヤー', colorElement: '元素別', colorChain: '鎖別',
     autorotate: '自動回転', resetView: '視点リセット', fullscreen: '全画面', loading: '読み込み中…',
     loadFailed: '読み込み失敗', structureTooBig: '構造が大きいため α炭素骨格のみ表示', searchFailed: '検索失敗',
     noResults: '一致する構造がありません', selectHint: '表示する構造を選択', atomCount: '原子', caOnly: 'α炭素骨格',
@@ -55,16 +55,6 @@ var I18N_FALLBACK = {
     startLoading: '読み込み中…'
   }
 };
-
-I18N_FALLBACK['zh-CN'].modeHybrid = '混合';
-I18N_FALLBACK['zh-CN'].modeCartoon = 'Ribbon';
-I18N_FALLBACK['zh-CN'].modeWireframe = '线框';
-I18N_FALLBACK['en-US'].modeHybrid = 'Hybrid';
-I18N_FALLBACK['en-US'].modeCartoon = 'Ribbon';
-I18N_FALLBACK['en-US'].modeWireframe = 'Wireframe';
-I18N_FALLBACK['ja-JP'].modeHybrid = '混合';
-I18N_FALLBACK['ja-JP'].modeCartoon = 'Ribbon';
-I18N_FALLBACK['ja-JP'].modeWireframe = 'ワイヤー';
 
 var AA_ONE = {
   ALA: 'A', ARG: 'R', ASN: 'N', ASP: 'D', CYS: 'C', GLN: 'Q', GLU: 'E', GLY: 'G',
@@ -95,7 +85,7 @@ function $id(id) { return document.getElementById(id); }
 var state = {
   renderer: null, scene: null, camera: null, raf: 0, paused: false, destroyed: false,
   target: null, theta: 0.6, phi: 1.1, radius: 6,
-  autoRotate: false, model: null, structure: null, bonds: null, rawCif: '',
+  autoRotate: false, model: null, pickMesh: null, structure: null, bonds: null, rawCif: '',
   colorMode: 'element', chainOrder: [], visibleChains: {}, renderAtoms: [],
   selectedAtom: null, measureAtoms: [], selectionMarker: null, pointerId: null, lastX: 0, lastY: 0, downX: 0, downY: 0, dragMode: null,
   pinchDist: 0, pinchStartTheta: 0, pinchStartPhi: 0,
@@ -372,9 +362,32 @@ function chainColorFor(structure, atom, index) {
   return colors.colorForElement(atom.el);
 }
 
+function makePickMesh(atoms) {
+  if (!THREE.InstancedMesh || !THREE.SphereGeometry || !THREE.MeshBasicMaterial || !THREE.Matrix4 || !atoms.length) return null;
+  var mesh = new THREE.InstancedMesh(
+    new THREE.SphereGeometry(0.58, 8, 6),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, colorWrite: false, depthWrite: false }),
+    atoms.length
+  );
+  var matrix = new THREE.Matrix4();
+  for (var i = 0; i < atoms.length; i++) {
+    matrix.makeTranslation(atoms[i].x, atoms[i].y, atoms[i].z);
+    mesh.setMatrixAt(i, matrix);
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.frustumCulled = false;
+  mesh.userData.pickTarget = true;
+  return mesh;
+}
+
 function buildModel() {
   var structure = state.structure;
   if (!structure || !state.scene) return;
+  if (state.pickMesh) {
+    build.disposeObject(state.pickMesh);
+    state.scene.remove(state.pickMesh);
+    state.pickMesh = null;
+  }
   if (state.model) {
     build.disposeObject(state.model);
     state.scene.remove(state.model);
@@ -394,6 +407,8 @@ function buildModel() {
   var model = build.makeWireframe(atoms, state.bonds, colorFor);
   state.model = model;
   state.scene.add(model);
+  state.pickMesh = makePickMesh(atoms);
+  if (state.pickMesh) state.scene.add(state.pickMesh);
   frameCamera();
 }
 
@@ -489,8 +504,6 @@ async function loadPdbId(input) {
   }
 }
 
-function buildSearchQuery(ids) { return parser.buildLookupQuery(ids); }
-
 async function runSearch() {
   var box = $id('view-search');
   var results = $id('view-search-results');
@@ -499,9 +512,9 @@ async function runSearch() {
   if (state.busy) return;
   state.busy = true; showSpinner(true); setStatus(i18n('startLoading') + ' · ' + term);
   try {
-    var ids = parser.parseSearchResponse(await Tapp.api('search', { query: term }));
+    var ids = parser.parseSearchResponse(await withTimeout(Tapp.api('search', { query: term }), 30000));
     if (!ids.length) { setStatus(i18n('noResults')); toast(i18n('noResults'), 'info'); results.hidden = true; return; }
-    var lookup = parser.parseLookupResponse(await Tapp.api('titles', { query: buildSearchQuery(ids) }));
+    var lookup = parser.parseLookupResponse(await withTimeout(Tapp.api('titles', { entry_ids: parser.buildLookupEntryIds(ids) }), 30000));
     renderSearchResults(results, lookup);
     setStatus(i18n('searchComplete') + ' · ' + ids.length);
   } catch (err) {
@@ -575,7 +588,8 @@ function pickAtom(ev) {
   var raycaster = new THREE.Raycaster();
   raycaster.setFromCamera(pointer, state.camera);
   var targets = [];
-  if (state.model.isInstancedMesh) targets = [state.model];
+  if (state.pickMesh) targets = [state.pickMesh];
+  else if (state.model.isInstancedMesh) targets = [state.model];
   else if (state.model.userData && state.model.userData.meshes) targets = [state.model.userData.meshes[0]];
   var hits = raycaster.intersectObjects(targets, false);
   if (!hits.length || hits[0].instanceId === undefined) return;
@@ -615,21 +629,31 @@ function renderAtomSearchResults(term) {
   });
 }
 
-function downloadText(filename, content, type) {
-  var blob = new Blob([content], { type: type || 'text/plain;charset=utf-8' });
-  var url = URL.createObjectURL(blob);
-  var link = document.createElement('a'); link.href = url; link.download = filename; link.click();
-  setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+async function downloadText(filename, content, type) {
+  if (typeof Tapp === 'undefined' || !Tapp.file || typeof Tapp.file.download !== 'function') {
+    throw new Error('FILE_DOWNLOAD_UNAVAILABLE');
+  }
+  await Tapp.file.download(content, filename, type || 'text/plain;charset=utf-8');
 }
 
-function downloadDataUrl(filename, dataUrl) {
-  var link = document.createElement('a'); link.href = dataUrl; link.download = filename; link.click();
+function screenshotSvg(canvas, dataUrl) {
+  var width = canvas.width || 1;
+  var height = canvas.height || 1;
+  return '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '">' +
+    '<image href="' + dataUrl + '" width="' + width + '" height="' + height + '" preserveAspectRatio="none"/></svg>';
 }
 
-function exportImage() {
+async function exportImage() {
   if (!state.renderer || !state.structure) return toast(i18n('selectHint'), 'warning');
-  try { downloadDataUrl((state.structure.id || 'structure') + '.png', state.renderer.domElement.toDataURL('image/png')); }
-  catch (_) { toast(i18n('exportFailed'), 'error'); }
+  try {
+    var canvas = state.renderer.domElement;
+    var svg = screenshotSvg(canvas, canvas.toDataURL('image/png'));
+    await downloadText((state.structure.id || 'structure') + '.svg', svg, 'image/svg+xml;charset=utf-8');
+  } catch (err) {
+    console.error('[viewer] export failed', err);
+    toast(i18n('exportFailed'), 'error');
+  }
 }
 
 function copyPdbId() {
@@ -705,28 +729,6 @@ function onDoubleClick() {
 function zoomBy(factor) {
   state.radius = Math.max(1.0, Math.min(state.radius * factor, 400));
   updateCamera();
-}
-
-function touchDelta(touches) {
-  if (touches.length === 1) {
-    var t = touches[0];
-    var dx = t.clientX - state.lastX;
-    var dy = t.clientY - state.lastY;
-    state.lastX = t.clientX; state.lastY = t.clientY;
-    state.theta -= dx * 0.006;
-    state.phi = Math.max(0.15, Math.min(Math.PI - 0.15, state.phi - dy * 0.006));
-    updateCamera();
-  } else if (touches.length === 2) {
-    var a = touches[0], b = touches[1];
-    var dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-    if (state.pinchDist > 0 && dist > 0) {
-      state.radius = Math.max(1.0, Math.min(state.radius * (state.pinchDist / dist), 400));
-      updateCamera();
-    }
-    state.pinchDist = dist;
-    state.lastX = (a.clientX + b.clientX) / 2;
-    state.lastY = (a.clientY + b.clientY) / 2;
-  }
 }
 
 function initCamera() {
@@ -826,7 +828,10 @@ function bindEvents() {
   $id('view-export-image').addEventListener('click', exportImage);
   $id('view-export-cif').addEventListener('click', function () {
     if (!state.rawCif || !state.structure) return toast(i18n('selectHint'), 'warning');
-    downloadText((state.structure.id || 'structure') + '.cif', state.rawCif, 'chemical/x-mmcif;charset=utf-8');
+    downloadText((state.structure.id || 'structure') + '.cif', state.rawCif, 'chemical/x-mmcif;charset=utf-8').catch(function (err) {
+      console.error('[viewer] mmCIF export failed', err);
+      toast(i18n('exportFailed'), 'error');
+    });
   });
   $id('view-copy-id').addEventListener('click', copyPdbId);
   $id('view-atom-search').addEventListener('input', function (ev) { renderAtomSearchResults(ev.target.value); });
@@ -916,6 +921,7 @@ function bootstrap() {
         if (state.selectionMarker.geometry) state.selectionMarker.geometry.dispose();
         if (state.selectionMarker.material) state.selectionMarker.material.dispose();
       }
+      if (state.pickMesh) { build.disposeObject(state.pickMesh); state.scene.remove(state.pickMesh); }
       if (state.model) { build.disposeObject(state.model); state.scene.remove(state.model); }
       if (state.renderer) { state.renderer.dispose(); }
       if (typeof Tapp !== 'undefined' && Tapp.assets && typeof Tapp.assets.revokeAll === 'function') Tapp.assets.revokeAll();

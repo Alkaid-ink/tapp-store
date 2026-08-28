@@ -47,6 +47,8 @@ const viewerSrc = read('page/viewer.js');
 for (const dep of ['parser', 'bonds', 'build', 'colors']) {
   check(`viewer -> ./${dep}.js`, new RegExp(`require\\(['"]\\./${dep}\\.js['"]\\)`).test(viewerSrc));
 }
+check('wireframe pick target', /function makePickMesh\(atoms\)/.test(viewerSrc) && /new THREE\.InstancedMesh/.test(viewerSrc) && /if \(state\.pickMesh\) targets = \[state\.pickMesh\]/.test(viewerSrc));
+check('host file download', /Tapp\.file\.download/.test(viewerSrc) && !/URL\.createObjectURL/.test(viewerSrc));
 
 for (const mod of ['page/build.js', 'page/viewer.js']) {
   const res = spawnSync(process.execPath, ['--check', join(root, mod)], { encoding: 'utf8' });

@@ -174,30 +174,58 @@ function normalizePdbId(input) {
   return String(input || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
 }
 
-// GraphQL query for batch title/atom-count lookup, used after a text search.
-function buildLookupQuery(ids) {
-  return '{ entries(entry_ids: ' + JSON.stringify(ids) + ') ' +
-    '{ rcsb_id struct { title } rcsb_entry_info { deposited_atom_count } } }';
+function unwrapStructuredResponse(result, field) {
+  var current = result;
+  var seen = [];
+  for (var depth = 0; depth < 8; depth++) {
+    if (!current || typeof current !== 'object') break;
+    if (Array.isArray(current[field])) return current;
+    if (seen.indexOf(current) !== -1) break;
+    seen.push(current);
+    var next = current.data;
+    if (next === undefined) next = current.body;
+    if (next === undefined) next = current.result;
+    if (next === undefined) next = current.content;
+    if (next === undefined) break;
+    current = next;
+  }
+  return current && typeof current === 'object' ? current : {};
+}
+
+// Build the JSON array injected into the manifest's fixed GraphQL query.
+function buildLookupEntryIds(ids) {
+  var normalized = [];
+  var seen = {};
+  for (var i = 0; i < (Array.isArray(ids) ? ids.length : 0); i++) {
+    var id = normalizePdbId(ids[i]);
+    if (id && !seen[id]) { seen[id] = true; normalized.push(id); }
+  }
+  return JSON.stringify(normalized);
 }
 
 function parseSearchResponse(result) {
-  if (!result || !Array.isArray(result.result_set)) throw new Error('SEARCH_BAD_RESPONSE');
+  var root = unwrapStructuredResponse(result, 'result_set');
+  if (!Array.isArray(root.result_set)) throw new Error('SEARCH_BAD_RESPONSE');
   var ids = [];
-  for (var i = 0; i < result.result_set.length; i++) {
-    var id = result.result_set[i] && result.result_set[i].identifier;
-    if (typeof id === 'string' && id) ids.push(id);
+  var seen = {};
+  for (var i = 0; i < root.result_set.length; i++) {
+    var id = normalizePdbId(root.result_set[i] && root.result_set[i].identifier);
+    if (id && !seen[id]) { seen[id] = true; ids.push(id); }
   }
   return ids;
 }
 
 function parseLookupResponse(result) {
-  var list = result && Array.isArray(result.entries) ? result.entries : [];
+  var root = unwrapStructuredResponse(result, 'entries');
+  var list = Array.isArray(root.entries) ? root.entries : [];
   var out = [];
   for (var i = 0; i < list.length; i++) {
     var item = list[i] || {};
     var count = item.rcsb_entry_info && item.rcsb_entry_info.deposited_atom_count;
+    var id = normalizePdbId(item.rcsb_id);
+    if (!id) continue;
     out.push({
-      id: item.rcsb_id || '',
+      id: id,
       title: (item.struct && item.struct.title) || '',
       atomCount: typeof count === 'number' ? count : 0
     });
@@ -210,7 +238,7 @@ module.exports = {
   extractCA: extractCA,
   toText: toText,
   normalizePdbId: normalizePdbId,
-  buildLookupQuery: buildLookupQuery,
+  buildLookupEntryIds: buildLookupEntryIds,
   parseSearchResponse: parseSearchResponse,
   parseLookupResponse: parseLookupResponse
 };
